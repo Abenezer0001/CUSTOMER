@@ -13,7 +13,7 @@ export const TableHeader: React.FC = () => {
         </div>
         <div>
           <span className="text-sm">TABLE</span>
-          <p className="text-2xl font-bold">{tableNumber || 'L01'}</p>
+          <p className="text-2xl font-bold">{tableNumber || 'L001'}</p>
         </div>
       </div>
     </header>
