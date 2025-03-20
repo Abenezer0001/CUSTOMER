@@ -6,13 +6,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/context/CartContext";
 import { FavoritesProvider } from "@/context/FavoritesContext";
+import { OrdersProvider } from "@/context/OrdersContext";
+import { TableProvider } from "@/context/TableContext";
 
 import Layout from "./pages/Layout";
 import Index from "./pages/Index";
 import Menu from "./pages/Menu";
-import MenuItemDetail from "./pages/MenuItemDetail";
-import Cart from "./pages/Cart";
-import Favorites from "./pages/Favorites";
+import MyOrders from "./pages/MyOrders";
+import CallWaiter from "./pages/CallWaiter";
+import Bill from "./pages/Bill";
+import Checkout from "./pages/Checkout";
+import OrderConfirmation from "./pages/OrderConfirmation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -26,26 +30,32 @@ const queryClient = new QueryClient({
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <CartProvider>
-      <FavoritesProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner position="top-right" closeButton />
-          <BrowserRouter>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route path="/" element={<Index />} />
-                <Route path="/menu" element={<Menu />} />
-                <Route path="/menu/:id" element={<MenuItemDetail />} />
-                <Route path="/cart" element={<Cart />} />
-                <Route path="/favorites" element={<Favorites />} />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </FavoritesProvider>
-    </CartProvider>
+    <TableProvider>
+      <OrdersProvider>
+        <CartProvider>
+          <FavoritesProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner position="top-right" closeButton />
+              <BrowserRouter>
+                <Routes>
+                  <Route element={<Layout />}>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/menu" element={<Menu />} />
+                    <Route path="/my-orders" element={<MyOrders />} />
+                    <Route path="/call-waiter" element={<CallWaiter />} />
+                    <Route path="/bill" element={<Bill />} />
+                    <Route path="/checkout" element={<Checkout />} />
+                    <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Route>
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </FavoritesProvider>
+        </CartProvider>
+      </OrdersProvider>
+    </TableProvider>
   </QueryClientProvider>
 );
 

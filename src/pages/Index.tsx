@@ -1,165 +1,194 @@
 
-import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
-import { MenuItem } from '@/types';
-import { MenuItemCard } from '@/components/MenuItemCard';
+import { Category, MenuItem } from '@/types';
+import { MenuItemComponent } from '@/components/MenuItemComponent';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { ArrowRight } from 'lucide-react';
+import { useCart } from '@/context/CartContext';
+import { ShoppingCart, Minus, Plus, Trash2 } from 'lucide-react';
 
-const HeroSection: React.FC = () => {
-  return (
-    <section className="relative bg-secondary overflow-hidden">
-      <div className="container px-4 mx-auto py-20 md:py-32">
-        <div className="max-w-2xl animate-slide-up">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-medium mb-6 leading-tight">
-            Elevate Your <span className="text-primary">Dining Experience</span>
-          </h1>
-          <p className="text-lg text-muted-foreground mb-8 md:pr-12">
-            Discover a curated selection of exquisite dishes from our premium menu,
-            delivered with elegance and precision to your doorstep.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button asChild size="lg" className="rounded-full px-8">
-              <Link to="/menu">Explore Menu</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="rounded-full px-8 border-foreground/20">
-              <Link to="/about">Our Story</Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-      <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-background to-transparent hidden lg:block"></div>
-    </section>
-  );
-};
+const Index: React.FC = () => {
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
+  const { items, subtotal, updateQuantity, removeItem } = useCart();
 
-const FeaturedSection: React.FC = () => {
-  const { data: featuredItems, isLoading } = useQuery({
-    queryKey: ['featuredItems'],
-    queryFn: api.getFeaturedItems,
+  // Get categories
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: api.getCategories,
   });
+
+  // Get menu items
+  const { data: menuItems, isLoading } = useQuery({
+    queryKey: ['menuItems'],
+    queryFn: api.getMenuItems,
+  });
+
+  // Filter items based on category
+  useEffect(() => {
+    if (!menuItems) return;
+
+    let filtered = [...menuItems];
+
+    // Filter by category
+    if (activeCategory !== 'all') {
+      filtered = filtered.filter(item => item.category === activeCategory);
+    }
+
+    setFilteredItems(filtered);
+  }, [menuItems, activeCategory]);
 
   if (isLoading) {
     return (
-      <section className="container px-4 mx-auto py-16">
-        <h2 className="text-3xl font-medium mb-10 text-center">Featured Dishes</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[...Array(3)].map((_, index) => (
-            <div key={index} className="bg-secondary animate-pulse rounded-xl h-80"></div>
+      <div className="px-4 py-4 mt-16">
+        <div className="flex overflow-x-auto gap-2 py-3 mb-4">
+          {[1, 2, 3, 4].map((_, i) => (
+            <div key={i} className="h-10 w-24 bg-gray-200 rounded-full animate-pulse flex-shrink-0"></div>
           ))}
         </div>
-      </section>
+        
+        <div className="grid grid-cols-1 gap-4">
+          {[1, 2, 3].map((_, i) => (
+            <div key={i} className="h-[120px] bg-gray-200 rounded-lg animate-pulse"></div>
+          ))}
+        </div>
+      </div>
     );
   }
 
   return (
-    <section className="container px-4 mx-auto py-16">
-      <div className="flex justify-between items-center mb-10">
-        <h2 className="text-3xl font-medium">Featured Dishes</h2>
-        <Button asChild variant="ghost" className="hidden md:flex">
-          <Link to="/menu" className="flex items-center gap-2">
-            View All <ArrowRight size={16} />
-          </Link>
+    <div className="px-4 py-4 mt-16">
+      <div className="flex overflow-x-auto gap-2 py-3 mb-4 no-scrollbar">
+        <Button
+          onClick={() => setActiveCategory('all')}
+          variant={activeCategory === 'all' ? "default" : "outline"}
+          className="rounded-full flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+        >
+          All
         </Button>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {featuredItems?.slice(0, 3).map((item: MenuItem) => (
-          <MenuItemCard key={item.id} item={item} className="animate-fade-in" />
+        
+        {categories?.map((category: Category) => (
+          <Button
+            key={category.id}
+            onClick={() => setActiveCategory(category.id)}
+            variant={activeCategory === category.id ? "default" : "outline"}
+            className={`rounded-full flex-shrink-0 ${
+              activeCategory === category.id 
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                : "text-gray-700"
+            }`}
+          >
+            {category.name}
+          </Button>
         ))}
       </div>
       
-      <div className="mt-8 text-center md:hidden">
-        <Button asChild variant="outline">
-          <Link to="/menu">View All Menu</Link>
-        </Button>
+      <div className="grid grid-cols-1 gap-4 mb-24">
+        {filteredItems.map((item: MenuItem) => (
+          <MenuItemComponent key={item.id} item={item} />
+        ))}
       </div>
-    </section>
-  );
-};
-
-const PopularSection: React.FC = () => {
-  const { data: popularItems, isLoading } = useQuery({
-    queryKey: ['popularItems'],
-    queryFn: api.getPopularItems,
-  });
-
-  if (isLoading) {
-    return (
-      <section className="bg-secondary/50">
-        <div className="container px-4 mx-auto py-16">
-          <h2 className="text-3xl font-medium mb-10 text-center">Most Popular</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, index) => (
-              <div key={index} className="bg-secondary animate-pulse rounded-xl h-72"></div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="bg-secondary/50">
-      <div className="container px-4 mx-auto py-16">
-        <div className="flex justify-between items-center mb-10">
-          <h2 className="text-3xl font-medium">Most Popular</h2>
-          <Button asChild variant="ghost" className="hidden md:flex">
-            <Link to="/menu" className="flex items-center gap-2">
-              View All <ArrowRight size={16} />
-            </Link>
-          </Button>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {popularItems?.slice(0, 4).map((item: MenuItem) => (
-            <MenuItemCard key={item.id} item={item} className="animate-fade-in" />
-          ))}
-        </div>
-        
-        <div className="mt-8 text-center md:hidden">
-          <Button asChild variant="outline">
-            <Link to="/menu">View All Menu</Link>
-          </Button>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-const CTASection: React.FC = () => {
-  return (
-    <section className="container px-4 mx-auto py-16 md:py-24">
-      <div className="bg-primary text-primary-foreground rounded-2xl p-8 md:p-12 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 to-transparent opacity-20"></div>
-        <div className="relative z-10 max-w-2xl">
-          <h2 className="text-3xl md:text-4xl font-medium mb-6">Hungry? We've got you covered.</h2>
-          <p className="text-primary-foreground/80 mb-8 text-lg">
-            From quick bites to gourmet experiences, we bring the best restaurants to your doorstep.
-            Order now and enjoy a seamless dining experience.
-          </p>
-          <Button asChild size="lg" variant="secondary" className="rounded-full px-8">
-            <Link to="/menu">Order Now</Link>
-          </Button>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-const Index: React.FC = () => {
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
-  return (
-    <div className="animate-fade-in">
-      <HeroSection />
-      <FeaturedSection />
-      <PopularSection />
-      <CTASection />
+      
+      {/* Cart Sheet */}
+      {items.length > 0 && (
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button 
+              className="fixed bottom-24 right-4 h-14 w-14 rounded-full bg-emerald-600 hover:bg-emerald-700 shadow-lg"
+            >
+              <ShoppingCart className="h-6 w-6" />
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center">
+                {items.reduce((total, item) => total + item.quantity, 0)}
+              </span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-full sm:max-w-md">
+            <div className="h-full flex flex-col">
+              <h2 className="text-xl font-semibold mb-4">Your Cart</h2>
+              
+              <div className="flex-1 overflow-auto">
+                {items.map((item) => (
+                  <div key={item.id} className="flex justify-between py-4 border-b">
+                    <div className="flex-1">
+                      <h3 className="font-medium">{item.name}</h3>
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <div className="text-sm text-gray-500 mt-1">
+                          {item.modifiers.map(mod => (
+                            <div key={mod.id}>+{mod.name} (${mod.price.toFixed(2)})</div>
+                          ))}
+                        </div>
+                      )}
+                      {item.cookingPreference && (
+                        <div className="text-sm text-gray-500 mt-1">
+                          {item.cookingPreference}
+                        </div>
+                      )}
+                      <div className="text-sm font-medium mt-1">
+                        ${item.price.toFixed(2)}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8 rounded-full"
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      
+                      <span className="w-6 text-center">{item.quantity}</span>
+                      
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8 rounded-full"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => removeItem(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-auto pt-4 border-t">
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span>${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between mb-4">
+                  <span className="text-gray-600">Tax (10%)</span>
+                  <span>${(subtotal * 0.1).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-lg font-semibold mb-4">
+                  <span>Total</span>
+                  <span>${(subtotal + subtotal * 0.1).toFixed(2)}</span>
+                </div>
+                
+                <Button 
+                  className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => window.location.href = '/checkout'}
+                >
+                  Proceed to Checkout
+                </Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 };

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CartContextType, CartItem, MenuItem } from '@/types';
+import { CartContextType, CartItem, MenuItem, CartItemModifier } from '@/types';
 import { toast } from 'sonner';
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -15,17 +15,37 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('cart', JSON.stringify(items));
   }, [items]);
 
-  const addItem = (menuItem: MenuItem, quantity: number, specialInstructions?: string) => {
+  const addItem = (
+    menuItem: MenuItem, 
+    quantity: number, 
+    modifiers?: CartItemModifier[], 
+    cookingPreference?: string,
+    specialInstructions?: string
+  ) => {
     setItems(prevItems => {
-      const existingItemIndex = prevItems.findIndex(item => item.menuItemId === menuItem.id);
+      // Calculate total price including modifiers
+      let totalPrice = menuItem.price;
+      if (modifiers && modifiers.length > 0) {
+        totalPrice += modifiers.reduce((sum, mod) => sum + mod.price, 0);
+      }
+
+      // Create a unique key for the item based on its selections
+      const modifierKey = modifiers?.map(m => m.id).sort().join('-') || '';
+      const preferenceKey = cookingPreference || '';
+      const instructionsKey = specialInstructions || '';
+      const uniqueKey = `${menuItem.id}-${modifierKey}-${preferenceKey}-${instructionsKey}`;
+      
+      // Check if this exact item (with same modifiers and preferences) exists
+      const existingItemIndex = prevItems.findIndex(item => 
+        `${item.menuItemId}-${item.modifiers?.map(m => m.id).sort().join('-') || ''}-${item.cookingPreference || ''}-${item.specialInstructions || ''}` === uniqueKey
+      );
       
       if (existingItemIndex > -1) {
-        // Item exists, update quantity
+        // Update existing item quantity
         const updatedItems = [...prevItems];
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + quantity,
-          specialInstructions: specialInstructions || updatedItems[existingItemIndex].specialInstructions
+          quantity: updatedItems[existingItemIndex].quantity + quantity
         };
         
         toast.success(`Updated ${menuItem.name} quantity in cart`);
@@ -34,12 +54,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Add new item
         toast.success(`Added ${menuItem.name} to cart`);
         return [...prevItems, {
-          id: `${menuItem.id}-${Date.now()}`,
+          id: `${uniqueKey}-${Date.now()}`,
           menuItemId: menuItem.id,
           name: menuItem.name,
-          price: menuItem.price,
+          price: totalPrice,
           quantity,
           image: menuItem.image,
+          modifiers,
+          cookingPreference,
           specialInstructions
         }];
       }
