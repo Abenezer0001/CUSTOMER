@@ -37,7 +37,14 @@ const MenuItemDetail: React.FC = () => {
 
   const handleAddToCart = () => {
     if (item) {
-      addItem(item, quantity, specialInstructions);
+      // Fixed: Passing parameters in the correct order with correct types
+      addItem(
+        item, 
+        quantity, 
+        undefined, // No modifiers for this simple add
+        undefined, // No cooking preference
+        specialInstructions // Pass special instructions as the last parameter
+      );
     }
   };
 
