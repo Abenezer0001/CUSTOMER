@@ -8,20 +8,20 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCart } from '@/context/CartContext';
-import { ShoppingCart, Minus, Plus, Trash2, Search } from 'lucide-react';
-import { 
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious
-} from '@/components/ui/carousel';
+import { Search, Minus, Plus, Trash2, ShoppingCart } from 'lucide-react';
+import useEmblaCarousel from 'embla-carousel-react';
+import { Autoplay } from 'embla-carousel-autoplay';
 
 const Index: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const { items, subtotal, updateQuantity, removeItem } = useCart();
+  
+  // Initialize embla carousel with autoplay
+  const [emblaRef] = useEmblaCarousel({ loop: true }, [
+    Autoplay({ delay: 4000, stopOnInteraction: false })
+  ]);
 
   // Get categories
   const { data: categories } = useQuery({
@@ -92,6 +92,10 @@ const Index: React.FC = () => {
         return '🍰';
       case 'appetizers':
         return '🍟';
+      case 'offers':
+        return '🏷️';
+      case 'others':
+        return '📦';
       default:
         return '🍽️';
     }
@@ -107,9 +111,9 @@ const Index: React.FC = () => {
           ))}
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {[1, 2, 3, 4].map((_, i) => (
-            <div key={i} className="h-[120px] bg-gray-200 rounded-lg animate-pulse"></div>
+            <div key={i} className="h-[180px] bg-gray-200 rounded-lg animate-pulse"></div>
           ))}
         </div>
       </div>
@@ -120,11 +124,11 @@ const Index: React.FC = () => {
     <div className="px-4 py-4 mt-16">
       {/* Promotional Banner Carousel */}
       <div className="mb-8 mt-2">
-        <Carousel className="w-full">
-          <CarouselContent>
+        <div className="overflow-hidden" ref={emblaRef}>
+          <div className="flex">
             {promos.map((promo) => (
-              <CarouselItem key={promo.id} className="md:basis-4/5">
-                <div className="relative rounded-xl overflow-hidden h-40">
+              <div key={promo.id} className="flex-[0_0_100%] min-w-0 relative">
+                <div className="relative rounded-xl overflow-hidden h-40 mx-1">
                   <img 
                     src={promo.image} 
                     alt={promo.title} 
@@ -135,12 +139,10 @@ const Index: React.FC = () => {
                     <p>{promo.description}</p>
                   </div>
                 </div>
-              </CarouselItem>
+              </div>
             ))}
-          </CarouselContent>
-          <CarouselPrevious className="left-2 bg-white/80" />
-          <CarouselNext className="right-2 bg-white/80" />
-        </Carousel>
+          </div>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -164,10 +166,10 @@ const Index: React.FC = () => {
         <Button
           onClick={() => setActiveCategory('all')}
           variant={activeCategory === 'all' ? "default" : "outline"}
-          className={`flex flex-col items-center p-3 h-auto rounded-xl ${
+          className={`flex flex-col items-center p-2 h-auto rounded-xl ${
             activeCategory === 'all' 
               ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-              : "text-gray-700 hover:bg-gray-100"
+              : "bg-emerald-50 text-emerald-800 border-emerald-100 hover:bg-emerald-100"
           }`}
         >
           <span className="text-2xl mb-1">🍽️</span>
@@ -179,10 +181,10 @@ const Index: React.FC = () => {
             key={category.id}
             onClick={() => setActiveCategory(category.id)}
             variant={activeCategory === category.id ? "default" : "outline"}
-            className={`flex flex-col items-center p-3 h-auto rounded-xl ${
+            className={`flex flex-col items-center p-2 h-auto rounded-xl ${
               activeCategory === category.id 
                 ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-                : "text-gray-700 hover:bg-gray-100"
+                : "bg-emerald-50 text-emerald-800 border-emerald-100 hover:bg-emerald-100"
             }`}
           >
             <span className="text-2xl mb-1">{getCategoryIcon(category.name)}</span>
@@ -191,8 +193,16 @@ const Index: React.FC = () => {
         ))}
       </div>
       
-      {/* Menu Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-24">
+      {/* Popular section header */}
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-bold">Premium Food</h2>
+        <Button variant="link" className="p-0 h-auto text-emerald-600">
+          See all
+        </Button>
+      </div>
+      
+      {/* Menu Items Grid - 2 columns */}
+      <div className="grid grid-cols-2 gap-3 mb-24">
         {filteredItems.map((item: MenuItem) => (
           <MenuItemComponent key={item.id} item={item} />
         ))}

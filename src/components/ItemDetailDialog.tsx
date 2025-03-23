@@ -7,7 +7,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { DialogClose } from '@/components/ui/dialog';
 import { useCart } from '@/context/CartContext';
-import { ShoppingCart } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { ShoppingCart, X } from 'lucide-react';
 
 interface ItemDetailDialogProps {
   item: MenuItem;
@@ -16,36 +17,62 @@ interface ItemDetailDialogProps {
 export const ItemDetailDialog: React.FC<ItemDetailDialogProps> = ({ item }) => {
   const { addItem } = useCart();
   const [selectedModifiers, setSelectedModifiers] = useState<CartItemModifier[]>([]);
-  const [cookingPreference, setCookingPreference] = useState('Rare');
+  const [cookingPreference, setCookingPreference] = useState('Medium');
+  const [specialInstructions, setSpecialInstructions] = useState('');
   const [totalPrice, setTotalPrice] = useState(item.price);
   
-  // Simulated modifiers for the burger
-  const burgerToppings = item.name.toLowerCase().includes('burger') ? [
-    { id: 'extra-cheese', name: 'Extra Cheese', price: 1.50 },
-    { id: 'bacon', name: 'Bacon', price: 2.00 },
-    { id: 'caramelized-onions', name: 'Caramelized Onions', price: 1.00 }
-  ] : [];
-  
-  // Simulated modifiers for pasta
-  const pastaModifiers = item.name.toLowerCase().includes('pasta') ? [
+  // Common modifiers for most items
+  const commonModifiers = [
     { id: 'extra-cheese', name: 'Extra Cheese', price: 1.50 },
     { id: 'extra-sauce', name: 'Extra Sauce', price: 1.00 },
-    { id: 'gluten-free', name: 'Gluten-Free Pasta', price: 2.50 }
+  ];
+  
+  // Specific modifiers based on item type
+  const burgerToppings = item.name.toLowerCase().includes('burger') ? [
+    { id: 'bacon', name: 'Bacon', price: 2.00 },
+    { id: 'caramelized-onions', name: 'Caramelized Onions', price: 1.00 },
+    { id: 'lettuce', name: 'Lettuce', price: 0.50 },
+    { id: 'tomato', name: 'Tomato', price: 0.50 }
   ] : [];
   
-  // Simulated modifiers for pizza
   const pizzaToppings = item.name.toLowerCase().includes('pizza') ? [
-    { id: 'extra-cheese', name: 'Extra Cheese', price: 2.00 },
     { id: 'pepperoni', name: 'Pepperoni', price: 2.50 },
     { id: 'mushrooms', name: 'Mushrooms', price: 1.50 },
-    { id: 'onions', name: 'Onions', price: 1.00 }
+    { id: 'onions', name: 'Onions', price: 1.00 },
+    { id: 'olives', name: 'Olives', price: 1.50 }
   ] : [];
   
-  // Combined modifiers
-  const availableModifiers = [...burgerToppings, ...pastaModifiers, ...pizzaToppings];
+  const drinkOptions = item.category === 'beverages' ? [
+    { id: 'ice', name: 'Extra Ice', price: 0.00 },
+    { id: 'sugar', name: 'Extra Sugar', price: 0.50 },
+    { id: 'lemon', name: 'Lemon Slice', price: 0.50 }
+  ] : [];
   
-  // Simulated cooking preferences for the burger
-  const cookingPreferences = item.name.toLowerCase().includes('burger') ? [
+  // Special diet modifiers
+  const dietOptions = [
+    { id: 'gluten-free', name: 'Gluten-Free', price: 2.50 },
+    { id: 'vegan', name: 'Vegan Option', price: 1.50 }
+  ];
+  
+  // Combined modifiers
+  const availableModifiers = [
+    ...commonModifiers, 
+    ...burgerToppings, 
+    ...pizzaToppings, 
+    ...drinkOptions,
+    ...dietOptions
+  ].filter((mod, index, self) => 
+    // Remove duplicates
+    index === self.findIndex(m => m.id === mod.id)
+  );
+  
+  // Cooking preferences for appropriate items
+  const needsCookingPreference = 
+    item.name.toLowerCase().includes('steak') || 
+    item.name.toLowerCase().includes('burger') ||
+    item.name.toLowerCase().includes('meat');
+  
+  const cookingPreferences = needsCookingPreference ? [
     { id: 'rare', name: 'Rare' },
     { id: 'medium-rare', name: 'Medium Rare' },
     { id: 'medium', name: 'Medium' },
@@ -70,7 +97,8 @@ export const ItemDetailDialog: React.FC<ItemDetailDialogProps> = ({ item }) => {
       item, 
       1, 
       selectedModifiers.length > 0 ? selectedModifiers : undefined,
-      cookingPreferences.length > 0 ? cookingPreference : undefined
+      cookingPreferences.length > 0 ? cookingPreference : undefined,
+      specialInstructions || undefined
     );
   };
 
@@ -80,12 +108,20 @@ export const ItemDetailDialog: React.FC<ItemDetailDialogProps> = ({ item }) => {
         <h2 className="text-xl font-medium">{item.name}</h2>
       </div>
       
+      <div className="mb-4">
+        <img 
+          src={item.image} 
+          alt={item.name}
+          className="w-full h-48 object-cover rounded-lg"
+        />
+      </div>
+      
       <p className="text-gray-600 mb-6">{item.description}</p>
       
       {availableModifiers.length > 0 && (
         <div className="mb-6">
           <h3 className="font-medium mb-3">Add Modifiers</h3>
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-40 overflow-y-auto pr-1">
             {availableModifiers.map(modifier => (
               <div key={modifier.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
                 <div className="flex items-center gap-2">
@@ -97,7 +133,9 @@ export const ItemDetailDialog: React.FC<ItemDetailDialogProps> = ({ item }) => {
                   />
                   <Label htmlFor={modifier.id}>{modifier.name}</Label>
                 </div>
-                <span className="text-emerald-600">+${modifier.price.toFixed(2)}</span>
+                <span className="text-emerald-600">
+                  {modifier.price > 0 ? `+$${modifier.price.toFixed(2)}` : 'Free'}
+                </span>
               </div>
             ))}
           </div>
@@ -109,7 +147,7 @@ export const ItemDetailDialog: React.FC<ItemDetailDialogProps> = ({ item }) => {
           <h3 className="font-medium mb-3">
             Cooking Preference <span className="text-red-500">*</span>
           </h3>
-          <RadioGroup defaultValue="Rare" onValueChange={setCookingPreference}>
+          <RadioGroup defaultValue="Medium" onValueChange={setCookingPreference}>
             <div className="grid grid-cols-2 gap-2">
               {cookingPreferences.map(pref => (
                 <div key={pref.id} className="flex items-center gap-2 bg-gray-50 p-2 rounded-md">
@@ -121,6 +159,16 @@ export const ItemDetailDialog: React.FC<ItemDetailDialogProps> = ({ item }) => {
           </RadioGroup>
         </div>
       )}
+
+      <div className="mb-6">
+        <h3 className="font-medium mb-2">Special Instructions</h3>
+        <Textarea 
+          placeholder="Any allergies or special requests?" 
+          value={specialInstructions}
+          onChange={(e) => setSpecialInstructions(e.target.value)}
+          className="resize-none h-20"
+        />
+      </div>
       
       <div className="mt-6 pt-4 border-t flex justify-between items-center">
         <div className="font-medium">Total:</div>
