@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
@@ -10,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { useCart } from '@/context/CartContext';
 import { Search, Minus, Plus, Trash2, ShoppingCart } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
-import { Autoplay } from 'embla-carousel-autoplay';
+import Autoplay from 'embla-carousel-autoplay';
 
 const Index: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState('all');
