@@ -5,21 +5,12 @@ import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { ItemDetailDialog } from '@/components/ItemDetailDialog';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import { useCart } from '@/context/CartContext';
 
 interface MenuItemComponentProps {
   item: MenuItem;
 }
 
 export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) => {
-  const { addItem } = useCart();
-  
-  const handleQuickAdd = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    addItem(item, 1);
-  };
-
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -39,9 +30,8 @@ export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) =>
             <Button
               size="sm"
               className="bg-emerald-600 hover:bg-emerald-700 text-white mt-2"
-              onClick={handleQuickAdd}
             >
-              <Plus size={16} className="mr-1" /> Add to Cart
+              <Plus size={16} className="mr-1" /> View Details
             </Button>
           </div>
         </div>

@@ -12,11 +12,14 @@ import { TableProvider } from "@/context/TableContext";
 import Layout from "./pages/Layout";
 import Index from "./pages/Index";
 import Menu from "./pages/Menu";
+import MenuItemDetail from "./pages/MenuItemDetail";
 import MyOrders from "./pages/MyOrders";
 import CallWaiter from "./pages/CallWaiter";
 import Bill from "./pages/Bill";
 import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -42,11 +45,14 @@ const App = () => (
                   <Route element={<Layout />}>
                     <Route path="/" element={<Index />} />
                     <Route path="/menu" element={<Menu />} />
+                    <Route path="/menu/:id" element={<MenuItemDetail />} />
                     <Route path="/my-orders" element={<MyOrders />} />
                     <Route path="/call-waiter" element={<CallWaiter />} />
                     <Route path="/bill" element={<Bill />} />
                     <Route path="/checkout" element={<Checkout />} />
                     <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/signup" element={<Signup />} />
                     <Route path="*" element={<NotFound />} />
                   </Route>
                 </Routes>

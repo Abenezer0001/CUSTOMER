@@ -6,12 +6,21 @@ import { Category, MenuItem } from '@/types';
 import { MenuItemComponent } from '@/components/MenuItemComponent';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useCart } from '@/context/CartContext';
-import { ShoppingCart, Minus, Plus, Trash2 } from 'lucide-react';
+import { ShoppingCart, Minus, Plus, Trash2, Search } from 'lucide-react';
+import { 
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious
+} from '@/components/ui/carousel';
 
 const Index: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const { items, subtotal, updateQuantity, removeItem } = useCart();
 
   // Get categories
@@ -26,7 +35,7 @@ const Index: React.FC = () => {
     queryFn: api.getMenuItems,
   });
 
-  // Filter items based on category
+  // Filter items based on category and search
   useEffect(() => {
     if (!menuItems) return;
 
@@ -37,20 +46,69 @@ const Index: React.FC = () => {
       filtered = filtered.filter(item => item.category === activeCategory);
     }
 
+    // Filter by search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.name.toLowerCase().includes(query) || 
+        item.description.toLowerCase().includes(query)
+      );
+    }
+
     setFilteredItems(filtered);
-  }, [menuItems, activeCategory]);
+  }, [menuItems, activeCategory, searchQuery]);
+
+  // Promotional offers data
+  const promos = [
+    {
+      id: 1,
+      title: "20% Promo Cashback",
+      description: "On your first order",
+      image: "/lovable-uploads/41f72dea-25ec-4be3-98ec-8a24aba5b54d.png"
+    },
+    {
+      id: 2,
+      title: "Free Delivery",
+      description: "On orders over $30",
+      image: "/lovable-uploads/41f72dea-25ec-4be3-98ec-8a24aba5b54d.png"
+    },
+    {
+      id: 3,
+      title: "Loyalty Rewards",
+      description: "Get 10% off every 5th order",
+      image: "/lovable-uploads/41f72dea-25ec-4be3-98ec-8a24aba5b54d.png"
+    }
+  ];
+
+  // Category icons
+  const getCategoryIcon = (category: string) => {
+    switch(category.toLowerCase()) {
+      case 'food':
+        return '🍔';
+      case 'beverages':
+      case 'drinks':
+        return '🥤';
+      case 'desserts':
+        return '🍰';
+      case 'appetizers':
+        return '🍟';
+      default:
+        return '🍽️';
+    }
+  };
 
   if (isLoading) {
     return (
       <div className="px-4 py-4 mt-16">
+        <div className="h-40 bg-gray-200 rounded-xl animate-pulse mb-8"></div>
         <div className="flex overflow-x-auto gap-2 py-3 mb-4">
           {[1, 2, 3, 4].map((_, i) => (
             <div key={i} className="h-10 w-24 bg-gray-200 rounded-full animate-pulse flex-shrink-0"></div>
           ))}
         </div>
         
-        <div className="grid grid-cols-1 gap-4">
-          {[1, 2, 3].map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((_, i) => (
             <div key={i} className="h-[120px] bg-gray-200 rounded-lg animate-pulse"></div>
           ))}
         </div>
@@ -60,32 +118,81 @@ const Index: React.FC = () => {
 
   return (
     <div className="px-4 py-4 mt-16">
-      <div className="flex overflow-x-auto gap-2 py-3 mb-4 no-scrollbar">
+      {/* Promotional Banner Carousel */}
+      <div className="mb-8 mt-2">
+        <Carousel className="w-full">
+          <CarouselContent>
+            {promos.map((promo) => (
+              <CarouselItem key={promo.id} className="md:basis-4/5">
+                <div className="relative rounded-xl overflow-hidden h-40">
+                  <img 
+                    src={promo.image} 
+                    alt={promo.title} 
+                    className="w-full h-full object-cover" 
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex flex-col justify-center p-6 text-white">
+                    <h3 className="text-2xl font-bold">{promo.title}</h3>
+                    <p>{promo.description}</p>
+                  </div>
+                </div>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          <CarouselPrevious className="left-2 bg-white/80" />
+          <CarouselNext className="right-2 bg-white/80" />
+        </Carousel>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative -mt-6 mb-6 z-10">
+        <div className="mx-auto max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <Input 
+              type="text" 
+              placeholder="Find your favorite food..." 
+              className="pl-10 py-5 pr-4 rounded-full shadow-lg border-none" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Category Selector */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
         <Button
           onClick={() => setActiveCategory('all')}
           variant={activeCategory === 'all' ? "default" : "outline"}
-          className="rounded-full flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+          className={`flex flex-col items-center p-3 h-auto rounded-xl ${
+            activeCategory === 'all' 
+              ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+              : "text-gray-700 hover:bg-gray-100"
+          }`}
         >
-          All
+          <span className="text-2xl mb-1">🍽️</span>
+          <span className="text-xs">All</span>
         </Button>
         
-        {categories?.map((category: Category) => (
+        {categories?.slice(0, 3).map((category: Category) => (
           <Button
             key={category.id}
             onClick={() => setActiveCategory(category.id)}
             variant={activeCategory === category.id ? "default" : "outline"}
-            className={`rounded-full flex-shrink-0 ${
+            className={`flex flex-col items-center p-3 h-auto rounded-xl ${
               activeCategory === category.id 
                 ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-                : "text-gray-700"
+                : "text-gray-700 hover:bg-gray-100"
             }`}
           >
-            {category.name}
+            <span className="text-2xl mb-1">{getCategoryIcon(category.name)}</span>
+            <span className="text-xs">{category.name}</span>
           </Button>
         ))}
       </div>
       
-      <div className="grid grid-cols-1 gap-4 mb-24">
+      {/* Menu Items Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-24">
         {filteredItems.map((item: MenuItem) => (
           <MenuItemComponent key={item.id} item={item} />
         ))}
