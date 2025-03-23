@@ -1,4 +1,5 @@
 
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,6 +23,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import NotFound from "./pages/NotFound";
 
+// Create a new client with proper configuration
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -31,38 +33,42 @@ const queryClient = new QueryClient({
   },
 });
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TableProvider>
-      <OrdersProvider>
-        <CartProvider>
-          <FavoritesProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner position="top-right" closeButton />
-              <BrowserRouter>
-                <Routes>
-                  <Route element={<Layout />}>
-                    <Route path="/" element={<Index />} />
-                    <Route path="/menu" element={<Menu />} />
-                    <Route path="/menu/:id" element={<MenuItemDetail />} />
-                    <Route path="/my-orders" element={<MyOrders />} />
-                    <Route path="/call-waiter" element={<CallWaiter />} />
-                    <Route path="/bill" element={<Bill />} />
-                    <Route path="/checkout" element={<Checkout />} />
-                    <Route path="/order-confirmation" element={<OrderConfirmation />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/signup" element={<Signup />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
-              </BrowserRouter>
-            </TooltipProvider>
-          </FavoritesProvider>
-        </CartProvider>
-      </OrdersProvider>
-    </TableProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  return (
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TableProvider>
+          <OrdersProvider>
+            <CartProvider>
+              <FavoritesProvider>
+                <TooltipProvider>
+                  <Toaster />
+                  <Sonner position="top-right" closeButton />
+                  <BrowserRouter>
+                    <Routes>
+                      <Route element={<Layout />}>
+                        <Route path="/" element={<Index />} />
+                        <Route path="/menu" element={<Menu />} />
+                        <Route path="/menu/:id" element={<MenuItemDetail />} />
+                        <Route path="/my-orders" element={<MyOrders />} />
+                        <Route path="/call-waiter" element={<CallWaiter />} />
+                        <Route path="/bill" element={<Bill />} />
+                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/signup" element={<Signup />} />
+                        <Route path="*" element={<NotFound />} />
+                      </Route>
+                    </Routes>
+                  </BrowserRouter>
+                </TooltipProvider>
+              </FavoritesProvider>
+            </CartProvider>
+          </OrdersProvider>
+        </TableProvider>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
+};
 
 export default App;
