@@ -12,7 +12,7 @@ const Login: React.FC = () => {
     <div className="container mx-auto px-4 py-8 mt-16">
       <Link to="/" className="inline-flex items-center mb-6 text-gray-600 hover:text-gray-900">
         <ArrowLeft className="mr-2" size={18} />
-        Back to menu
+        Back to main menu
       </Link>
       
       <Card className="max-w-md mx-auto border-emerald-100">
