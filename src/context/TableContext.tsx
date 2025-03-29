@@ -2,8 +2,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { TableInfo } from '@/types';
 
+type SetTableInfoAction = TableInfo | ((prev: TableInfo) => TableInfo);
+
 type TableContextType = TableInfo & {
-  setTableInfo: (tableInfo: TableInfo | ((prev: TableInfo) => TableInfo)) => void;
+  setTableInfo: (tableInfo: SetTableInfoAction) => void;
 };
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
@@ -20,11 +22,22 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('tableInfo', JSON.stringify(tableInfo));
   }, [tableInfo]);
 
+  const updateTableInfo = (tableInfoOrFunction: SetTableInfoAction) => {
+    if (typeof tableInfoOrFunction === 'function') {
+      setTableInfo(prev => {
+        const newTableInfo = tableInfoOrFunction(prev);
+        return newTableInfo;
+      });
+    } else {
+      setTableInfo(tableInfoOrFunction);
+    }
+  };
+
   return (
     <TableContext.Provider
       value={{
         ...tableInfo,
-        setTableInfo,
+        setTableInfo: updateTableInfo,
       }}
     >
       {children}

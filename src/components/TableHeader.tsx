@@ -3,10 +3,14 @@ import React, { useEffect } from 'react';
 import { useTableInfo } from '@/context/TableContext';
 import { Link, useLocation } from 'react-router-dom';
 import { User } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { useTheme } from "next-themes";
 
 export const TableHeader: React.FC = () => {
   const { restaurantName, tableNumber, setTableInfo } = useTableInfo();
   const location = useLocation();
+  const { isAuthenticated, user } = useAuth();
+  const { theme } = useTheme();
   
   useEffect(() => {
     // Extract table number from URL query parameters
@@ -17,19 +21,17 @@ export const TableHeader: React.FC = () => {
       // If table parameter exists in URL, use it
       setTableInfo(prev => ({
         ...prev,
-        tableNumber: tableParam,
-        restaurantName: restaurantName
+        tableNumber: tableParam
       }));
     } else if (!tableNumber) {
       // If no table number set yet, generate a random one
       const randomTable = generateRandomTableNumber();
       setTableInfo(prev => ({
         ...prev,
-        tableNumber: randomTable,
-        restaurantName: restaurantName
+        tableNumber: randomTable
       }));
     }
-  }, [location.search, setTableInfo, restaurantName, tableNumber]);
+  }, [location.search, setTableInfo, tableNumber]);
   
   // Generate a random alphanumeric table number of length 4
   const generateRandomTableNumber = (): string => {
@@ -42,8 +44,13 @@ export const TableHeader: React.FC = () => {
   };
   
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[url('/lovable-uploads/67359cb5-4e87-412a-a754-ae25100c8b48.png')] bg-cover bg-center">
-      <div className="flex justify-between items-center px-4 py-2 bg-emerald-600/90 backdrop-blur-sm text-white">
+    <header className={cn(
+      "fixed top-0 left-0 right-0 z-50 bg-cover bg-center transition-all duration-300",
+      theme === 'dark'
+        ? "bg-[url('/lovable-uploads/67359cb5-4e87-412a-a754-ae25100c8b48.png')] before:absolute before:inset-0 before:bg-black/60 before:backdrop-blur-sm before:z-[-1]"
+        : "bg-[url('/lovable-uploads/67359cb5-4e87-412a-a754-ae25100c8b48.png')]"
+    )}>
+      <div className="flex justify-between items-center px-4 py-2 bg-emerald-600/90 dark:bg-emerald-800/90 backdrop-blur-sm text-white relative">
         <div>
           <h1 className="text-sm font-medium">{restaurantName || 'InSeat'}</h1>
         </div>
@@ -52,11 +59,20 @@ export const TableHeader: React.FC = () => {
           <span className="text-xs font-semibold tracking-wider">TABLE {tableNumber}</span>
         </div>
         
-        <Link to="/login" className="flex items-center gap-1 text-white">
+        <Link 
+          to={isAuthenticated ? '/account' : '/login'} 
+          className="flex items-center gap-1 text-white"
+        >
           <User size={14} />
-          <span className="text-xs hidden sm:inline">Login</span>
+          <span className="text-xs hidden sm:inline">
+            {isAuthenticated ? (user?.name || 'Account') : 'Login'}
+          </span>
         </Link>
       </div>
     </header>
   );
 };
+
+function cn(...classes: string[]) {
+  return classes.filter(Boolean).join(' ');
+}

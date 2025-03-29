@@ -1,96 +1,134 @@
 
-/**
- * Utility for fetching data with JSON fallback functionality
- */
+import { toast } from 'sonner';
 
-type FetchOptions = {
+interface FetchWithFallbackOptions {
+  signal?: AbortSignal;
+  headers?: HeadersInit;
+  method?: string;
+  body?: BodyInit;
   fallbackPath: string;
-  timeoutMs?: number;
-  mapDataFn?: (data: any) => any;
-};
+  timeout?: number;
+}
+
+interface FetchWithFallbackResult<T> {
+  data: T;
+  isFallback: boolean;
+}
 
 /**
- * Fetches data with JSON fallback functionality
- * @param apiUrl The API URL to fetch from
- * @param options Options for the fetch including fallback path and timeout
- * @returns The fetched data and a flag indicating if fallback was used
+ * Fetch data from an API endpoint with fallback to a local JSON file
  */
-export async function fetchWithFallback<T>(
-  apiUrl: string, 
-  options: FetchOptions
-): Promise<{ data: T, isFallback: boolean }> {
-  const { fallbackPath, timeoutMs = 5000, mapDataFn } = options;
+export const fetchWithFallback = async <T>(
+  apiUrl: string,
+  options: FetchWithFallbackOptions
+): Promise<FetchWithFallbackResult<T>> => {
+  let isFallback = false;
   
-  // Create an abort controller for timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // Add timeout if not provided
+  const timeoutSignal = options.timeout 
+    ? AbortSignal.timeout(options.timeout) 
+    : AbortSignal.timeout(5000); // 5 seconds default
+  
+  const fetchSignal = options.signal 
+    ? AbortSignal.any([options.signal, timeoutSignal]) 
+    : timeoutSignal;
   
   try {
-    // Try the API first
-    const response = await fetch(apiUrl, {
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json'
-      }
+    // Try API endpoint first
+    const apiResponse = await fetch(apiUrl, {
+      method: options.method || 'GET',
+      headers: options.headers || {
+        'Content-Type': 'application/json',
+      },
+      body: options.body,
+      signal: fetchSignal,
     });
-    
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-      throw new Error(`API request failed with status ${response.status}`);
+
+    if (apiResponse.ok) {
+      const data = await apiResponse.json();
+      return { data, isFallback: false };
     }
     
-    const data = await response.json();
-    return { 
-      data: mapDataFn ? mapDataFn(data) : data, 
-      isFallback: false 
-    };
+    throw new Error(`API request failed with status: ${apiResponse.status}`);
   } catch (error) {
-    console.warn(`API fetch failed for ${apiUrl}, using JSON fallback`, error);
+    console.error(`Error fetching ${apiUrl}:`, error);
     
+    // API request failed, fall back to local JSON
+    isFallback = true;
     try {
-      // Clear timeout if it wasn't triggered by the abort controller
-      clearTimeout(timeoutId);
+      console.info(`Falling back to local file: ${options.fallbackPath}`);
+      const fallbackResponse = await fetch(options.fallbackPath);
       
-      // Fallback to local JSON file
-      const fallbackResponse = await fetch(fallbackPath);
       if (!fallbackResponse.ok) {
-        throw new Error(`Fallback JSON fetch failed with status ${fallbackResponse.status}`);
+        throw new Error(`Fallback request failed with status: ${fallbackResponse.status}`);
       }
       
       const fallbackData = await fallbackResponse.json();
-      return { 
-        data: mapDataFn ? mapDataFn(fallbackData) : fallbackData, 
-        isFallback: true 
-      };
+      return { data: fallbackData, isFallback: true };
     } catch (fallbackError) {
-      console.error('Both API and fallback JSON fetch failed', fallbackError);
-      throw new Error('Failed to fetch data from both API and fallback source');
+      console.error(`Fallback to ${options.fallbackPath} failed:`, fallbackError);
+      throw new Error(`Both API and fallback data sources failed`);
     }
   }
-}
+};
 
 /**
- * Creates folders in the data directory if they don't exist
- * Note: This is a simulated function as browser JS cannot create folders
- * In a real app, this would be done by the server
+ * Add data to a JSON file if API is not available
  */
-export function ensureDataFolders(): void {
-  console.log('Simulating folder creation for data storage');
-  // In a browser environment, we can't directly create folders
-  // This would need to be handled by the backend
-}
+export const saveDataLocally = async <T>(
+  apiUrl: string, 
+  data: T, 
+  fallbackPath: string
+): Promise<boolean> => {
+  try {
+    // Try API endpoint first
+    const apiResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+      signal: AbortSignal.timeout(5000),
+    });
 
-/**
- * Saves data to a JSON file
- * Note: This is a simulated function as browser JS cannot write to files
- * In a real app, this would be done by the server
- */
-export function saveToJsonFile(path: string, data: any): void {
-  console.log(`Simulating saving data to ${path}`, data);
-  // In a browser environment, we can't directly write to files
-  // This would need to be handled by the backend
-  
-  // Instead, we can store in localStorage as a fallback
-  localStorage.setItem(`simulated_${path.replace(/\//g, '_')}`, JSON.stringify(data));
-}
+    if (apiResponse.ok) {
+      toast.success('Data saved successfully');
+      return true;
+    }
+    
+    throw new Error(`API request failed with status: ${apiResponse.status}`);
+  } catch (error) {
+    console.error(`Error saving to ${apiUrl}:`, error);
+    
+    // In a real app, we would save to localStorage as we can't write to files directly
+    // from browser. For this demo, we'll just show what would happen.
+    const localStorageKey = `local_${fallbackPath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    
+    try {
+      // Get existing data if any
+      let existingData = [];
+      const storedData = localStorage.getItem(localStorageKey);
+      
+      if (storedData) {
+        existingData = JSON.parse(storedData);
+      }
+      
+      // Add new data
+      if (Array.isArray(existingData)) {
+        existingData.push(data);
+      } else {
+        existingData = [data];
+      }
+      
+      // Save back to localStorage
+      localStorage.setItem(localStorageKey, JSON.stringify(existingData));
+      
+      toast.warning('API is unavailable. Data saved locally and will be synced when the server is back online.');
+      return true;
+    } catch (localSaveError) {
+      console.error('Failed to save data locally:', localSaveError);
+      toast.error('Failed to save data. Please try again later.');
+      return false;
+    }
+  }
+};
