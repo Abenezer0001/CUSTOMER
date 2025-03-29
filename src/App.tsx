@@ -9,6 +9,8 @@ import { CartProvider } from "@/context/CartContext";
 import { FavoritesProvider } from "@/context/FavoritesContext";
 import { OrdersProvider } from "@/context/OrdersContext";
 import { TableProvider } from "@/context/TableContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 import Layout from "./pages/Layout";
 import Index from "./pages/Index";
@@ -37,35 +39,45 @@ const App = () => {
   return (
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
-        <TableProvider>
-          <OrdersProvider>
-            <CartProvider>
-              <FavoritesProvider>
-                <TooltipProvider>
-                  <Toaster />
-                  <Sonner position="top-right" closeButton />
-                  <BrowserRouter>
-                    <Routes>
-                      <Route element={<Layout />}>
-                        <Route path="/" element={<Index />} />
-                        <Route path="/menu" element={<Menu />} />
-                        <Route path="/menu/:id" element={<MenuItemDetail />} />
-                        <Route path="/my-orders" element={<MyOrders />} />
-                        <Route path="/call-waiter" element={<CallWaiter />} />
-                        <Route path="/bill" element={<Bill />} />
-                        <Route path="/checkout" element={<Checkout />} />
-                        <Route path="/order-confirmation" element={<OrderConfirmation />} />
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/signup" element={<Signup />} />
-                        <Route path="*" element={<NotFound />} />
-                      </Route>
-                    </Routes>
-                  </BrowserRouter>
-                </TooltipProvider>
-              </FavoritesProvider>
-            </CartProvider>
-          </OrdersProvider>
-        </TableProvider>
+        <AuthProvider>
+          <TableProvider>
+            <OrdersProvider>
+              <CartProvider>
+                <FavoritesProvider>
+                  <TooltipProvider>
+                    <Toaster />
+                    <Sonner position="top-right" closeButton />
+                    <BrowserRouter>
+                      <Routes>
+                        <Route element={<Layout />}>
+                          <Route path="/" element={<Index />} />
+                          <Route path="/menu" element={<Menu />} />
+                          <Route path="/menu/:id" element={<MenuItemDetail />} />
+                          <Route path="/my-orders" element={
+                            <ProtectedRoute>
+                              <MyOrders />
+                            </ProtectedRoute>
+                          } />
+                          <Route path="/call-waiter" element={<CallWaiter />} />
+                          <Route path="/bill" element={<Bill />} />
+                          <Route path="/checkout" element={
+                            <ProtectedRoute>
+                              <Checkout />
+                            </ProtectedRoute>
+                          } />
+                          <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                          <Route path="/login" element={<Login />} />
+                          <Route path="/signup" element={<Signup />} />
+                          <Route path="*" element={<NotFound />} />
+                        </Route>
+                      </Routes>
+                    </BrowserRouter>
+                  </TooltipProvider>
+                </FavoritesProvider>
+              </CartProvider>
+            </OrdersProvider>
+          </TableProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </React.StrictMode>
   );

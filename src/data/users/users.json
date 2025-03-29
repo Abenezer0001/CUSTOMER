@@ -1,0 +1,21 @@
+
+[
+  {
+    "id": "user_1",
+    "name": "Demo User",
+    "email": "user@example.com",
+    "password": "password123",
+    "loyaltyPoints": 250,
+    "orders": ["order_1", "order_2"],
+    "createdAt": "2023-08-15T12:00:00.000Z"
+  },
+  {
+    "id": "user_2",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "password": "john123",
+    "loyaltyPoints": 150,
+    "orders": ["order_3"],
+    "createdAt": "2023-09-20T10:30:00.000Z"
+  }
+]
