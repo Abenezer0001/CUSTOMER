@@ -23,10 +23,11 @@ export const TableHeader: React.FC = () => {
     } else if (!tableNumber) {
       // If no table number set yet, generate a random one
       const randomTable = generateRandomTableNumber();
-      setTableInfo({
+      setTableInfo(prev => ({
+        ...prev,
         tableNumber: randomTable,
         restaurantName: restaurantName
-      });
+      }));
     }
   }, [location.search, setTableInfo, restaurantName, tableNumber]);
   
