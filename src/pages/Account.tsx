@@ -312,8 +312,8 @@ const Account: React.FC = () => {
                           </div>
                           <Badge variant={
                             order.status === 'completed' ? 'default' :
-                            order.status === 'delivered' ? 'success' :
-                            order.status === 'ready' ? 'warning' : 'secondary'
+                            order.status === 'delivered' ? 'secondary' :
+                            order.status === 'ready' ? 'outline' : 'secondary'
                           }>
                             {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                           </Badge>
