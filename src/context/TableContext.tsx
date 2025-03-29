@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { TableInfo } from '@/types';
 
 type TableContextType = TableInfo & {
-  setTableInfo: (tableInfo: TableInfo) => void;
+  setTableInfo: (tableInfo: TableInfo | ((prev: TableInfo) => TableInfo)) => void;
 };
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
@@ -24,7 +24,7 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <TableContext.Provider
       value={{
         ...tableInfo,
-        setTableInfo: (newTableInfo: TableInfo) => setTableInfo(newTableInfo),
+        setTableInfo,
       }}
     >
       {children}

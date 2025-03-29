@@ -15,10 +15,11 @@ export const TableHeader: React.FC = () => {
     
     if (tableParam) {
       // If table parameter exists in URL, use it
-      setTableInfo({
+      setTableInfo(prev => ({
+        ...prev,
         tableNumber: tableParam,
         restaurantName: restaurantName
-      });
+      }));
     } else if (!tableNumber) {
       // If no table number set yet, generate a random one
       const randomTable = generateRandomTableNumber();
