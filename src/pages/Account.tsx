@@ -229,130 +229,132 @@ const Account: React.FC = () => {
                   </TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="profile" className="m-0">
-                  <CardTitle className="text-xl mb-1">My Profile</CardTitle>
-                  <CardDescription>Manage your account information</CardDescription>
-                </TabsContent>
-                
-                <TabsContent value="orders" className="m-0">
-                  <CardTitle className="text-xl mb-1">Order History</CardTitle>
-                  <CardDescription>Review your past orders</CardDescription>
-                </TabsContent>
+                <div>
+                  <TabsContent value="profile" className="m-0">
+                    <CardTitle className="text-xl mb-1">My Profile</CardTitle>
+                    <CardDescription>Manage your account information</CardDescription>
+                  </TabsContent>
+                  
+                  <TabsContent value="orders" className="m-0">
+                    <CardTitle className="text-xl mb-1">Order History</CardTitle>
+                    <CardDescription>Review your past orders</CardDescription>
+                  </TabsContent>
+                </div>
+              
+                <CardContent className="pt-6">
+                  <TabsContent value="profile" className="m-0">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium">Full Name</label>
+                        <div className="flex items-center justify-between mt-1">
+                          <span>{user.name}</span>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Edit className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <label className="text-sm font-medium">Email Address</label>
+                        <div className="flex items-center justify-between mt-1">
+                          <span>{user.email}</span>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Edit className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <label className="text-sm font-medium">Password</label>
+                        <div className="flex items-center justify-between mt-1">
+                          <span>••••••••</span>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Edit className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <label className="text-sm font-medium">Communication Preferences</label>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex items-center">
+                            <input type="checkbox" id="emailNotif" className="mr-2" defaultChecked />
+                            <label htmlFor="emailNotif" className="text-sm">Email notifications</label>
+                          </div>
+                          <div className="flex items-center">
+                            <input type="checkbox" id="smsNotif" className="mr-2" />
+                            <label htmlFor="smsNotif" className="text-sm">SMS notifications</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="orders" className="m-0">
+                    {orders.length > 0 ? (
+                      <div className="space-y-4">
+                        {orders.map((order) => (
+                          <Card key={order.id} className="overflow-hidden">
+                            <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 flex justify-between items-center">
+                              <div>
+                                <span className="text-sm font-medium">
+                                  Order #{order.id.substring(0, 8)}
+                                </span>
+                                <span className="text-xs text-muted-foreground block">
+                                  {format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a')}
+                                </span>
+                              </div>
+                              <Badge variant={
+                                order.status === 'completed' ? 'default' :
+                                order.status === 'delivered' ? 'secondary' :
+                                order.status === 'ready' ? 'outline' : 'secondary'
+                              }>
+                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                              </Badge>
+                            </div>
+                            <CardContent className="p-4">
+                              <div className="space-y-2">
+                                {order.items.map((item, idx) => (
+                                  <div key={idx} className="flex justify-between text-sm">
+                                    <span>
+                                      {item.quantity}x {item.name}
+                                      {item.modifiers && item.modifiers.length > 0 && (
+                                        <span className="text-xs text-muted-foreground block pl-4">
+                                          {item.modifiers.map(mod => mod.name).join(', ')}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span>${(item.price * item.quantity).toFixed(2)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <Separator className="my-3" />
+                              <div className="flex justify-between font-medium">
+                                <span>Total</span>
+                                <span>${order.total.toFixed(2)}</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <History className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                        <h3 className="text-lg font-medium mb-2">No orders yet</h3>
+                        <p className="text-muted-foreground text-sm mb-4">You haven't placed any orders yet</p>
+                        <Button onClick={() => navigate('/menu')}>Browse Menu</Button>
+                      </div>
+                    )}
+                  </TabsContent>
+                </CardContent>
               </Tabs>
             </CardHeader>
-            
-            <CardContent>
-              <TabsContent value="profile" className="m-0">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">Full Name</label>
-                    <div className="flex items-center justify-between mt-1">
-                      <span>{user.name}</span>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Edit className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div>
-                    <label className="text-sm font-medium">Email Address</label>
-                    <div className="flex items-center justify-between mt-1">
-                      <span>{user.email}</span>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Edit className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div>
-                    <label className="text-sm font-medium">Password</label>
-                    <div className="flex items-center justify-between mt-1">
-                      <span>••••••••</span>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Edit className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div>
-                    <label className="text-sm font-medium">Communication Preferences</label>
-                    <div className="mt-2 space-y-2">
-                      <div className="flex items-center">
-                        <input type="checkbox" id="emailNotif" className="mr-2" defaultChecked />
-                        <label htmlFor="emailNotif" className="text-sm">Email notifications</label>
-                      </div>
-                      <div className="flex items-center">
-                        <input type="checkbox" id="smsNotif" className="mr-2" />
-                        <label htmlFor="smsNotif" className="text-sm">SMS notifications</label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="orders" className="m-0">
-                {orders.length > 0 ? (
-                  <div className="space-y-4">
-                    {orders.map((order) => (
-                      <Card key={order.id} className="overflow-hidden">
-                        <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 flex justify-between items-center">
-                          <div>
-                            <span className="text-sm font-medium">
-                              Order #{order.id.substring(0, 8)}
-                            </span>
-                            <span className="text-xs text-muted-foreground block">
-                              {format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a')}
-                            </span>
-                          </div>
-                          <Badge variant={
-                            order.status === 'completed' ? 'default' :
-                            order.status === 'delivered' ? 'secondary' :
-                            order.status === 'ready' ? 'outline' : 'secondary'
-                          }>
-                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                          </Badge>
-                        </div>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
-                            {order.items.map((item, idx) => (
-                              <div key={idx} className="flex justify-between text-sm">
-                                <span>
-                                  {item.quantity}x {item.name}
-                                  {item.modifiers && item.modifiers.length > 0 && (
-                                    <span className="text-xs text-muted-foreground block pl-4">
-                                      {item.modifiers.map(mod => mod.name).join(', ')}
-                                    </span>
-                                  )}
-                                </span>
-                                <span>${(item.price * item.quantity).toFixed(2)}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <Separator className="my-3" />
-                          <div className="flex justify-between font-medium">
-                            <span>Total</span>
-                            <span>${order.total.toFixed(2)}</span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <History className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                    <h3 className="text-lg font-medium mb-2">No orders yet</h3>
-                    <p className="text-muted-foreground text-sm mb-4">You haven't placed any orders yet</p>
-                    <Button onClick={() => navigate('/menu')}>Browse Menu</Button>
-                  </div>
-                )}
-              </TabsContent>
-            </CardContent>
           </Card>
         </div>
       </div>
