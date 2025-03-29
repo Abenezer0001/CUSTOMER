@@ -1,0 +1,157 @@
+
+{
+  "items": [
+    {
+      "id": "1",
+      "name": "Dal Makhani",
+      "description": "The unique recipe captures purity in creaminess of black lentils simmered overnight on low flame.",
+      "price": 30.00,
+      "image": "/lovable-uploads/e66c6a9e-63eb-4bd4-a5d0-61c8a2bce69b.png",
+      "category": "curry",
+      "restaurantId": "rest1",
+      "featured": true,
+      "popular": true,
+      "nutritionInfo": {
+        "protein": "50g",
+        "carbs": "70g",
+        "fats": "18g",
+        "calories": 124
+      },
+      "preparationTime": "8-10 min",
+      "tags": ["vegan", "spicy", "vegetarian"]
+    },
+    {
+      "id": "2",
+      "name": "Classic Cheeseburger",
+      "description": "Juicy beef patty with melted cheddar cheese, lettuce, tomato, and our special sauce.",
+      "price": 12.99,
+      "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd",
+      "category": "burger",
+      "restaurantId": "rest1",
+      "featured": true,
+      "popular": true,
+      "nutritionInfo": {
+        "protein": "35g",
+        "carbs": "45g",
+        "fats": "22g",
+        "calories": 650
+      },
+      "preparationTime": "10-12 min",
+      "tags": ["beef", "cheese"]
+    },
+    {
+      "id": "3",
+      "name": "Margherita Pizza",
+      "description": "Traditional pizza with tomato sauce, mozzarella cheese, and fresh basil leaves.",
+      "price": 14.99,
+      "image": "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38",
+      "category": "pizza",
+      "restaurantId": "rest1",
+      "featured": false,
+      "popular": true,
+      "nutritionInfo": {
+        "protein": "28g",
+        "carbs": "65g",
+        "fats": "18g",
+        "calories": 550
+      },
+      "preparationTime": "15-20 min",
+      "tags": ["vegetarian", "classic"]
+    },
+    {
+      "id": "4",
+      "name": "Truffle French Fries",
+      "description": "Crispy golden fries drizzled with truffle oil and sprinkled with parmesan cheese.",
+      "price": 8.99,
+      "image": "https://images.unsplash.com/photo-1630384060421-cb20d0e0649d",
+      "category": "fries",
+      "restaurantId": "rest1",
+      "featured": true,
+      "popular": false,
+      "nutritionInfo": {
+        "protein": "8g",
+        "carbs": "48g",
+        "fats": "22g",
+        "calories": 420
+      },
+      "preparationTime": "8-10 min",
+      "tags": ["vegetarian", "truffle"]
+    },
+    {
+      "id": "5",
+      "name": "Spicy Chicken Wings",
+      "description": "Crispy chicken wings tossed in our spicy buffalo sauce, served with blue cheese dip.",
+      "price": 13.99,
+      "image": "https://images.unsplash.com/photo-1562967914-608f82629710",
+      "category": "chicken",
+      "restaurantId": "rest1",
+      "featured": false,
+      "popular": true,
+      "nutritionInfo": {
+        "protein": "42g",
+        "carbs": "12g",
+        "fats": "28g",
+        "calories": 480
+      },
+      "preparationTime": "12-15 min",
+      "tags": ["spicy", "chicken"]
+    },
+    {
+      "id": "6",
+      "name": "Spaghetti Carbonara",
+      "description": "Al dente spaghetti with creamy egg sauce, crispy pancetta, and freshly ground black pepper.",
+      "price": 16.99,
+      "image": "/lovable-uploads/6f5e2fa0-aae5-4b1d-b109-d17950f3202f.png",
+      "category": "pasta",
+      "restaurantId": "rest1",
+      "featured": true,
+      "popular": true,
+      "nutritionInfo": {
+        "protein": "25g",
+        "carbs": "75g",
+        "fats": "24g",
+        "calories": 620
+      },
+      "preparationTime": "12-15 min",
+      "tags": ["italian", "creamy"]
+    },
+    {
+      "id": "7",
+      "name": "Chocolate Lava Cake",
+      "description": "Warm chocolate cake with a molten center, served with vanilla ice cream.",
+      "price": 9.99,
+      "image": "https://images.unsplash.com/photo-1551024506-0bccd828d307",
+      "category": "desserts",
+      "restaurantId": "rest1",
+      "featured": true,
+      "popular": false,
+      "nutritionInfo": {
+        "protein": "5g",
+        "carbs": "48g",
+        "fats": "18g",
+        "calories": 380
+      },
+      "preparationTime": "12-15 min",
+      "tags": ["dessert", "chocolate"]
+    },
+    {
+      "id": "8",
+      "name": "Fresh Berry Smoothie",
+      "description": "Blend of fresh strawberries, blueberries, and raspberries with yogurt and honey.",
+      "price": 7.99,
+      "image": "https://images.unsplash.com/photo-1551024709-8f23befc6f87",
+      "category": "drinks",
+      "restaurantId": "rest1",
+      "featured": false,
+      "popular": true,
+      "nutritionInfo": {
+        "protein": "8g",
+        "carbs": "32g",
+        "fats": "2g",
+        "calories": 180
+      },
+      "preparationTime": "5-7 min",
+      "tags": ["healthy", "refreshing"]
+    }
+  ]
+}
