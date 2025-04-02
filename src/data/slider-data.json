@@ -2,23 +2,30 @@
 [
   {
     "id": "slide1",
-    "imageUrl": "/lovable-uploads/41f72dea-25ec-4be3-98ec-8a24aba5b54d.png",
-    "title": "Welcome Offer!",
-    "description": "Get 10% off your first order with code WELCOME10",
-    "link": "/menu"
+    "imageUrl": "/lovable-uploads/9ad0e17d-9c30-426a-b36c-11c3e8e5e0a5.png",
+    "title": "Summer Special Offer!",
+    "description": "Get 30% off on all cocktails every Friday",
+    "link": "/category/cocktails"
   },
   {
     "id": "slide2", 
     "imageUrl": "/lovable-uploads/6f5e2fa0-aae5-4b1d-b109-d17950f3202f.png",
-    "title": "Featured: Premium Pasta",
-    "description": "Try our new handmade pasta dishes",
-    "link": "/menu/pasta"
+    "title": "New: Premium Pasta Collection",
+    "description": "Handcrafted Italian pasta with authentic sauces",
+    "link": "/category/food"
   },
   {
     "id": "slide3",
     "imageUrl": "/lovable-uploads/e66c6a9e-63eb-4bd4-a5d0-61c8a2bce69b.png",
-    "title": "Curry Festival",
-    "description": "Explore our authentic curry selection",
-    "link": "/menu/curry"
+    "title": "Curry Festival This Week",
+    "description": "Explore our authentic curry selection with special prices",
+    "link": "/category/food"
+  },
+  {
+    "id": "slide4",
+    "imageUrl": "/lovable-uploads/3a7894a7-444c-4b24-88cf-c09a08fe27a9.png",
+    "title": "Cinema Snack Combos",
+    "description": "Perfect pairings for your movie night",
+    "link": "/category/cinema_snacks"
   }
 ]

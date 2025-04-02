@@ -26,6 +26,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
+import CategoryDetail from "./pages/CategoryDetail";
 
 // Create a new client with proper configuration
 const queryClient = new QueryClient({
@@ -41,7 +42,7 @@ const App = () => {
   return (
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider attribute="class" defaultTheme="light">
+        <ThemeProvider attribute="class" defaultTheme="dark">
           <AuthProvider>
             <TableProvider>
               <OrdersProvider>
@@ -56,6 +57,7 @@ const App = () => {
                             <Route path="/" element={<Index />} />
                             <Route path="/menu" element={<Menu />} />
                             <Route path="/menu/:id" element={<MenuItemDetail />} />
+                            <Route path="/category/:categoryId" element={<CategoryDetail />} />
                             <Route path="/my-orders" element={
                               <ProtectedRoute>
                                 <MyOrders />
