@@ -1,0 +1,180 @@
+Okay, here's the refined prompt, taking into account your feedback and the backend details.
+
+**Prompt: Build a Customer-Facing Ordering Site with UI Improvements, Dynamic Table Number, Real JSON Data, API Fallback, and Full Authentication**
+
+**Overall Goal:** Build a *new and independent* customer-facing online ordering platform, drawing *inspiration and reusable components* 
+The platform should:
+
+1.  Provide a visually appealing menu browsing experience.
+2.  Allow users to browse menus, add items to a cart, and place orders.
+3.  Implement full user authentication (email/password and Google Auth).
+4.  Have a loyalty system.
+5.  Gracefully handle backend API unavailability by falling back to local JSON files served by JSON Server.
+6.  Implement a dynamic table number display.
+**I. Core Functionality Requirements:**
+
+1.  **Dynamic Table Number:**
+    *   **Functionality:** The application should retrieve the table number from the URL path.  For example, if the URL is `http://localhost:5173/?table=L01`, the table number "L01" should be extracted. If no `table` query parameter is present, generate a random alphanumeric string of length 4 (e.g., "A4B2").
+    *   **Display:** Display the table number prominently in the navbar, as shown in the provided screenshot ("TABLE L01").  Use the `localStorage` to persit the table number.
+    *   **Re-randomization:** When the user refreshes the page, the URL should be checked again to see if the `table` parameter is added, if not regenerate a new random alphanumeric string of length 4
+    *   **Component:** Modify the `Layout.tsx` component to accommodate this dynamic table number.
+
+2.  **Hero Section/Slider (Improved):**
+    *   **Functionality:** Implement a functional hero section slider at the top of the menu page.
+    *   **Content:** The slider should display promotional content related to the restaurant, such as:
+        *   Special offers (e.g., "10% off your first order").
+        *   Featured menu items.
+        *   Seasonal promotions.
+        *   Restaurant information (e.g., new location, hours of operation).
+    *   **Data Source:** The slider content should be loaded from a JSON file: `src/data/slider-data.json`.
+        *   **Data Structure (slider-data.json):**
+            ```json
+            [
+              {
+                "id": "slide1",
+                "imageUrl": "url to a promotional image",
+                "title": "Welcome Offer!",
+                "description": "Get 10% off your first order with code WELCOME10",
+                "link": "/menu" // Optional link to a specific page
+              },
+              {
+                "id": "slide2",
+                "imageUrl": "url to a featured item image",
+                "title": "Featured Item: Spicy Chicken Burger",
+                "description": "Try our new Spicy Chicken Burger – guaranteed to ignite your taste buds!",
+                "link": "/menu/item23" //Optional link
+              }
+            ]
+            ```
+    *   **UI:** The slider should have:
+        *   Automatic sliding with a smooth transition effect.
+        *   Navigation indicators (dots or arrows) to allow users to manually navigate the slides.
+        *   Clear and legible text.
+        *   Optimized images for fast loading.
+    *   **Component:** Create a new component `src/components/home/HeroSlider.tsx` to handle the slider functionality.
+    *   **Responsiveness:** Make the slider responsive and adapt to different screen sizes.
+
+3.  **Menu Browsing:**
+    *   **UI:** Design a visually appealing menu browsing experience, drawing inspiration from the provided screenshot.
+        *   Implement the category selection as a horizontal scrollable list of icon buttons.
+        *   Display menu items in a grid format, with clear images, names, descriptions, and prices.
+        *   Add a "+" button (as in the screenshot) to allow users to quickly add items to the cart.
+    *   **Data Source:**
+        *   **Primary:** Attempt to fetch menu categories and items from `localhost:3000/api/categories` and `localhost:3000/api/menu-items`. Use `axiosConfig.ts` to make the API requests.
+        *   **Fallback:** If the API requests fail, load mock data from JSON files located in a new folder: `src/data/menu-data.json` (containing categories) and `src/data/menu-items.json` (containing menu items).  The application *must not crash*.  Display an appropriate message to the user indicating the data source.
+        *   **Filtering:** Display only categories and menu items that belong to the currently selected restaurant (store restaurant ID in `localStorage`). Add a `restaurantId` property to the JSON data structures (see the previous prompt) and use it to filter the displayed items and categories.
+    *   **Modifier Groups:** Implement support for displaying and selecting modifiers. Use real data fetch for modifiers and modifier groups with json fallback.
+    * **Real JSON Data**: The application should attempt to load data from the `src/data` json files using `fetch` api.
+4.  **Shopping Cart:**
+    *   **Functionality:** Implement a shopping cart.
+    *   **Display:**  Display the cart with item names, quantities, prices, and a running total. Implement a badge icon for the cart.
+    *   **Floating Cart:**  Display the cart as a floating icon (as shown in the screenshot) on the right corner of the screen, with the number of items in the cart.
+    *   **Quantity Adjustment:** Allow users to easily adjust the quantity of items in the cart.
+
+5.  **Order Placement:**
+    *   **UI:** Design a clear and concise order placement form.
+    *   **Data:** Collect necessary information:
+        *   Customer Name
+        *   Contact Information (Phone/Email)
+        *   Delivery Address / Table Number (automatically populated from the URL parameter).
+        *   Order Type (Delivery/Dine-in - implement a radio button).
+        *   Special Instructions (optional)
+    *   **Order Submission:**
+        *   **API Interaction:** Attempt to POST the order data to `localhost:3000/api/orders`.
+        *   **JSON Server Fallback:** If the API request fails, store the order data in a new JSON file: `src/data/orders.json` (append to the existing array or create the file if it doesn't exist). Store the order data in the appropriate folder inside `src/data` folder. Alert the user that the order was saved locally and will be processed when the server is back online.
+        *   Implement validation to ensure only users order for their selected restaurant
+
+6.  **User Authentication (Email/Password and Google Auth) with Loyalty System:**
+    *   **Registration/Login:** Create Login.tsx and Register.tsx pages (modify existing ones).
+        *   **Data Source:**
+            *   **API Interaction:** Attempt to register/login users via `localhost:3000/api/register` and `localhost:3000/api/login`.
+            *   **JSON Server Fallback:** If the API is unavailable, store user data in `src/data/users.json`. Store all user data to the correct folder inside `src/data`
+        *   **Google Auth:** Integrate Google Authentication.
+        * Store the login status in `localStorage`
+    *   **Account Management:** Create a "My Account" page where users can view their profile, order history, and loyalty points.
+    *   **Protected Routes:** Use `ProtectedRoute.tsx` to protect the order placement and "My Account" pages.
+    *   **Loyalty System:**
+        * Implement a points system
+        * Give users a certain amount of points on each succesful order.
+        * Display and load user loyalty points by calling data fetch from localhost api then fallback to the json data
+        * Reward users based on loyalty points to give them discounts and so on.
+
+7.  **Restaurant Selection (Existing):**
+    *   Keep the restaurant selection functionality but implement the filter for restaurant to prevent users from placing order that does not belong to the selected restaurant
+
+**II. UI/UX Enhancements:**
+
+1.  **Visual Theme:** Completely revamp the UI to be customer-friendly and visually appealing.  Use a modern design aesthetic. Use a library like Tailwind CSS or Material UI for styling. Refer to the screenshot provided for inspiration.
+2.  **Responsiveness:** Ensure the site is fully responsive.
+3.  **Image Handling:**  Implement proper image handling.
+
+**III. Code Structure and Organization:**
+
+1.  **Modularity:** Maintain a modular code structure.
+2.  **Data Fetching:** Create custom hooks.
+3.  **Error Handling:** Implement comprehensive error handling.
+4.  **TypeScript:** Maintain strong typing.
+
+**IV. Backend Interaction (Simulated with JSON Server):**
+
+1.  **JSON Server Setup:**
+    *   Install JSON Server globally.
+    *   Create a `db.json` file.
+    *   Run JSON Server on port 3000.
+2.  **API Endpoints:** The application should use the following API endpoints:
+    *   `GET /api/categories`
+    *   `GET /api/menu-items`
+    *   `GET /api/modifier-groups`
+    *   `GET /api/modifiers`
+    *   `POST /api/orders`
+    *   `POST /api/register`
+    *   `POST /api/login`
+    *   `GET /api/users/:id` (to get user profile data)
+
+**V. JSON Server Fallback Logic (Critical):**
+
+1.  **Centralized Fetching:** Create a utility function or a custom hook.
+2.  **API Request:** Attempt to fetch data from the JSON Server API endpoint.
+3.  **Timeout:** Implement a timeout.
+4.  **Error Handling:** Use `try...catch` blocks.
+5.  **JSON File Fallback:** If the API request fails, load the data from the corresponding JSON file in `src/data/`.
+6. ** Folder organization inside `src/data`:
+Create the following folders inside `src/data` to store different data:
+* `src/data/orders`: To store order data
+* `src/data/users`: To store users data
+* `src/data/restaurants`: To store restaurant data
+
+7.  **Caching:** Consider caching the data.
+8.  **User Feedback:** Display a clear message.
+
+**VI. Things to Consider and Implement:**
+
+*   **Testing:** Write unit tests.
+*   **Clear Error Messages:** Provide informative error messages.
+*   **Loading States:** Display loading indicators.
+
+**VII. Existing Components to Leverage and Adapt:**
+
+*   `src/components/menu/*`: Adapt these components.
+*   `src/components/common/ProtectedRoute.tsx`: Use this for protecting routes.
+*   `src/context/AuthContext.tsx`: Adapt or replace this context.
+*   `src/utils/axiosConfig.ts`: Use this for making API requests.
+
+**This prompt provides a detailed guide for transforming the existing admin dashboard into a fully functional, visually appealing, and robust customer-facing ordering site. It emphasizes the use of a real data, dynamic table number, user authentication, JSON Server fallback, and a modern UI.  Pay close attention to the folder structure and data source priorities.**
+
+
+Key improvements in this prompt:
+
+Table Number: Implemented dynamic table number extraction and display.
+
+Hero Section: Described the hero section in detail.
+
+Functionality Improvements: User authentication, and Loyalty system.
+
+Folder organization: Specified a folder inside src/data to oraganize data
+
+API endpoints Added the list of API endpoints that are expected.
+
+Data fetching Try to make data fetch as possible from the src/data folders for JSON data.
+
+Remember to break this down into smaller tasks and iterate on the AI-generated code. Good luck!
