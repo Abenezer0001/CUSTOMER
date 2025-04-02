@@ -10,18 +10,20 @@
     "createdAt": "2023-08-15T12:00:00.000Z",
     "preferences": {
       "notifications": true,
-      "marketing": false
+      "darkMode": true,
+      "language": "en"
     },
     "address": {
       "street": "123 Main St",
       "city": "New York",
       "zipCode": "10001"
     },
-    "favoriteItems": ["item_1", "item_3"],
-    "rewardLevel": "gold"
+    "favorites": ["item_1", "item_3"],
+    "rewardLevel": "gold",
+    "phoneNumber": "+1234567890"
   },
   {
-    "id": "user_2",
+    "id": "user_2", 
     "name": "John Doe",
     "email": "john@example.com",
     "password": "hashed_password_456",
@@ -30,14 +32,16 @@
     "createdAt": "2023-09-20T10:30:00.000Z",
     "preferences": {
       "notifications": true,
-      "marketing": true
+      "darkMode": false,
+      "language": "en"
     },
     "address": {
       "street": "456 Oak Ave",
-      "city": "Los Angeles",
+      "city": "Los Angeles", 
       "zipCode": "90001"
     },
-    "favoriteItems": ["item_2"],
-    "rewardLevel": "silver"
+    "favorites": ["item_2"],
+    "rewardLevel": "silver",
+    "phoneNumber": "+1987654321"
   }
 ]

@@ -2,26 +2,23 @@
 [
   {
     "id": "slide1",
-    "imageUrl": "https://images.unsplash.com/photo-1504674900247-0877df9cc836",
-    "title": "Special Weekend Offer",
-    "description": "20% off on all main courses",
-    "buttonText": "View Menu",
+    "imageUrl": "/lovable-uploads/41f72dea-25ec-4be3-98ec-8a24aba5b54d.png",
+    "title": "Welcome Offer!",
+    "description": "Get 10% off your first order with code WELCOME10",
     "link": "/menu"
   },
   {
-    "id": "slide2",
-    "imageUrl": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5",
-    "title": "New! Truffle Collection",
-    "description": "Try our signature truffle-infused dishes",
-    "buttonText": "Explore",
-    "link": "/menu"
+    "id": "slide2", 
+    "imageUrl": "/lovable-uploads/6f5e2fa0-aae5-4b1d-b109-d17950f3202f.png",
+    "title": "Featured: Premium Pasta",
+    "description": "Try our new handmade pasta dishes",
+    "link": "/menu/pasta"
   },
   {
     "id": "slide3",
-    "imageUrl": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0",
-    "title": "Chef's Special",
-    "description": "Handcrafted gourmet experience",
-    "buttonText": "Order Now",
-    "link": "/menu"
+    "imageUrl": "/lovable-uploads/e66c6a9e-63eb-4bd4-a5d0-61c8a2bce69b.png",
+    "title": "Curry Festival",
+    "description": "Explore our authentic curry selection",
+    "link": "/menu/curry"
   }
 ]
