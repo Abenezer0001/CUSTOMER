@@ -1,8 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from 'next-themes';
 import {
@@ -27,117 +25,97 @@ type SlideData = {
 export const HeroSlider: React.FC = () => {
   const [slides, setSlides] = useState<SlideData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [currentSlide, setCurrentSlide] = useState(0);
   const navigate = useNavigate();
   const { theme } = useTheme();
-  
+
   useEffect(() => {
     const fetchSlides = async () => {
       try {
         // Try to fetch from API first
-        const apiUrl = 'http://localhost:3000/api/promotions';
+        const apiUrl = 'http://0.0.0.0:3000/api/promotions';
         const apiResponse = await fetch(apiUrl, { signal: AbortSignal.timeout(3000) });
-        
+
         if (apiResponse.ok) {
           const apiData = await apiResponse.json();
           setSlides(apiData);
-          setIsLoading(false);
           return;
         }
-        
+
         // API failed, fall back to JSON file
         const response = await fetch('/src/data/slider-data.json');
-        if (!response.ok) {
-          throw new Error('Failed to fetch slider data');
-        }
+        if (!response.ok) throw new Error('Failed to fetch slider data');
         const data = await response.json();
         setSlides(data);
         toast.info('Using local promotion data');
       } catch (error) {
         console.error('Error loading slider data:', error);
-        setError('Could not load promotional content');
         // Fallback data in case of error
-        setSlides([
-          {
-            id: 'fallback1',
-            imageUrl: '/lovable-uploads/6f5e2fa0-aae5-4b1d-b109-d17950f3202f.png',
-            title: 'Special Offers',
-            description: 'Check out our latest promotions',
-            buttonText: 'View Menu',
-            link: '/menu'
-          }
-        ]);
+        setSlides([{
+          id: 'fallback1',
+          imageUrl: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836',
+          title: 'Welcome to Our Restaurant',
+          description: 'Discover our delicious menu',
+          buttonText: 'Browse Menu',
+          link: '/menu'
+        }]);
       } finally {
         setIsLoading(false);
       }
     };
-    
+
     fetchSlides();
   }, []);
-  
+
   if (isLoading) {
     return (
-      <div className="w-full h-56 bg-emerald-100 dark:bg-emerald-900/30 animate-pulse rounded-xl">
+      <div className="w-full h-64 md:h-[400px] bg-gradient-to-r from-emerald-100 to-emerald-50 dark:from-emerald-900/30 dark:to-emerald-800/30 animate-pulse rounded-xl">
         <div className="w-full h-full flex items-center justify-center">
-          <span className="text-emerald-500 dark:text-emerald-400">Loading...</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
         </div>
       </div>
     );
   }
-  
-  if (error && slides.length === 0) {
-    return (
-      <div className="w-full p-4 bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-xl">
-        {error}
-      </div>
-    );
-  }
-  
-  const handleSlideClick = (link?: string) => {
-    if (link) {
-      navigate(link);
-    }
-  };
-  
+
   const plugin = React.useRef(
     Autoplay({ delay: 5000, stopOnInteraction: true })
   );
-  
+
   return (
     <Carousel 
-      className="w-full relative rounded-xl overflow-hidden"
+      className="w-full relative rounded-xl overflow-hidden shadow-xl"
       plugins={[plugin.current]}
+      onSlideChanged={setCurrentSlide}
       opts={{
         loop: true,
         align: "start",
       }}
     >
       <CarouselContent>
-        {slides.map((slide) => (
+        {slides.map((slide, index) => (
           <CarouselItem key={slide.id}>
             <div 
-              className="relative h-48 sm:h-56 md:h-64 w-full cursor-pointer transform transition-transform hover:scale-[1.01] duration-300"
-              onClick={() => handleSlideClick(slide.link)}
+              className="relative h-64 md:h-[400px] w-full cursor-pointer group"
+              onClick={() => slide.link && navigate(slide.link)}
             >
               <img
                 src={slide.imageUrl}
                 alt={slide.title}
-                className="w-full h-full object-cover"
-                loading="lazy"
+                className="w-full h-full object-cover transform transition-transform duration-700 scale-100 group-hover:scale-105"
+                loading={index === 0 ? "eager" : "lazy"}
               />
               <div className={cn(
-                "absolute inset-0 flex flex-col justify-center p-6",
-                theme === 'dark' 
-                  ? "bg-gradient-to-r from-black/90 via-black/70 to-transparent" 
-                  : "bg-gradient-to-r from-black/70 via-black/40 to-transparent"
+                "absolute inset-0 flex flex-col justify-end p-6 md:p-10",
+                "bg-gradient-to-t from-black/90 via-black/50 to-transparent",
+                "transition-opacity duration-300"
               )}>
-                <h2 className="text-white text-lg sm:text-xl md:text-2xl font-bold mb-2 tracking-tight">{slide.title}</h2>
-                <p className="text-white/90 text-sm sm:text-base mb-4 max-w-xs">{slide.description}</p>
+                <h2 className="text-2xl md:text-4xl font-bold text-white mb-2 tracking-tight">{slide.title}</h2>
+                <p className="text-white/90 text-sm md:text-lg mb-4 max-w-xl">{slide.description}</p>
                 {slide.buttonText && (
                   <Button 
                     variant="default"
-                    size="sm" 
-                    className="w-fit bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-black dark:text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+                    size="lg"
+                    className="w-fit bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300"
                   >
                     {slide.buttonText}
                   </Button>
@@ -147,21 +125,23 @@ export const HeroSlider: React.FC = () => {
           </CarouselItem>
         ))}
       </CarouselContent>
-      
-      <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1 z-10">
+
+      <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 z-10">
         {slides.map((_, index) => (
           <div
             key={`dot-${index}`}
             className={cn(
               "w-2 h-2 rounded-full transition-all duration-300",
-              index === 0 ? "bg-white" : "bg-white/50"
+              index === currentSlide 
+                ? "bg-white w-6" 
+                : "bg-white/50 hover:bg-white/75"
             )}
           />
         ))}
       </div>
-      
-      <CarouselPrevious className="absolute left-2 -translate-y-1/2 top-1/2 h-8 w-8 bg-black/30 hover:bg-black/50 dark:bg-white/10 dark:hover:bg-white/20 border-none text-white" />
-      <CarouselNext className="absolute right-2 -translate-y-1/2 top-1/2 h-8 w-8 bg-black/30 hover:bg-black/50 dark:bg-white/10 dark:hover:bg-white/20 border-none text-white" />
+
+      <CarouselPrevious className="absolute left-4 -translate-y-1/2 top-1/2 h-10 w-10 bg-black/30 hover:bg-black/50 border-none text-white opacity-0 transition-opacity group-hover:opacity-100" />
+      <CarouselNext className="absolute right-4 -translate-y-1/2 top-1/2 h-10 w-10 bg-black/30 hover:bg-black/50 border-none text-white opacity-0 transition-opacity group-hover:opacity-100" />
     </Carousel>
   );
 };

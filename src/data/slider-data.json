@@ -2,34 +2,26 @@
 [
   {
     "id": "slide1",
-    "imageUrl": "/lovable-uploads/6f5e2fa0-aae5-4b1d-b109-d17950f3202f.png",
-    "title": "Free delivery for spaghetti",
-    "description": "Up to 3 times per day",
-    "buttonText": "Order now",
+    "imageUrl": "https://images.unsplash.com/photo-1504674900247-0877df9cc836",
+    "title": "Special Weekend Offer",
+    "description": "20% off on all main courses",
+    "buttonText": "View Menu",
     "link": "/menu"
   },
   {
     "id": "slide2",
-    "imageUrl": "/lovable-uploads/e66c6a9e-63eb-4bd4-a5d0-61c8a2bce69b.png",
-    "title": "Try our signature Dal Makhani",
-    "description": "Creamy lentils in a rich buttery sauce",
-    "buttonText": "View item",
-    "link": "/menu/1"
-  },
-  {
-    "id": "slide3",
-    "imageUrl": "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38",
-    "title": "Weekend Pizza Special",
-    "description": "Buy one, get one free every weekend!",
-    "buttonText": "Get offer",
+    "imageUrl": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5",
+    "title": "New! Truffle Collection",
+    "description": "Try our signature truffle-infused dishes",
+    "buttonText": "Explore",
     "link": "/menu"
   },
   {
-    "id": "slide4",
-    "imageUrl": "https://images.unsplash.com/photo-1513104890138-7c749659a591",
-    "title": "Fresh & Healthy",
-    "description": "Check out our new healthy menu options",
-    "buttonText": "Explore",
+    "id": "slide3",
+    "imageUrl": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0",
+    "title": "Chef's Special",
+    "description": "Handcrafted gourmet experience",
+    "buttonText": "Order Now",
     "link": "/menu"
   }
 ]

@@ -4,18 +4,40 @@
     "id": "user_1",
     "name": "Demo User",
     "email": "user@example.com",
-    "password": "password123",
+    "password": "hashed_password_123",
     "loyaltyPoints": 250,
     "orders": ["order_1", "order_2"],
-    "createdAt": "2023-08-15T12:00:00.000Z"
+    "createdAt": "2023-08-15T12:00:00.000Z",
+    "preferences": {
+      "notifications": true,
+      "marketing": false
+    },
+    "address": {
+      "street": "123 Main St",
+      "city": "New York",
+      "zipCode": "10001"
+    },
+    "favoriteItems": ["item_1", "item_3"],
+    "rewardLevel": "gold"
   },
   {
     "id": "user_2",
     "name": "John Doe",
     "email": "john@example.com",
-    "password": "john123",
+    "password": "hashed_password_456",
     "loyaltyPoints": 150,
     "orders": ["order_3"],
-    "createdAt": "2023-09-20T10:30:00.000Z"
+    "createdAt": "2023-09-20T10:30:00.000Z",
+    "preferences": {
+      "notifications": true,
+      "marketing": true
+    },
+    "address": {
+      "street": "456 Oak Ave",
+      "city": "Los Angeles",
+      "zipCode": "90001"
+    },
+    "favoriteItems": ["item_2"],
+    "rewardLevel": "silver"
   }
 ]
