@@ -1,157 +1,494 @@
-
 {
   "items": [
     {
       "id": "1",
       "name": "Dal Makhani",
-      "description": "The unique recipe captures purity in creaminess of black lentils simmered overnight on low flame.",
+      "description": "Creamy black lentils simmered overnight.",
       "price": 30.00,
-      "image": "/lovable-uploads/e66c6a9e-63eb-4bd4-a5d0-61c8a2bce69b.png",
-      "category": "curry",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "dal makhani indian food",
+      "categoryId": "food",
       "restaurantId": "rest1",
       "featured": true,
       "popular": true,
-      "nutritionInfo": {
-        "protein": "50g",
-        "carbs": "70g",
-        "fats": "18g",
-        "calories": 124
-      },
+      "nutritionInfo": { "calories": 124 },
       "preparationTime": "8-10 min",
-      "tags": ["vegan", "spicy", "vegetarian"]
+      "tags": ["vegetarian", "creamy"]
     },
     {
       "id": "2",
       "name": "Classic Cheeseburger",
-      "description": "Juicy beef patty with melted cheddar cheese, lettuce, tomato, and our special sauce.",
+      "description": "Juicy beef patty with cheddar cheese.",
       "price": 12.99,
-      "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd",
-      "category": "burger",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "classic cheeseburger beef",
+      "categoryId": "food",
       "restaurantId": "rest1",
       "featured": true,
       "popular": true,
-      "nutritionInfo": {
-        "protein": "35g",
-        "carbs": "45g",
-        "fats": "22g",
-        "calories": 650
-      },
+      "nutritionInfo": { "calories": 650 },
       "preparationTime": "10-12 min",
       "tags": ["beef", "cheese"]
     },
     {
       "id": "3",
       "name": "Margherita Pizza",
-      "description": "Traditional pizza with tomato sauce, mozzarella cheese, and fresh basil leaves.",
+      "description": "Tomato sauce, mozzarella, fresh basil.",
       "price": 14.99,
-      "image": "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38",
-      "category": "pizza",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "margherita pizza italian",
+      "categoryId": "food",
       "restaurantId": "rest1",
       "featured": false,
       "popular": true,
-      "nutritionInfo": {
-        "protein": "28g",
-        "carbs": "65g",
-        "fats": "18g",
-        "calories": 550
-      },
+      "nutritionInfo": { "calories": 550 },
       "preparationTime": "15-20 min",
       "tags": ["vegetarian", "classic"]
     },
     {
       "id": "4",
       "name": "Truffle French Fries",
-      "description": "Crispy golden fries drizzled with truffle oil and sprinkled with parmesan cheese.",
+      "description": "Crispy fries with truffle oil & parmesan.",
       "price": 8.99,
-      "image": "https://images.unsplash.com/photo-1630384060421-cb20d0e0649d",
-      "category": "fries",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "truffle french fries gourmet",
+      "categoryId": "food",
       "restaurantId": "rest1",
       "featured": true,
       "popular": false,
-      "nutritionInfo": {
-        "protein": "8g",
-        "carbs": "48g",
-        "fats": "22g",
-        "calories": 420
-      },
+      "nutritionInfo": { "calories": 420 },
       "preparationTime": "8-10 min",
       "tags": ["vegetarian", "truffle"]
     },
     {
       "id": "5",
       "name": "Spicy Chicken Wings",
-      "description": "Crispy chicken wings tossed in our spicy buffalo sauce, served with blue cheese dip.",
+      "description": "Crispy wings in buffalo sauce.",
       "price": 13.99,
-      "image": "https://images.unsplash.com/photo-1562967914-608f82629710",
-      "category": "chicken",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "spicy chicken wings buffalo",
+      "categoryId": "food",
       "restaurantId": "rest1",
       "featured": false,
       "popular": true,
-      "nutritionInfo": {
-        "protein": "42g",
-        "carbs": "12g",
-        "fats": "28g",
-        "calories": 480
-      },
+      "nutritionInfo": { "calories": 480 },
       "preparationTime": "12-15 min",
       "tags": ["spicy", "chicken"]
     },
     {
       "id": "6",
       "name": "Spaghetti Carbonara",
-      "description": "Al dente spaghetti with creamy egg sauce, crispy pancetta, and freshly ground black pepper.",
+      "description": "Creamy egg sauce, crispy pancetta.",
       "price": 16.99,
-      "image": "/lovable-uploads/6f5e2fa0-aae5-4b1d-b109-d17950f3202f.png",
-      "category": "pasta",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "spaghetti carbonara italian pasta",
+      "categoryId": "food",
       "restaurantId": "rest1",
       "featured": true,
       "popular": true,
-      "nutritionInfo": {
-        "protein": "25g",
-        "carbs": "75g",
-        "fats": "24g",
-        "calories": 620
-      },
+      "nutritionInfo": { "calories": 620 },
       "preparationTime": "12-15 min",
       "tags": ["italian", "creamy"]
     },
     {
       "id": "7",
       "name": "Chocolate Lava Cake",
-      "description": "Warm chocolate cake with a molten center, served with vanilla ice cream.",
+      "description": "Warm cake with molten center.",
       "price": 9.99,
-      "image": "https://images.unsplash.com/photo-1551024506-0bccd828d307",
-      "category": "desserts",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "chocolate lava cake dessert",
+      "categoryId": "food",
       "restaurantId": "rest1",
       "featured": true,
       "popular": false,
-      "nutritionInfo": {
-        "protein": "5g",
-        "carbs": "48g",
-        "fats": "18g",
-        "calories": 380
-      },
+      "nutritionInfo": { "calories": 380 },
       "preparationTime": "12-15 min",
       "tags": ["dessert", "chocolate"]
     },
     {
+      "id": "11",
+      "name": "Pad Thai Noodles",
+      "description": "Classic Thai stir-fried noodles.",
+      "price": 15.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "pad thai noodles thai food",
+      "categoryId": "food",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "12",
+      "name": "Caesar Salad",
+      "description": "Romaine lettuce, croutons, parmesan, Caesar dressing.",
+      "price": 11.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "caesar salad classic",
+      "categoryId": "food",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "18",
+      "name": "California Roll",
+      "description": "Crab, avocado, cucumber sushi roll.",
+      "price": 9.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "california roll sushi",
+      "categoryId": "food",
+      "restaurantId": "rest1"
+    },
+    {
       "id": "8",
       "name": "Fresh Berry Smoothie",
-      "description": "Blend of fresh strawberries, blueberries, and raspberries with yogurt and honey.",
+      "description": "Strawberries, blueberries, raspberries.",
       "price": 7.99,
-      "image": "https://images.unsplash.com/photo-1551024709-8f23befc6f87",
-      "category": "drinks",
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "fresh berry smoothie healthy",
+      "categoryId": "drinks",
       "restaurantId": "rest1",
       "featured": false,
       "popular": true,
-      "nutritionInfo": {
-        "protein": "8g",
-        "carbs": "32g",
-        "fats": "2g",
-        "calories": 180
-      },
+      "nutritionInfo": { "calories": 180 },
       "preparationTime": "5-7 min",
       "tags": ["healthy", "refreshing"]
+    },
+    {
+      "id": "15",
+      "name": "Espresso",
+      "description": "Strong shot of coffee.",
+      "price": 3.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "espresso coffee shot",
+      "categoryId": "drinks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "19",
+      "name": "Latte",
+      "description": "Espresso with steamed milk.",
+      "price": 4.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "latte coffee milk",
+      "categoryId": "drinks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "20",
+      "name": "Green Tea",
+      "description": "Hot brewed green tea.",
+      "price": 3.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "green tea hot drink",
+      "categoryId": "drinks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "21",
+      "name": "Orange Juice",
+      "description": "Freshly squeezed orange juice.",
+      "price": 5.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "orange juice fresh",
+      "categoryId": "drinks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "9",
+      "name": "Draft Lager",
+      "description": "Crisp and refreshing draft lager.",
+      "price": 6.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "draft lager beer",
+      "categoryId": "beers",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "10",
+      "name": "Bottled IPA",
+      "description": "Hoppy India Pale Ale.",
+      "price": 7.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "bottled IPA beer",
+      "categoryId": "beers",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "22",
+      "name": "Stout",
+      "description": "Dark, rich stout beer.",
+      "price": 7.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "stout beer dark",
+      "categoryId": "beers",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "23",
+      "name": "Pilsner",
+      "description": "Light and crisp pilsner.",
+      "price": 6.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "pilsner beer light",
+      "categoryId": "beers",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "24",
+      "name": "Wheat Beer",
+      "description": "Cloudy wheat beer with fruity notes.",
+      "price": 7.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "wheat beer hefeweizen",
+      "categoryId": "beers",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "13",
+      "name": "Large Popcorn",
+      "description": "Buttery cinema-style popcorn.",
+      "price": 8.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "large popcorn cinema snack",
+      "categoryId": "cinema_snacks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "25",
+      "name": "Nachos with Cheese",
+      "description": "Tortilla chips with warm cheese sauce.",
+      "price": 9.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "nachos cheese cinema",
+      "categoryId": "cinema_snacks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "26",
+      "name": "Candy Bar",
+      "description": "Assorted popular candy bars.",
+      "price": 3.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "candy bar chocolate cinema",
+      "categoryId": "cinema_snacks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "27",
+      "name": "Pretzel Bites",
+      "description": "Warm, salted pretzel bites.",
+      "price": 6.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "pretzel bites snack",
+      "categoryId": "cinema_snacks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "28",
+      "name": "Soda Cup",
+      "description": "Large fountain soda.",
+      "price": 4.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "soda cup fountain drink",
+      "categoryId": "cinema_snacks",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "14",
+      "name": "Virgin Mojito",
+      "description": "Refreshing mint and lime mocktail.",
+      "price": 8.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "virgin mojito mocktail",
+      "categoryId": "mocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "29",
+      "name": "Shirley Temple",
+      "description": "Classic grenadine and ginger ale mocktail.",
+      "price": 7.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "shirley temple mocktail",
+      "categoryId": "mocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "30",
+      "name": "Virgin Strawberry Daiquiri",
+      "description": "Blended strawberry mocktail.",
+      "price": 9.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "virgin strawberry daiquiri mocktail",
+      "categoryId": "mocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "31",
+      "name": "Virgin Pina Colada",
+      "description": "Creamy pineapple and coconut mocktail.",
+      "price": 9.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "virgin pina colada mocktail",
+      "categoryId": "mocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "32",
+      "name": "Fruit Punch",
+      "description": "Mixed fruit juice punch.",
+      "price": 7.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "fruit punch mocktail",
+      "categoryId": "mocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "16",
+      "name": "Old Fashioned",
+      "description": "Classic whiskey cocktail.",
+      "price": 14.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "old fashioned cocktail whiskey",
+      "categoryId": "cocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "33",
+      "name": "Margarita",
+      "description": "Tequila, lime, triple sec cocktail.",
+      "price": 12.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "margarita cocktail tequila",
+      "categoryId": "cocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "34",
+      "name": "Mojito",
+      "description": "Rum, mint, lime, sugar, soda cocktail.",
+      "price": 13.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "mojito cocktail rum",
+      "categoryId": "cocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "35",
+      "name": "Negroni",
+      "description": "Gin, Campari, sweet vermouth cocktail.",
+      "price": 15.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "negroni cocktail gin",
+      "categoryId": "cocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "36",
+      "name": "Cosmopolitan",
+      "description": "Vodka, triple sec, cranberry, lime cocktail.",
+      "price": 13.50,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "cosmopolitan cocktail vodka",
+      "categoryId": "cocktails",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "17",
+      "name": "Pinot Noir (Glass)",
+      "description": "Smooth red wine.",
+      "price": 12.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "pinot noir red wine glass",
+      "categoryId": "wine",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "37",
+      "name": "Sauvignon Blanc (Glass)",
+      "description": "Crisp white wine.",
+      "price": 11.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "sauvignon blanc white wine glass",
+      "categoryId": "wine",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "38",
+      "name": "Cabernet Sauvignon (Glass)",
+      "description": "Full-bodied red wine.",
+      "price": 13.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "cabernet sauvignon red wine glass",
+      "categoryId": "wine",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "39",
+      "name": "Rosé (Bottle)",
+      "description": "Dry rosé wine.",
+      "price": 40.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "rose wine bottle",
+      "categoryId": "wine",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "40",
+      "name": "Prosecco (Bottle)",
+      "description": "Italian sparkling wine.",
+      "price": 45.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "prosecco sparkling wine bottle",
+      "categoryId": "wine",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "41",
+      "name": "Happy Hour Special",
+      "description": "Discounted drinks and appetizers.",
+      "price": 0.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "happy hour promotion bar",
+      "categoryId": "promotions",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "42",
+      "name": "Lunch Combo",
+      "description": "Special price for a set lunch menu.",
+      "price": 15.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "lunch combo promotion restaurant",
+      "categoryId": "promotions",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "43",
+      "name": "Weekend Brunch Deal",
+      "description": "All-you-can-eat brunch offer.",
+      "price": 35.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "weekend brunch promotion buffet",
+      "categoryId": "promotions",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "44",
+      "name": "Tuesday Taco Night",
+      "description": "Special price on tacos every Tuesday.",
+      "price": 3.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "taco night promotion mexican",
+      "categoryId": "promotions",
+      "restaurantId": "rest1"
+    },
+    {
+      "id": "45",
+      "name": "Kids Eat Free",
+      "description": "One free kids meal with adult entree purchase.",
+      "price": 0.00,
+      "image": "/placeholder.svg",
+      "imageSearchTerm": "kids eat free promotion family restaurant",
+      "categoryId": "promotions",
+      "restaurantId": "rest1"
     }
   ]
 }

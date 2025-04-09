@@ -109,7 +109,7 @@ const CategoryDetail: React.FC = () => {
         </Button>
         
         {/* Category title */}
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="absolute bottom-2 left-4 right-4"> {/* Reduced bottom spacing */}
           <h1 className="text-2xl font-bold text-white">{category.name}</h1>
           <p className="text-white/80 text-sm">
             {category.subCategories.length} subcategories

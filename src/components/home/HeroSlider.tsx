@@ -56,12 +56,12 @@ export const HeroSlider = () => {
 
   if (isLoading || slides.length === 0) {
     return (
-      <div className="w-full h-[400px] bg-gray-100 animate-pulse rounded-lg"></div>
+      <div className="w-full h-[250px] bg-gray-100 animate-pulse rounded-lg"></div>
     );
   }
 
   return (
-    <div className="relative w-full h-[400px] overflow-hidden rounded-lg">
+    <div className="relative w-full h-[250px] overflow-hidden rounded-lg">
       <div
         className="flex transition-transform duration-500 ease-out h-full"
         style={{ transform: `translateX(-${currentSlide * 100}%)` }}

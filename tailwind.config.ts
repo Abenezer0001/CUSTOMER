@@ -62,7 +62,12 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+				        'raisin-black': '#1E1F23',
+				        'night': '#0B0C0E',
+				        'delft-blue': '#3A3A61',
+				        'marian-blue': '#464587',
+				        'white': '#FFFFFF', // Keep white for text/icons
 			},
 			borderRadius: {
 				lg: 'var(--radius)',

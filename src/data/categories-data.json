@@ -1,21 +1,23 @@
-
 [
   {
     "id": "beers",
     "name": "BEERS",
     "image": "/lovable-uploads/9ad0e17d-9c30-426a-b36c-11c3e8e5e0a5.png",
+    "imageSearchTerm": "craft beer selection",
     "subCategories": ["Draft Beers", "Bottled Beers", "Craft Beers", "Import Beers"]
   },
   {
     "id": "promotions",
     "name": "PROMOTIONS",
     "image": "/lovable-uploads/4286559a-2d42-42fc-9bca-5fba323d3cb7.png",
+    "imageSearchTerm": "restaurant promotion deal",
     "subCategories": ["Daily Deals", "Happy Hour", "Combo Offers", "Special Events"]
   },
   {
     "id": "food",
     "name": "FOOD",
     "image": "/lovable-uploads/9f429efa-68ea-4053-829c-5c6add92b336.png",
+    "imageSearchTerm": "gourmet food platter",
     "subCategories": [
       "NOODLES",
       "FRIED SIDES",
@@ -32,30 +34,35 @@
     "id": "cinema_snacks",
     "name": "CINEMA SNACKS",
     "image": "/lovable-uploads/3a7894a7-444c-4b24-88cf-c09a08fe27a9.png",
+    "imageSearchTerm": "cinema snacks popcorn nachos",
     "subCategories": ["Popcorn", "Nachos", "Candy", "Pretzels", "Soft Drinks"]
   },
   {
     "id": "mocktails",
     "name": "MOCKTAILS & FIZZ DRINKS",
     "image": "/lovable-uploads/38df3812-eaa8-4ddc-986b-1da63f216fef.png",
+    "imageSearchTerm": "colorful mocktails bar",
     "subCategories": ["Virgin Cocktails", "Smoothies", "Shakes", "Sparkling Drinks"]
   },
   {
     "id": "drinks",
     "name": "DRINKS",
     "image": "/lovable-uploads/16dcc478-46ec-4824-864c-814524dc52ae.png",
+    "imageSearchTerm": "refreshing drinks variety",
     "subCategories": ["Coffee", "Tea", "Juices", "Soft Drinks", "Energy Drinks"]
   },
   {
     "id": "cocktails",
     "name": "COCKTAILS & ALCOHOLIC BEVERAGES",
     "image": "/lovable-uploads/9ad0e17d-9c30-426a-b36c-11c3e8e5e0a5.png",
+    "imageSearchTerm": "classic cocktails bar setting",
     "subCategories": ["Signature Cocktails", "Classic Cocktails", "Spirits", "Liqueurs"]
   },
   {
     "id": "wine",
     "name": "WINE LIST",
     "image": "/lovable-uploads/4286559a-2d42-42fc-9bca-5fba323d3cb7.png",
+    "imageSearchTerm": "wine bottles cellar",
     "subCategories": ["Red Wine", "White Wine", "Rosé", "Sparkling Wine", "Champagne"]
   }
 ]

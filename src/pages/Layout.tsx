@@ -46,9 +46,10 @@ const Layout: React.FC = () => {
   };
   
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background">
       <TableHeader />
-      <main className="flex-grow pb-20">
+      {/* Set main content background to white and ensure dark text in dark mode */}
+      <main className="flex-grow pb-20"> {/* Removed bg-white and dark:text-gray-800 */}
         <Outlet />
       </main>
       <BottomNav />

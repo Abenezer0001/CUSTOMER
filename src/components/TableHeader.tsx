@@ -44,29 +44,24 @@ export const TableHeader: React.FC = () => {
   };
   
   return (
-    <header className={cn(
-      "fixed top-0 left-0 right-0 z-50 bg-cover bg-center transition-all duration-300",
-      theme === 'dark'
-        ? "bg-[url('/lovable-uploads/67359cb5-4e87-412a-a754-ae25100c8b48.png')] before:absolute before:inset-0 before:bg-black/60 before:backdrop-blur-sm before:z-[-1]"
-        : "bg-[url('/lovable-uploads/67359cb5-4e87-412a-a754-ae25100c8b48.png')]"
-    )}>
-      <div className="flex justify-between items-center px-4 py-2 bg-emerald-600/90 dark:bg-emerald-800/90 backdrop-blur-sm text-white relative">
+    <header className="fixed top-0 left-0 right-0 z-50 transition-all duration-300">
+      {/* Use raisin-black for the header background, ensure text is white */}
+      <div className="flex justify-between items-center px-4 py-2 bg-raisin-black text-white relative">
         <div>
           <h1 className="text-sm font-medium">{restaurantName || 'InSeat'}</h1>
         </div>
         
-        <div className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-full px-3 py-1">
-          <span className="text-xs font-semibold tracking-wider">TABLE {tableNumber}</span>
+        {/* Use delft-blue for table number background and white text */}
+        <div className="flex items-center justify-center bg-delft-blue rounded-md px-3 py-1">
+          <span className="text-xs font-semibold tracking-wider text-white">TABLE {tableNumber}</span>
         </div>
         
         <Link 
           to={isAuthenticated ? '/account' : '/login'} 
           className="flex items-center gap-1 text-white"
         >
-          <User size={14} />
-          <span className="text-xs hidden sm:inline">
-            {isAuthenticated ? (user?.name || 'Account') : 'Login'}
-          </span>
+          <User size={16} className="text-white" /> {/* Ensure icon is white */}
+          {/* Removed text label for login/account to match image simplicity */}
         </Link>
       </div>
     </header>

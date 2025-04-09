@@ -135,7 +135,7 @@ const MenuItemDetail: React.FC = () => {
       <div className="rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm">
         <div className="relative">
           <img 
-            src={item.image} 
+            src={item.image}
             alt={item.name} 
             className="w-full h-60 object-cover"
           />

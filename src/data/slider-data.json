@@ -1,15 +1,16 @@
-
 [
   {
     "id": "slide1",
     "imageUrl": "/lovable-uploads/9ad0e17d-9c30-426a-b36c-11c3e8e5e0a5.png",
+    "imageSearchTerm": "summer cocktail promotion bar",
     "title": "Summer Special Offer!",
     "description": "Get 30% off on all cocktails every Friday",
     "link": "/category/cocktails"
   },
   {
-    "id": "slide2", 
+    "id": "slide2",
     "imageUrl": "/lovable-uploads/6f5e2fa0-aae5-4b1d-b109-d17950f3202f.png",
+    "imageSearchTerm": "premium italian pasta dish",
     "title": "New: Premium Pasta Collection",
     "description": "Handcrafted Italian pasta with authentic sauces",
     "link": "/category/food"
@@ -17,6 +18,7 @@
   {
     "id": "slide3",
     "imageUrl": "/lovable-uploads/e66c6a9e-63eb-4bd4-a5d0-61c8a2bce69b.png",
+    "imageSearchTerm": "indian curry festival food",
     "title": "Curry Festival This Week",
     "description": "Explore our authentic curry selection with special prices",
     "link": "/category/food"
@@ -24,6 +26,7 @@
   {
     "id": "slide4",
     "imageUrl": "/lovable-uploads/3a7894a7-444c-4b24-88cf-c09a08fe27a9.png",
+    "imageSearchTerm": "cinema snacks combo popcorn drink",
     "title": "Cinema Snack Combos",
     "description": "Perfect pairings for your movie night",
     "link": "/category/cinema_snacks"

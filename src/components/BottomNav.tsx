@@ -17,23 +17,26 @@ export const BottomNav: React.FC = () => {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[url('/lovable-uploads/357c4052-21e4-4c8d-ba4a-c9962646d47a.png')] bg-cover bg-center">
-      <Dock className="bg-black/40 backdrop-blur-sm text-white">
+    <div className="fixed bottom-0 left-0 right-0 z-50"> {/* Removed pb-4 */}
+      {/* Make dock full width, apply raisin-black bg, adjust padding/justification */}
+      <Dock className="bg-raisin-black px-4 py-3 flex items-center justify-around w-full"> 
         {navItems.map((item) => (
           <Link key={item.path} to={item.path}>
             <DockItem 
-              className="aspect-square rounded-full bg-black/20 backdrop-blur-md border border-white/10 hover:bg-emerald-900/30"
+              className="p-0 flex flex-col items-center" // Ensure vertical layout if needed
               isActive={location.pathname === item.path}
             >
-              <DockLabel>{item.label}</DockLabel>
-              <DockIcon>
-                {item.icon}
+              {/* Update active/inactive colors */}
+              <DockIcon className={`transition-all duration-200 ${location.pathname === item.path ? 'text-marian-blue scale-110' : 'text-muted-foreground'}`}> 
+                {React.cloneElement(item.icon, { size: 24 })} {/* Slightly larger icon */}
                 {item.path === '/my-orders' && totalItems > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
                     {totalItems}
                   </span>
                 )}
               </DockIcon>
+               {/* Ensure label is visible and styled */}
+              <DockLabel className={`text-xs mt-1 ${location.pathname === item.path ? 'text-marian-blue' : 'text-muted-foreground'}`}>{item.label}</DockLabel>
             </DockItem>
           </Link>
         ))}

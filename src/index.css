@@ -37,33 +37,34 @@
   }
   
   .dark {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 98%;
-    
-    --card: 240 10% 4%;
+    /* New Dark Theme Colors */
+    --background: 230 8% 6%; /* night (#0B0C0E) */
+    --foreground: 0 0% 98%; /* Almost white for better readability */
+
+    --card: 232 7% 13%; /* raisin-black (#1E1F23) */
     --card-foreground: 0 0% 98%;
-    
-    --popover: 240 10% 4%;
+
+    --popover: 232 7% 13%; /* raisin-black (#1E1F23) */
     --popover-foreground: 0 0% 98%;
-    
-    --primary: 142 70% 50%;
-    --primary-foreground: 240 5.9% 10%;
-    
-    --secondary: 240 3.7% 15.9%;
+
+    --primary: 240 25% 30%; /* delft-blue (#3A3A61) */
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 232 7% 13%; /* raisin-black (#1E1F23) */
     --secondary-foreground: 0 0% 98%;
-    
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    
-    --accent: 240 3.7% 15.9%;
+
+    --muted: 232 7% 13%; /* raisin-black (#1E1F23) */
+    --muted-foreground: 240 5% 65%; /* Lighter gray for muted text */
+
+    --accent: 241 30% 40%; /* marian-blue (#464587) */
     --accent-foreground: 0 0% 98%;
-    
-    --destructive: 0 62.8% 30.6%;
+
+    --destructive: 0 72% 51%; /* Adjusted red for dark mode */
     --destructive-foreground: 0 0% 98%;
-    
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 142 70% 50%;
+
+    --border: 232 7% 20%; /* Slightly lighter raisin-black for borders */
+    --input: 232 7% 20%; /* Slightly lighter raisin-black for inputs */
+    --ring: 240 25% 30%; /* delft-blue (#3A3A61) */
   }
 }
 
@@ -73,7 +74,7 @@
   }
   
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased; /* Removed dark:* here as variables handle it */
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -107,11 +108,11 @@
   }
   
   .menu-category.active {
-    @apply bg-primary text-primary-foreground;
+    @apply bg-primary text-primary-foreground dark:bg-marian-blue dark:text-primary-foreground; /* Use marian-blue for active dark */
   }
   
   .menu-category:not(.active) {
-    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80 dark:bg-card dark:text-card-foreground dark:hover:bg-card/80; /* Use card bg for inactive dark */
   }
   
   .product-card {
@@ -139,7 +140,7 @@
   }
   
   .active-nav-item::after {
-    @apply content-[''] absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full;
+    @apply content-[''] absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-primary rounded-full dark:bg-marian-blue; /* Use marian-blue for active dark */
   }
 }
 
