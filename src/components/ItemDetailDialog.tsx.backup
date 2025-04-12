@@ -1,0 +1,311 @@
+import React, { useState, useEffect } from 'react';
+import { Dialog } from '@headlessui/react';
+import { MenuItem } from '@/types/menuItem';
+import { useCart } from '@/context/CartContext';
+import { ChevronLeft, Heart, Plus, Star, ThumbsUp, Users, MessageCircle } from 'lucide-react';
+import Image from 'next/image';
+import { useToast } from '@/components/ui/use-toast';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+
+interface ItemDetailDialogProps {
+  item: MenuItem;
+  closeDialog: () => void;
+}
+
+// StarRating component
+const StarRating = ({ rating }: { rating: number }) => {
+  return (
+    <div className="flex items-center">
+      {[...Array(5)].map((_, i) => (
+        <Star 
+          key={i} 
+          size={16} 
+          className={`${i < Math.floor(rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} mr-0.5`} 
+        />
+      ))}
+      <span className="ml-1 text-sm font-medium text-gray-600">{rating.toFixed(1)}</span>
+    </div>
+  );
+};
+
+// ReviewCard component
+const ReviewCard = ({ 
+  author, 
+  rating, 
+  comment, 
+  date, 
+  likes 
+}: { 
+  author: string; 
+  rating: number; 
+  comment: string; 
+  date: string; 
+  likes: number 
+}) => {
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(likes);
+
+  const handleLike = () => {
+    if (!liked) {
+      setLikeCount(prev => prev + 1);
+      setLiked(true);
+    } else {
+      setLikeCount(prev => prev - 1);
+      setLiked(false);
+    }
+  };
+
+  return (
+    <div className="p-4 border rounded-lg mb-3">
+      <div className="flex justify-between items-center mb-2">
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2">
+            {author.charAt(0).toUpperCase()}
+          </div>
+          <span className="font-medium">{author}</span>
+        </div>
+        <StarRating rating={rating} />
+      </div>
+      <p className="text-gray-700 mb-2">{comment}</p>
+      <div className="flex justify-between items-center text-sm text-gray-500">
+        <span>{date}</span>
+        <div className="flex items-center">
+          <button 
+            className={`flex items-center gap-1 ${liked ? 'text-blue-500' : ''}`}
+            onClick={handleLike}
+          >
+            <ThumbsUp size={14} />
+            <span>{likeCount}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function ItemDetailDialog({ item, closeDialog }: ItemDetailDialogProps) {
+  const { addToCart } = useCart();
+  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  const [cookingPreference, setCookingPreference] = useState<string>('');
+  const [specialInstructions, setSpecialInstructions] = useState<string>('');
+  const [totalPrice, setTotalPrice] = useState<number>(item.price);
+  const { toast } = useToast();
+  
+  // Sample reviews
+  const reviews = [
+    {
+      author: 'John D.',
+      rating: 4.5,
+      comment: 'This dish was fantastic! The flavors were well balanced and the portion size was perfect.',
+      date: 'May 15, 2023',
+      likes: 12
+    },
+    {
+      author: 'Sarah M.',
+      rating: 5,
+      comment: 'Absolutely loved it! Would definitely order again.',
+      date: 'June 2, 2023',
+      likes: 8
+    }
+  ];
+
+  useEffect(() => {
+    let newTotal = item.price;
+    selectedModifiers.forEach((modifier) => {
+      if (modifier === 'Extra cheese') {
+        newTotal += 1.5;
+      } else if (modifier === 'Double patty') {
+        newTotal += 3.0;
+      } else if (modifier === 'Bacon') {
+        newTotal += 2.0;
+      } else if (modifier === 'Extra toppings') {
+        newTotal += 1.0;
+      }
+    });
+    setTotalPrice(newTotal);
+  }, [item.price, selectedModifiers]);
+
+  const handleModifierChange = (modifier: string) => {
+    setSelectedModifiers((prev) =>
+      prev.includes(modifier)
+        ? prev.filter((m) => m !== modifier)
+        : [...prev, modifier]
+    );
+  };
+
+  const handleAddToCart = () => {
+    addToCart({
+      ...item,
+      modifiers: selectedModifiers,
+      cookingPreference,
+      specialInstructions,
+      totalPrice,
+    });
+    toast({
+      title: 'Added to cart',
+      description: `${item.name} has been added to your cart.`,
+    });
+    closeDialog();
+  };
+
+  // Determine available modifiers based on item type
+  const availableModifiers = (() => {
+    if (item.category === 'Burgers') {
+      return ['Bacon', 'Extra cheese', 'Double patty', 'No onions'];
+    } else if (item.category === 'Pizzas') {
+      return ['Extra cheese', 'Extra toppings', 'Thin crust', 'Gluten-free'];
+    } else if (item.category === 'Beverages') {
+      return ['Ice', 'Sugar-free', 'Extra shot', 'Whipped cream'];
+    }
+    return ['Extra sauce', 'No spice', 'Larger portion'];
+  })();
+
+  // Function to render a section title
+  const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <h3 className="font-medium text-gray-900 mb-2">{children}</h3>
+  );
+
+  return (
+    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+      <Dialog.Title
+        as="div"
+        className="relative h-56 w-full overflow-hidden mb-4"
+      >
+        <button
+          onClick={closeDialog}
+          className="absolute left-4 top-4 z-10 rounded-full bg-white/80 p-1 text-gray-800 backdrop-blur-sm"
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <button className="absolute right-4 top-4 z-10 rounded-full bg-white/80 p-1 text-gray-800 backdrop-blur-sm">
+          <Heart size={20} />
+        </button>
+        {item.imageUrl && (
+          <Image
+            src={item.imageUrl}
+            alt={item.name}
+            fill
+            style={{ objectFit: 'cover' }}
+            quality={95}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="rounded-lg"
+          />
+        )}
+      </Dialog.Title>
+      <div className="mt-3">
+        <div className="flex justify-between items-center mb-1">
+          <h3 className="text-xl font-bold text-gray-900">{item.name}</h3>
+          <p className="text-lg font-semibold text-gray-900">${item.price.toFixed(2)}</p>
+      </div>
+      
+        <div className="flex items-center mb-3">
+          <StarRating rating={4.7} />
+          <span className="mx-2 text-gray-500">•</span>
+          <div className="flex items-center text-gray-500 text-sm">
+            <MessageCircle size={14} className="mr-1" />
+            <span>{reviews.length} reviews</span>
+          </div>
+          <span className="mx-2 text-gray-500">•</span>
+          <div className="flex items-center text-gray-500 text-sm">
+            <Users size={14} className="mr-1" />
+            <span>120+ orders</span>
+          </div>
+      </div>
+      
+        <p className="text-gray-600 mb-4">{item.description}</p>
+
+        {/* Modifiers Section */}
+        <div className="mb-4">
+          <SectionTitle>Customize Your Order</SectionTitle>
+          <div className="grid grid-cols-2 gap-2">
+            {availableModifiers.map((modifier) => (
+              <div key={modifier} className="flex items-center">
+                <input
+                  type="checkbox"
+                  id={modifier}
+                  checked={selectedModifiers.includes(modifier)}
+                  onChange={() => handleModifierChange(modifier)}
+                  className="mr-2 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor={modifier} className="text-sm text-gray-700">
+                  {modifier}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Cooking Preference Section - shown only for relevant categories */}
+        {(['Steaks', 'Burgers'].includes(item.category)) && (
+          <div className="mb-4">
+            <SectionTitle>Cooking Preference</SectionTitle>
+            <div className="grid grid-cols-3 gap-2">
+              {['Rare', 'Medium', 'Well Done'].map((pref) => (
+                <div key={pref} className="flex items-center">
+                  <input
+                    type="radio"
+                    id={pref}
+                    name="cookingPreference"
+                    checked={cookingPreference === pref}
+                    onChange={() => setCookingPreference(pref)}
+                    className="mr-2 h-4 w-4 border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor={pref} className="text-sm text-gray-700">
+                    {pref}
+                  </label>
+                </div>
+              ))}
+            </div>
+        </div>
+      )}
+
+        {/* Special Instructions Section */}
+        <div className="mb-4">
+          <SectionTitle>Special Instructions</SectionTitle>
+          <textarea
+          value={specialInstructions}
+          onChange={(e) => setSpecialInstructions(e.target.value)}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm"
+            placeholder="Any special requirements for your order?"
+            rows={2}
+        />
+      </div>
+      
+        {/* Reviews Section */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-3">
+            <SectionTitle>Customer Reviews</SectionTitle>
+            <button className="text-sm text-emerald-600 font-medium">View All</button>
+          </div>
+          
+          {reviews.map((review, index) => (
+            <ReviewCard 
+              key={index}
+              author={review.author}
+              rating={review.rating}
+              comment={review.comment}
+              date={review.date}
+              likes={review.likes}
+            />
+          ))}
+      </div>
+      
+        {/* Add to Cart Button */}
+        <div className="mt-5">
+        <Button 
+            type="button"
+            className="flex w-full items-center justify-center rounded-md bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+          onClick={handleAddToCart}
+        >
+            <Plus className="mr-2 h-5 w-5" aria-hidden="true" />
+            Add to Order - ${totalPrice.toFixed(2)}
+        </Button>
+        </div>
+    </div>
+    </Dialog.Panel>
+  );
+}

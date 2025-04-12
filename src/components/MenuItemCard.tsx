@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MenuItem } from '@/types';
@@ -38,20 +37,10 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
     addItem(item, 1);
   };
 
-  // Placeholder functions for quantity adjustment if needed later
-  // const handleIncrease = (e: React.MouseEvent) => {
-  //   e.preventDefault();
-  //   e.stopPropagation();
-  //   updateItemQuantity(item.id, quantity + 1);
-  // };
-
-  // const handleDecrease = (e: React.MouseEvent) => {
-  //   e.preventDefault();
-  //   e.stopPropagation();
-  //   if (quantity > 0) {
-  //     updateItemQuantity(item.id, quantity - 1);
-  //   }
-  // };
+  // Get fallback image if needed
+  const getFallbackImage = (searchTerm: string) => {
+    return `https://foodish-api.herokuapp.com/images/burger/burger${Math.floor(Math.random() * 30) + 1}.jpg`;
+  };
 
   return (
     <div // Changed Link to div to prevent nested interactive elements if quantity controls are added later
@@ -75,10 +64,14 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
       <Link to={`/menu/${item.id}`} className="block flex flex-col h-full">
         <div className="relative aspect-[4/3] w-full overflow-hidden">
           <img
-            src={item.image} // Use item's image
+            src={item.image || `https://source.unsplash.com/random/300x200/?${item.imageSearchTerm || 'food'}`} // Use item's image
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = getFallbackImage(item.imageSearchTerm || 'food');
+            }}
           />
         </div>
 
@@ -87,45 +80,26 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
             <h3 className="font-semibold text-sm mb-1 truncate" title={item.name}>
               {item.name}
             </h3>
-            {/* Added volume/description - using description or default */}
+            {/* Display first few words of description or a generic placeholder */}
             <p className="text-muted-foreground text-xs"> {/* Use muted foreground */}
-              {item.description?.split(' ').slice(0, 2).join(' ') || '70 ml'}
+              {item.description ? `${item.description.split(' ').slice(0, 3).join(' ')}...` : 'View details'}
             </p>
           </div>
 
           <div className="flex justify-between items-center mt-auto">
             <span className="font-semibold text-sm">
-              {/* Formatting price to match reference (e.g., 590 ₽) */}
-              {item.price.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              ${item.price.toFixed(2)}
             </span>
 
             {/* Add Button - Use marian-blue */}
             <Button
               size="icon"
-              className="h-8 w-8 rounded-md bg-marian-blue hover:bg-marian-blue/90 text-primary-foreground" // Use marian-blue and primary-foreground
+              className="h-8 w-8 rounded-full bg-marian-blue hover:bg-marian-blue/90 text-primary-foreground" // Use marian-blue and primary-foreground
               onClick={handleAdd}
               aria-label="Add to cart"
             >
               <Plus size={18} />
             </Button>
-
-            {/* Quantity Controls (Example - keep commented out for now, update colors if used) */}
-            {/* {quantity > 0 ? (
-              <div className="flex items-center gap-1 bg-marian-blue rounded-md"> // Use marian-blue
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-primary-foreground hover:bg-marian-blue/80" onClick={handleDecrease}><Minus size={16} /></Button>
-                <span className="font-medium text-sm text-primary-foreground w-4 text-center">{quantity}</span>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-primary-foreground hover:bg-marian-blue/80" onClick={handleIncrease}><Plus size={16} /></Button>
-              </div>
-            ) : (
-              <Button
-                size="icon"
-                className="h-8 w-8 rounded-md bg-marian-blue hover:bg-marian-blue/90 text-primary-foreground" // Use marian-blue
-                onClick={handleAdd}
-                aria-label="Add to cart"
-              >
-                <Plus size={18} />
-              </Button>
-            )} */}
           </div>
         </div>
       </Link>

@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 import { api } from '@/services/api';
 import { Category, MenuItem } from '@/types';
 import { MenuItemCard } from '@/components/MenuItemCard';
@@ -9,9 +9,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Filter } from 'lucide-react';
 
 const Menu: React.FC = () => {
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
+
+  // Get search query from URL if present
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const queryParam = searchParams.get('search');
+    if (queryParam) {
+      setSearchQuery(queryParam);
+    }
+  }, [location.search]);
 
   // Get categories
   const { data: categories, isLoading: categoriesLoading } = useQuery({
@@ -33,7 +43,7 @@ const Menu: React.FC = () => {
 
     // Filter by category
     if (activeCategory !== 'all') {
-      filtered = filtered.filter(item => item.category === activeCategory);
+      filtered = filtered.filter(item => item.categoryId === activeCategory);
     }
 
     // Filter by search query
@@ -59,7 +69,7 @@ const Menu: React.FC = () => {
     return (
       <div className="container mx-auto px-4 py-8 md:py-12 animate-fade-in">
         <div className="text-center mb-16">
-          <h1 className="text-4xl font-medium mb-4">Our Menu</h1>
+          <h1 className="text-3xl font-medium mb-4">Our Menu</h1>
           <p className="text-muted-foreground">Discover our exquisite selection of dishes</p>
         </div>
         
@@ -79,7 +89,7 @@ const Menu: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8 md:py-12 animate-fade-in">
       <div className="text-center mb-8 md:mb-12">
-        <h1 className="text-4xl font-medium mb-4">Our Menu</h1>
+        <h1 className="text-3xl font-medium mb-4">Our Menu</h1>
         <p className="text-muted-foreground">Discover our exquisite selection of dishes</p>
       </div>
       
@@ -91,14 +101,14 @@ const Menu: React.FC = () => {
         <Input
           type="text"
           placeholder="Search dishes, ingredients..."
-          className="pl-10 py-6 rounded-full bg-secondary/70 border-none"
+          className="pl-10 py-6 rounded-full bg-muted/50 border-none"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
       
       {/* Category Tabs */}
-      <Tabs defaultValue="all" value={activeCategory} onValueChange={setActiveCategory} className="mb-8">
+      <Tabs defaultValue={activeCategory} value={activeCategory} onValueChange={setActiveCategory} className="mb-8">
         <TabsList className="flex justify-start mb-4 overflow-x-auto p-1 custom-scrollbar gap-2 w-full bg-transparent">
           <TabsTrigger 
             value="all" 
@@ -117,6 +127,18 @@ const Menu: React.FC = () => {
             </TabsTrigger>
           ))}
         </TabsList>
+        
+        {/* Search Results */}
+        {searchQuery.trim() && (
+          <div className="mb-6 px-2">
+            <h2 className="text-lg font-medium mb-2">
+              Search results for "{searchQuery}"
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} found
+            </p>
+          </div>
+        )}
         
         {/* Items Grid - Same content for all tabs, filtering handled by state */}
         <div className="mt-8">

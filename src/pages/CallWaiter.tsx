@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,18 +40,18 @@ const CallWaiter: React.FC = () => {
       
       {submitted ? (
         <div className="text-center py-8">
-          <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
-            <Check className="h-8 w-8 text-green-600" />
+          <div className="w-16 h-16 bg-marian-blue/20 rounded-full mx-auto flex items-center justify-center mb-4">
+            <Check className="h-8 w-8 text-marian-blue" />
           </div>
           
           <h2 className="text-xl font-medium mb-2">Request Sent!</h2>
           
-          <p className="text-gray-600 mb-4">
+          <p className="text-muted-foreground mb-4">
             A waiter will come to table {tableNumber} shortly.
           </p>
           
           <Button
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-marian-blue hover:bg-marian-blue/90 text-white"
             onClick={() => setSubmitted(false)}
           >
             Send Another Request
@@ -60,7 +59,7 @@ const CallWaiter: React.FC = () => {
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
-          <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+          <div className="bg-background border border-border rounded-lg p-4 mb-6">
             <h2 className="font-medium mb-4">Select a reason</h2>
             
             <RadioGroup 
@@ -69,19 +68,19 @@ const CallWaiter: React.FC = () => {
               onValueChange={setSelectedReason}
             >
               <div className="flex items-center space-x-2 mb-3">
-                <RadioGroupItem value="assistance" id="assistance" />
+                <RadioGroupItem value="assistance" id="assistance" className="text-marian-blue border-marian-blue" />
                 <Label htmlFor="assistance">Need Assistance</Label>
               </div>
               <div className="flex items-center space-x-2 mb-3">
-                <RadioGroupItem value="refill" id="refill" />
+                <RadioGroupItem value="refill" id="refill" className="text-marian-blue border-marian-blue" />
                 <Label htmlFor="refill">Need a Refill</Label>
               </div>
               <div className="flex items-center space-x-2 mb-3">
-                <RadioGroupItem value="utensils" id="utensils" />
+                <RadioGroupItem value="utensils" id="utensils" className="text-marian-blue border-marian-blue" />
                 <Label htmlFor="utensils">Need Utensils</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="other" id="other" />
+                <RadioGroupItem value="other" id="other" className="text-marian-blue border-marian-blue" />
                 <Label htmlFor="other">Other</Label>
               </div>
             </RadioGroup>
@@ -97,12 +96,13 @@ const CallWaiter: React.FC = () => {
               value={additionalInfo}
               onChange={(e) => setAdditionalInfo(e.target.value)}
               rows={4}
+              className="border-border focus-visible:ring-marian-blue"
             />
           </div>
           
           <Button 
             type="submit"
-            className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="w-full h-12 bg-marian-blue hover:bg-marian-blue/90 text-white"
             disabled={isSubmitting}
           >
             {isSubmitting ? (

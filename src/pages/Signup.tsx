@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -63,70 +62,70 @@ const Signup: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 mt-16">
-      <Link to="/" className="inline-flex items-center mb-6 text-gray-600 hover:text-gray-900">
+      <Link to="/" className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground">
         <ArrowLeft className="mr-2" size={18} />
         Back to menu
       </Link>
       
-      <Card className="max-w-md mx-auto border-emerald-100 dark:border-emerald-800 dark:bg-gray-800">
+      <Card className="max-w-md mx-auto border-marian-blue/20 bg-background">
         <CardHeader className="space-y-1 text-center pb-0">
-          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-700/30 rounded-full flex items-center justify-center mx-auto mb-2">
-            <Gift className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+          <div className="w-16 h-16 bg-marian-blue/10 rounded-full flex items-center justify-center mx-auto mb-2">
+            <Gift className="h-8 w-8 text-marian-blue" />
           </div>
-          <h1 className="text-2xl font-bold dark:text-white">Create an Account</h1>
-          <p className="text-gray-600 dark:text-gray-300 text-sm">Join our loyalty program and earn points with every order</p>
+          <h1 className="text-2xl font-bold">Create an Account</h1>
+          <p className="text-muted-foreground text-sm">Join our loyalty program and earn points with every order</p>
         </CardHeader>
         
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4 pt-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName" className="dark:text-gray-200">First Name</Label>
+                <Label htmlFor="firstName">First Name</Label>
                 <Input 
                   id="firstName" 
                   placeholder="John" 
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="bg-background border-border"
                   required
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="lastName" className="dark:text-gray-200">Last Name</Label>
+                <Label htmlFor="lastName">Last Name</Label>
                 <Input 
                   id="lastName" 
                   placeholder="Doe" 
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="bg-background border-border"
                   required
                 />
               </div>
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="email" className="dark:text-gray-200">Email</Label>
+              <Label htmlFor="email">Email</Label>
               <Input 
                 id="email" 
                 type="email" 
                 placeholder="your.email@example.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="bg-background border-border"
                 required
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="password" className="dark:text-gray-200">Password</Label>
+              <Label htmlFor="password">Password</Label>
               <Input 
                 id="password" 
                 type="password" 
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="bg-background border-border"
                 required
               />
             </div>
@@ -136,15 +135,15 @@ const Signup: React.FC = () => {
                 id="terms" 
                 checked={agreeTerms}
                 onCheckedChange={(checked) => setAgreeTerms(checked === true)}
-                className="dark:border-gray-500"
+                className="border-border data-[state=checked]:bg-marian-blue data-[state=checked]:border-marian-blue"
               />
-              <Label htmlFor="terms" className="text-sm dark:text-gray-300">
+              <Label htmlFor="terms" className="text-sm text-muted-foreground">
                 I agree to the{' '}
-                <Link to="/terms" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+                <Link to="/terms" className="text-marian-blue hover:underline">
                   Terms of Service
                 </Link>
                 {' '}and{' '}
-                <Link to="/privacy" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+                <Link to="/privacy" className="text-marian-blue hover:underline">
                   Privacy Policy
                 </Link>
               </Label>
@@ -152,7 +151,7 @@ const Signup: React.FC = () => {
             
             <Button 
               type="submit" 
-              className="w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+              className="w-full bg-marian-blue hover:bg-marian-blue/90"
               disabled={isSubmitting}
             >
               {isSubmitting ? (
@@ -167,17 +166,17 @@ const Signup: React.FC = () => {
             
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+                <div className="w-full border-t border-border"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or continue with</span>
+                <span className="px-2 bg-background text-muted-foreground">Or continue with</span>
               </div>
             </div>
             
             <Button 
               type="button" 
               variant="outline" 
-              className="w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="w-full bg-background border-border"
               onClick={handleGoogleSignup}
               disabled={isSubmitting}
             >
@@ -193,31 +192,31 @@ const Signup: React.FC = () => {
         </form>
         
         <CardFooter className="flex flex-col pt-0">
-          <p className="text-center text-gray-600 dark:text-gray-300 text-sm">
+          <p className="text-center text-muted-foreground text-sm">
             Already have an account?{' '}
-            <Link to="/login" className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
+            <Link to="/login" className="text-marian-blue hover:underline font-medium">
               Log in
             </Link>
           </p>
           
-          <div className="mt-6 p-4 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg border border-emerald-100 dark:border-emerald-800/50">
+          <div className="mt-6 p-4 bg-delft-blue/5 rounded-lg border border-delft-blue/10">
             <div className="flex items-start">
-              <div className="bg-emerald-100 dark:bg-emerald-700/50 rounded-full p-2 mr-3 text-emerald-600 dark:text-emerald-400">
+              <div className="bg-marian-blue/20 rounded-full p-2 mr-3 text-marian-blue">
                 <Gift size={16} />
               </div>
               <div>
-                <h4 className="font-medium dark:text-white">Loyalty Program Benefits</h4>
-                <ul className="text-sm text-gray-600 dark:text-gray-300 mt-1 space-y-1">
+                <h4 className="font-medium">Loyalty Program Benefits</h4>
+                <ul className="text-sm text-muted-foreground mt-1 space-y-1">
                   <li className="flex items-center">
-                    <span className="bg-emerald-200 dark:bg-emerald-500 rounded-full h-1.5 w-1.5 mr-2"></span>
+                    <span className="bg-marian-blue rounded-full h-1.5 w-1.5 mr-2"></span>
                     Earn 1 point for every $1 spent
                   </li>
                   <li className="flex items-center">
-                    <span className="bg-emerald-200 dark:bg-emerald-500 rounded-full h-1.5 w-1.5 mr-2"></span>
+                    <span className="bg-marian-blue rounded-full h-1.5 w-1.5 mr-2"></span>
                     Get $10 off when you reach 100 points
                   </li>
                   <li className="flex items-center">
-                    <span className="bg-emerald-200 dark:bg-emerald-500 rounded-full h-1.5 w-1.5 mr-2"></span>
+                    <span className="bg-marian-blue rounded-full h-1.5 w-1.5 mr-2"></span>
                     Exclusive offers and early access
                   </li>
                 </ul>
