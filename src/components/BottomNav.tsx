@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, Bell, ClipboardList, Receipt } from 'lucide-react';
@@ -9,7 +10,7 @@ export const BottomNav: React.FC = () => {
   const { totalItems } = useCart();
   
   const navItems = [
-    { path: '/', icon: <Menu size={24} />, label: 'Menu' },
+    { path: '/menu', icon: <Menu size={24} />, label: 'Menu' },
     { path: '/call-waiter', icon: <Bell size={24} />, label: 'Call Waiter' },
     { path: '/my-orders', icon: <ClipboardList size={24} />, label: 'My Orders' },
     { path: '/bill', icon: <Receipt size={24} />, label: 'Get Bill' },
@@ -17,7 +18,7 @@ export const BottomNav: React.FC = () => {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
-      <Dock className="bg-raisin-black px-4 py-3 flex items-center justify-around w-full rounded-none">
+      <Dock className="bg-raisin-black px-0 py-3 flex items-center justify-around w-full rounded-none">
         {navItems.map((item) => (
           <Link key={item.path} to={item.path}>
             <DockItem 

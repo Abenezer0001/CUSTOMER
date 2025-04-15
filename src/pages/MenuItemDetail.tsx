@@ -83,6 +83,11 @@ const MenuItemDetail: React.FC = () => {
     navigate(-1);
   };
 
+  // Get fallback image if Unsplash fails
+  const getFallbackImage = (searchTerm: string) => {
+    return `https://foodish-api.herokuapp.com/images/burger/burger${Math.floor(Math.random() * 30) + 1}.jpg`;
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-6 mt-14">
@@ -135,9 +140,13 @@ const MenuItemDetail: React.FC = () => {
       <div className="rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm">
         <div className="relative">
           <img 
-            src={item.image}
+            src={item.image || `https://source.unsplash.com/random/800x600/?${item.imageSearchTerm || 'food'}`}
             alt={item.name} 
             className="w-full h-60 object-cover"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = getFallbackImage(item.imageSearchTerm || 'food');
+            }}
           />
           
           <Button
