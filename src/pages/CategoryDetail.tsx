@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +10,8 @@ import { MenuItemComponent } from '@/components/MenuItemComponent';
 import { api } from '@/services/api';
 import { MenuItem } from '@/types';
 
-interface Category {
+// Local interface for the category with subCategories
+interface CategoryWithSubcategories {
   id: string;
   name: string;
   image: string;
@@ -34,19 +36,22 @@ const CategoryDetail: React.FC = () => {
     queryFn: api.getMenuItems,
   });
   
-  const category: Category | undefined = categoriesData?.find(
-    (cat: Category) => cat.id === categoryId
-  );
+  // Find the current category and cast to the local interface with required subCategories
+  const category = categoriesData?.find(
+    (cat) => cat.id === categoryId
+  ) as CategoryWithSubcategories | undefined;
   
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
   const [menuItemsBySubCategory, setMenuItemsBySubCategory] = useState<Record<string, MenuItem[]>>({});
   
   // Create a mapping of menu items by subcategory
   useEffect(() => {
-    if (!menuItems || !category) return;
+    if (!menuItems || !category || !category.subCategories) return;
     
     // Filter items for this category
-    const categoryItems = menuItems.filter((item: MenuItem) => item.categoryId === categoryId);
+    const categoryItems = menuItems.filter((item: MenuItem) => 
+      item.categoryId === categoryId || item.category === categoryId
+    );
     
     // Create a mapping for each subcategory
     const mapping: Record<string, MenuItem[]> = {};

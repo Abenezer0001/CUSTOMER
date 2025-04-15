@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
@@ -6,7 +7,7 @@ import { Category, MenuItem } from '@/types';
 import { MenuItemCard } from '@/components/MenuItemCard';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Filter } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 const Menu: React.FC = () => {
   const location = useLocation();
@@ -43,7 +44,7 @@ const Menu: React.FC = () => {
 
     // Filter by category
     if (activeCategory !== 'all') {
-      filtered = filtered.filter(item => item.categoryId === activeCategory);
+      filtered = filtered.filter(item => item.categoryId === activeCategory || item.category === activeCategory);
     }
 
     // Filter by search query

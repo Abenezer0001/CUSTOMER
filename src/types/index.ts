@@ -6,10 +6,20 @@ export interface MenuItem {
   price: number;
   image: string;
   category: string;
+  categoryId?: string; // Add this for compatibility with existing code
   featured?: boolean;
   popular?: boolean;
   tags?: string[];
   modifiers?: MenuItemModifierGroup[];
+  imageSearchTerm?: string; // Add this for Unsplash image searches
+  preparationTime?: string; // Add this for preparation time display
+  nutritionInfo?: {
+    calories: number;
+    protein?: string;
+    carbs?: string;
+    fats?: string;
+  }; // Add this for nutrition information
+  restaurantId?: string;
 }
 
 export interface MenuItemModifierGroup {
@@ -34,6 +44,9 @@ export interface Category {
   id: string;
   name: string;
   image?: string;
+  subCategories?: string[]; // Add this for compatibility with existing code
+  imageSearchTerm?: string; // Add this for Unsplash image searches
+  restaurantId?: string;
 }
 
 export interface CartItem {

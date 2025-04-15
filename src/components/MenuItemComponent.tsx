@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MenuItem } from '@/types';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Plus, Clock, X, MinusCircle, PlusCircle } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'sonner';
@@ -93,17 +93,13 @@ export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) =>
       </SheetTrigger>
       <SheetContent 
         side="bottom" 
-        className="h-[85%] rounded-t-3xl p-0" 
-        showClose={false}
-        // Add animation properties for smoother transition
+        className="h-[85%] rounded-t-3xl p-0 data-[state=open]:transform-none data-[state=open]:transition-transform data-[state=open]:duration-500" 
         style={{
           transform: 'translateY(100%)',
           transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
-        // Override default animation classes
-        customCloseIcon={<></>}
-        className="data-[state=open]:transform-none data-[state=open]:transition-transform data-[state=open]:duration-500"
       >
+        <SheetClose className="close-sheet-trigger hidden" />
         <MenuItemDetail item={item} onAddToCart={handleAddToCart} />
       </SheetContent>
     </Sheet>

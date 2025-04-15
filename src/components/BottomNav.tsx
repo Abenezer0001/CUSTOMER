@@ -18,7 +18,7 @@ export const BottomNav: React.FC = () => {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
-      <Dock className="bg-raisin-black px-0 py-3 flex items-center justify-around w-full rounded-none">
+      <Dock className="bg-raisin-black px-0 py-3 flex items-center justify-around w-full rounded-none border-none">
         {navItems.map((item) => (
           <Link key={item.path} to={item.path}>
             <DockItem 

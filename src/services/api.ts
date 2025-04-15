@@ -1,3 +1,4 @@
+
 import { Category, MenuItem } from '@/types';
 import menuItemsData from '@/data/menu-items.json';
 import categoriesData from '@/data/categories-data.json';
@@ -7,6 +8,14 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Base URL for placeholder images
 const PLACEHOLDER_IMAGE_BASE = 'https://images.unsplash.com/';
+
+// Map the data from JSON to match our types
+const mapMenuItem = (item: any): MenuItem => {
+  return {
+    ...item,
+    category: item.categoryId || '',  // Assign categoryId to category for compatibility
+  };
+};
 
 // API Services
 export const api = {
@@ -19,42 +28,50 @@ export const api = {
   // Get all menu items
   getMenuItems: async (): Promise<MenuItem[]> => {
     await delay(500);
-    return [...menuItemsData.items];
+    return menuItemsData.items.map(mapMenuItem);
   },
   
   // Get menu items by category
   getMenuItemsByCategory: async (categoryId: string): Promise<MenuItem[]> => {
     await delay(400);
-    return menuItemsData.items.filter(item => item.categoryId === categoryId);
+    return menuItemsData.items
+      .filter(item => item.categoryId === categoryId)
+      .map(mapMenuItem);
   },
   
   // Get a single menu item by ID
   getMenuItem: async (id: string): Promise<MenuItem | undefined> => {
     await delay(300);
-    return menuItemsData.items.find(item => item.id === id);
+    const item = menuItemsData.items.find(item => item.id === id);
+    return item ? mapMenuItem(item) : undefined;
   },
   
   // Get featured menu items
   getFeaturedItems: async (): Promise<MenuItem[]> => {
     await delay(400);
-    return menuItemsData.items.filter(item => item.featured);
+    return menuItemsData.items
+      .filter(item => item.featured)
+      .map(mapMenuItem);
   },
   
   // Get popular menu items
   getPopularItems: async (): Promise<MenuItem[]> => {
     await delay(400);
-    return menuItemsData.items.filter(item => item.popular);
+    return menuItemsData.items
+      .filter(item => item.popular)
+      .map(mapMenuItem);
   },
   
   // Search menu items
   searchMenuItems: async (query: string): Promise<MenuItem[]> => {
     await delay(300);
     const lowerCaseQuery = query.toLowerCase();
-    return menuItemsData.items.filter(
-      item =>
+    return menuItemsData.items
+      .filter(item =>
         item.name.toLowerCase().includes(lowerCaseQuery) ||
         item.description.toLowerCase().includes(lowerCaseQuery) ||
         item.tags?.some(tag => tag.toLowerCase().includes(lowerCaseQuery))
-    );
+      )
+      .map(mapMenuItem);
   }
 };
