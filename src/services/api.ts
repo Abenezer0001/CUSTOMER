@@ -11,6 +11,9 @@ const mapMenuItem = (item: any): MenuItem => {
   return {
     ...item,
     category: item.categoryId || '',  // Assign categoryId to category for compatibility
+    imageSearchTerm: item.imageSearchTerm || '',  // Ensure imageSearchTerm exists
+    preparationTime: item.preparationTime || '',  // Ensure preparationTime exists
+    nutritionInfo: item.nutritionInfo || null,    // Ensure nutritionInfo exists
   };
 };
 
@@ -32,7 +35,7 @@ export const api = {
   getMenuItemsByCategory: async (categoryId: string): Promise<MenuItem[]> => {
     await delay(400);
     return menuItemsData.items
-      .filter(item => item.categoryId === categoryId || item.category === categoryId)
+      .filter(item => item.categoryId === categoryId || item.categoryId === categoryId)
       .map(mapMenuItem);
   },
   
