@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,19 +8,17 @@ import { Input } from '@/components/ui/input';
 import SplashScreen from '@/components/SplashScreen';
 import HeroSlider from '@/components/home/HeroSlider';
 import CategoryGrid from '@/components/CategoryGrid';
+import { api } from '@/services/api';
 
 const Index: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   
-  // Get categories data
+  // Get categories data using the API service
   const { data: categories = [] } = useQuery({
-    queryKey: ['categories-data'],
-    queryFn: async () => {
-      const response = await fetch('/src/data/categories-data.json');
-      return response.json();
-    }
+    queryKey: ['categories'],
+    queryFn: api.getCategories
   });
   
   useEffect(() => {

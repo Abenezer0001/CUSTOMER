@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
@@ -142,7 +143,7 @@ const Menu: React.FC = () => {
           </div>
         )}
         
-        {/* Items Grid - Same content for all tabs, filtering handled by state */}
+        {/* Items Grid */}
         <div className="mt-8">
           {filteredItems.length === 0 ? (
             <div className="text-center py-12">

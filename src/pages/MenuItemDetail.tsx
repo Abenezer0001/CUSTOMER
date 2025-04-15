@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -84,7 +85,9 @@ const MenuItemDetail: React.FC = () => {
 
   // Get food image using Foodish API
   const getFoodImage = (searchTerm: string) => {
-    // Use foodish API - a free food image API
+    // Use the item ID to get a deterministic image number
+    const itemNum = id ? (parseInt(id.replace(/\D/g, '')) % 30) + 1 : Math.floor(Math.random() * 30) + 1;
+    
     // Categories: biryani, burger, butter-chicken, dessert, dosa, idly, pasta, pizza, rice, samosa
     const category = searchTerm?.includes('burger') ? 'burger' : 
                      searchTerm?.includes('pasta') ? 'pasta' :
@@ -93,7 +96,7 @@ const MenuItemDetail: React.FC = () => {
                      searchTerm?.includes('chicken') ? 'butter-chicken' :
                      searchTerm?.includes('rice') ? 'rice' : 'burger';
                      
-    return `https://foodish-api.herokuapp.com/images/${category}/${category}${Math.floor(Math.random() * 30) + 1}.jpg`;
+    return `https://foodish-api.herokuapp.com/images/${category}/${category}${itemNum}.jpg`;
   };
 
   if (isLoading) {
@@ -127,6 +130,7 @@ const MenuItemDetail: React.FC = () => {
   }
 
   const isFav = isFavorite(item.id);
+  const imageUrl = item.image || getFoodImage(item.imageSearchTerm || 'food');
 
   return (
     <div className="container mx-auto px-4 py-4 mt-14 animate-fade-in pb-20">
@@ -148,7 +152,7 @@ const MenuItemDetail: React.FC = () => {
       <div className="rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm">
         <div className="relative">
           <img 
-            src={item.image || getFoodImage(item.imageSearchTerm || 'food')}
+            src={imageUrl}
             alt={item.name} 
             className="w-full h-60 object-cover"
             onError={(e) => {

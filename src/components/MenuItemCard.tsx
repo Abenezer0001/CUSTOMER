@@ -7,6 +7,7 @@ import { useCart } from '@/context/CartContext';
 import { Button } from '@/components/ui/button';
 import { Heart, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface MenuItemCardProps {
   item: MenuItem;
@@ -23,8 +24,10 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
     e.stopPropagation();
     if (isFav) {
       removeFavorite(item.id);
+      toast.info(`Removed ${item.name} from favorites`);
     } else {
       addFavorite(item.id);
+      toast.success(`Added ${item.name} to favorites`);
     }
   };
 
@@ -32,20 +35,23 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
     e.preventDefault();
     e.stopPropagation();
     addItem(item, 1);
+    toast.success(`Added ${item.name} to cart`);
   };
 
-  // Get food image using Foodish API
-  const getFoodImage = (searchTerm: string) => {
-    // Use foodish API - a free food image API
-    // Categories: biryani, burger, butter-chicken, dessert, dosa, idly, pasta, pizza, rice, samosa
-    const category = searchTerm?.includes('burger') ? 'burger' : 
-                     searchTerm?.includes('pasta') ? 'pasta' :
-                     searchTerm?.includes('pizza') ? 'pizza' :
-                     searchTerm?.includes('dessert') ? 'dessert' :
-                     searchTerm?.includes('chicken') ? 'butter-chicken' :
-                     searchTerm?.includes('rice') ? 'rice' : 'burger';
-                     
-    return `https://foodish-api.herokuapp.com/images/${category}/${category}${Math.floor(Math.random() * 30) + 1}.jpg`;
+  // Generate a consistent image URL based on the item's category or search term
+  const getImageUrl = () => {
+    // Use the Foodish API for images
+    const searchTerm = item.imageSearchTerm?.toLowerCase() || '';
+    const category = searchTerm.includes('burger') ? 'burger' : 
+                   searchTerm.includes('pasta') ? 'pasta' :
+                   searchTerm.includes('pizza') ? 'pizza' :
+                   searchTerm.includes('dessert') ? 'dessert' :
+                   searchTerm.includes('chicken') ? 'butter-chicken' :
+                   searchTerm.includes('rice') ? 'rice' : 'burger';
+    
+    // Use a deterministic number based on item id to get a consistent image
+    const itemNum = parseInt(item.id.replace(/\D/g, '')) % 30 + 1;
+    return `https://foodish-api.herokuapp.com/images/${category}/${category}${itemNum}.jpg`;
   };
 
   return (
@@ -55,7 +61,7 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
         className
       )}
     >
-      {/* Favorite Button - Positioned relative to the card */}
+      {/* Favorite Button */}
       <button
         className={cn(
           'absolute top-2 right-2 z-10 p-1.5 rounded-full transition-colors duration-200',
@@ -70,13 +76,13 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
       <Link to={`/menu/${item.id}`} className="block flex flex-col h-full">
         <div className="relative aspect-[4/3] w-full overflow-hidden">
           <img
-            src={item.image || getFoodImage(item.imageSearchTerm || 'food')}
+            src={item.image || getImageUrl()}
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              target.src = getFoodImage(item.imageSearchTerm || 'food');
+              target.src = getImageUrl();
             }}
           />
         </div>
@@ -97,7 +103,7 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
               ${item.price.toFixed(2)}
             </span>
 
-            {/* Add Button - Use marian-blue */}
+            {/* Add Button */}
             <Button
               size="icon"
               className="h-8 w-8 rounded-full bg-marian-blue hover:bg-marian-blue/90 text-primary-foreground"

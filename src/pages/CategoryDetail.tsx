@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -11,7 +12,7 @@ import { MenuItem, Category } from '@/types';
 
 // Local interface for the category with subCategories
 interface CategoryWithSubcategories extends Category {
-  subCategories: string[];
+  subCategories?: string[];
 }
 
 const CategoryDetail: React.FC = () => {
@@ -32,7 +33,7 @@ const CategoryDetail: React.FC = () => {
     queryFn: api.getMenuItems,
   });
   
-  // Find the current category and cast to the local interface with required subCategories
+  // Find the current category
   const category = categoriesData?.find(
     (cat) => cat.id === categoryId
   ) as CategoryWithSubcategories | undefined;
@@ -124,12 +125,30 @@ const CategoryDetail: React.FC = () => {
     );
   }
   
+  // Generate an image URL for the category
+  const getCategoryImage = () => {
+    if (category.image && !category.image.includes('unsplash')) {
+      return category.image;
+    }
+    
+    const categoryName = category.id || 'food';
+    const foodCategory = 
+      categoryName.includes('burger') ? 'burger' :
+      categoryName.includes('pizza') ? 'pizza' :
+      categoryName.includes('pasta') ? 'pasta' :
+      categoryName.includes('dessert') ? 'dessert' :
+      categoryName.includes('rice') ? 'rice' :
+      'burger';
+    
+    return `https://foodish-api.herokuapp.com/images/${foodCategory}/${foodCategory}${Math.floor(Math.random() * 30) + 1}.jpg`;
+  };
+  
   return (
     <div className="pt-16 pb-24">
       {/* Header */}
       <div className="relative h-48">
         <motion.img 
-          src={category.image} 
+          src={getCategoryImage()} 
           alt={category.name}
           className="w-full h-full object-cover"
           initial={{ scale: 1.1 }}
@@ -152,7 +171,7 @@ const CategoryDetail: React.FC = () => {
         <div className="absolute bottom-2 left-4 right-4">
           <h1 className="text-2xl font-bold text-white">{category.name}</h1>
           <p className="text-white/80 text-sm">
-            {category.subCategories.length} subcategories
+            {category.subCategories ? `${category.subCategories.length} subcategories` : 'Delicious options'}
           </p>
         </div>
       </div>
@@ -171,32 +190,34 @@ const CategoryDetail: React.FC = () => {
       </div>
       
       {/* Subcategories */}
-      <div className="px-4">
-        <div className="overflow-x-auto flex gap-2 pb-4 no-scrollbar">
-          <Button
-            variant={activeSubCategory === 'all' ? 'default' : 'outline'}
-            className="flex-shrink-0 bg-marian-blue hover:bg-marian-blue/90"
-            onClick={() => setActiveSubCategory('all')}
-          >
-            All
-          </Button>
-          
-          {category.subCategories.map((subCategory) => (
+      {category.subCategories && (
+        <div className="px-4">
+          <div className="overflow-x-auto flex gap-2 pb-4 no-scrollbar">
             <Button
-              key={subCategory}
-              variant={activeSubCategory === subCategory ? 'default' : 'outline'}
-              className={`flex-shrink-0 whitespace-nowrap ${
-                activeSubCategory === subCategory 
-                  ? 'bg-marian-blue hover:bg-marian-blue/90' 
-                  : 'hover:bg-marian-blue/10 hover:text-marian-blue border-marian-blue/30'
-              }`}
-              onClick={() => setActiveSubCategory(subCategory)}
+              variant={activeSubCategory === 'all' ? 'default' : 'outline'}
+              className="flex-shrink-0 bg-marian-blue hover:bg-marian-blue/90"
+              onClick={() => setActiveSubCategory('all')}
             >
-              {subCategory}
+              All
             </Button>
-          ))}
+            
+            {category.subCategories.map((subCategory) => (
+              <Button
+                key={subCategory}
+                variant={activeSubCategory === subCategory ? 'default' : 'outline'}
+                className={`flex-shrink-0 whitespace-nowrap ${
+                  activeSubCategory === subCategory 
+                    ? 'bg-marian-blue hover:bg-marian-blue/90' 
+                    : 'hover:bg-marian-blue/10 hover:text-marian-blue border-marian-blue/30'
+                }`}
+                onClick={() => setActiveSubCategory(subCategory)}
+              >
+                {subCategory}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       
       {/* Menu items */}
       <AnimatePresence mode="wait">

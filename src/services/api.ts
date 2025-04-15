@@ -35,7 +35,7 @@ export const api = {
   getMenuItemsByCategory: async (categoryId: string): Promise<MenuItem[]> => {
     await delay(400);
     return menuItemsData.items
-      .filter(item => item.categoryId === categoryId || item.categoryId === categoryId)
+      .filter(item => item.categoryId === categoryId)
       .map(mapMenuItem);
   },
   
