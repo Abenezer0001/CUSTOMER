@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -8,13 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { MenuItemComponent } from '@/components/MenuItemComponent';
 import { api } from '@/services/api';
-import { MenuItem } from '@/types';
+import { MenuItem, Category } from '@/types';
 
 // Local interface for the category with subCategories
-interface CategoryWithSubcategories {
-  id: string;
-  name: string;
-  image: string;
+interface CategoryWithSubcategories extends Category {
   subCategories: string[];
 }
 
@@ -58,12 +54,12 @@ const CategoryDetail: React.FC = () => {
     
     // Add a menu item for each subcategory 
     category.subCategories.forEach((subCat) => {
-      // For each subcategory, assign a subset of menu items with Unsplash images
+      // For each subcategory, assign a subset of menu items with images
       const subCategoryItems = categoryItems.slice(0, 4).map((item, index) => ({
         ...item,
         id: `${item.id}-${subCat}-${index}`,
         name: `${subCat} ${item.name}`,
-        image: `https://source.unsplash.com/random/300x200/?${item.imageSearchTerm || 'food'}`
+        image: `https://foodish-api.herokuapp.com/images/burger/burger${Math.floor(Math.random() * 30) + 1}.jpg`
       }));
       
       mapping[subCat] = subCategoryItems;

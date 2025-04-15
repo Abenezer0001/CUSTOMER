@@ -6,9 +6,6 @@ import categoriesData from '@/data/categories-data.json';
 // Simulated API delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Base URL for placeholder images
-const PLACEHOLDER_IMAGE_BASE = 'https://images.unsplash.com/';
-
 // Map the data from JSON to match our types
 const mapMenuItem = (item: any): MenuItem => {
   return {
@@ -35,7 +32,7 @@ export const api = {
   getMenuItemsByCategory: async (categoryId: string): Promise<MenuItem[]> => {
     await delay(400);
     return menuItemsData.items
-      .filter(item => item.categoryId === categoryId)
+      .filter(item => item.categoryId === categoryId || item.category === categoryId)
       .map(mapMenuItem);
   },
   

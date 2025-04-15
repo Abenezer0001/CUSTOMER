@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
@@ -44,7 +43,9 @@ const Menu: React.FC = () => {
 
     // Filter by category
     if (activeCategory !== 'all') {
-      filtered = filtered.filter(item => item.categoryId === activeCategory || item.category === activeCategory);
+      filtered = filtered.filter(item => 
+        item.categoryId === activeCategory || item.category === activeCategory
+      );
     }
 
     // Filter by search query

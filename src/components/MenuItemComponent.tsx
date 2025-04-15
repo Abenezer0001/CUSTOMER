@@ -38,9 +38,18 @@ export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) =>
     toast.success(`Added ${item.name} to cart`);
   };
   
-  // Use a backup image service if Unsplash fails
-  const getFallbackImage = (searchTerm: string) => {
-    return `https://foodish-api.herokuapp.com/images/burger/burger${Math.floor(Math.random() * 30) + 1}.jpg`;
+  // Get food image using Foodish API
+  const getFoodImage = (searchTerm: string) => {
+    // Use foodish API - a free food image API
+    // Categories: biryani, burger, butter-chicken, dessert, dosa, idly, pasta, pizza, rice, samosa
+    const category = searchTerm?.includes('burger') ? 'burger' : 
+                     searchTerm?.includes('pasta') ? 'pasta' :
+                     searchTerm?.includes('pizza') ? 'pizza' :
+                     searchTerm?.includes('dessert') ? 'dessert' :
+                     searchTerm?.includes('chicken') ? 'butter-chicken' :
+                     searchTerm?.includes('rice') ? 'rice' : 'burger';
+                     
+    return `https://foodish-api.herokuapp.com/images/${category}/${category}${Math.floor(Math.random() * 30) + 1}.jpg`;
   };
   
   return (
@@ -54,13 +63,13 @@ export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) =>
           )}
           <div className="aspect-[4/3] overflow-hidden">
             <img 
-              src={item.image || `https://source.unsplash.com/random/300x200/?${item.imageSearchTerm || 'food'}`} 
+              src={item.image || getFoodImage(item.imageSearchTerm || 'food')} 
               alt={item.name}
               className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
               loading="lazy"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                target.src = getFallbackImage(item.imageSearchTerm || 'food');
+                target.src = getFoodImage(item.imageSearchTerm || 'food');
               }}
             />
           </div>
@@ -256,9 +265,18 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
     setQuantity(quantity + 1);
   };
   
-  // Get fallback image if Unsplash fails
-  const getFallbackImage = (searchTerm: string) => {
-    return `https://foodish-api.herokuapp.com/images/burger/burger${Math.floor(Math.random() * 30) + 1}.jpg`;
+  // Get food image using Foodish API
+  const getFoodImage = (searchTerm: string) => {
+    // Use foodish API - a free food image API
+    // Categories: biryani, burger, butter-chicken, dessert, dosa, idly, pasta, pizza, rice, samosa
+    const category = searchTerm?.includes('burger') ? 'burger' : 
+                     searchTerm?.includes('pasta') ? 'pasta' :
+                     searchTerm?.includes('pizza') ? 'pizza' :
+                     searchTerm?.includes('dessert') ? 'dessert' :
+                     searchTerm?.includes('chicken') ? 'butter-chicken' :
+                     searchTerm?.includes('rice') ? 'rice' : 'burger';
+                     
+    return `https://foodish-api.herokuapp.com/images/${category}/${category}${Math.floor(Math.random() * 30) + 1}.jpg`;
   };
   
   return (
@@ -277,12 +295,12 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
       
       <div className="relative h-64">
         <img 
-          src={item.image || `https://source.unsplash.com/random/800x600/?${item.imageSearchTerm || 'food'}`} 
+          src={item.image || getFoodImage(item.imageSearchTerm || 'food')} 
           alt={item.name}
           className="w-full h-full object-cover"
           onError={(e) => {
             const target = e.target as HTMLImageElement;
-            target.src = getFallbackImage(item.imageSearchTerm || 'food');
+            target.src = getFoodImage(item.imageSearchTerm || 'food');
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-night to-transparent"></div>

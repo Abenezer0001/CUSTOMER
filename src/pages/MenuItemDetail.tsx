@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -83,9 +82,18 @@ const MenuItemDetail: React.FC = () => {
     navigate(-1);
   };
 
-  // Get fallback image if Unsplash fails
-  const getFallbackImage = (searchTerm: string) => {
-    return `https://foodish-api.herokuapp.com/images/burger/burger${Math.floor(Math.random() * 30) + 1}.jpg`;
+  // Get food image using Foodish API
+  const getFoodImage = (searchTerm: string) => {
+    // Use foodish API - a free food image API
+    // Categories: biryani, burger, butter-chicken, dessert, dosa, idly, pasta, pizza, rice, samosa
+    const category = searchTerm?.includes('burger') ? 'burger' : 
+                     searchTerm?.includes('pasta') ? 'pasta' :
+                     searchTerm?.includes('pizza') ? 'pizza' :
+                     searchTerm?.includes('dessert') ? 'dessert' :
+                     searchTerm?.includes('chicken') ? 'butter-chicken' :
+                     searchTerm?.includes('rice') ? 'rice' : 'burger';
+                     
+    return `https://foodish-api.herokuapp.com/images/${category}/${category}${Math.floor(Math.random() * 30) + 1}.jpg`;
   };
 
   if (isLoading) {
@@ -140,12 +148,12 @@ const MenuItemDetail: React.FC = () => {
       <div className="rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm">
         <div className="relative">
           <img 
-            src={item.image || `https://source.unsplash.com/random/800x600/?${item.imageSearchTerm || 'food'}`}
+            src={item.image || getFoodImage(item.imageSearchTerm || 'food')}
             alt={item.name} 
             className="w-full h-60 object-cover"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              target.src = getFallbackImage(item.imageSearchTerm || 'food');
+              target.src = getFoodImage(item.imageSearchTerm || 'food');
             }}
           />
           

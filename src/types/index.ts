@@ -1,4 +1,3 @@
-
 export interface MenuItem {
   id: string;
   name: string;
@@ -6,12 +5,12 @@ export interface MenuItem {
   price: number;
   image: string;
   category: string;
-  categoryId?: string; // Add this for compatibility with existing code
+  categoryId?: string; // For compatibility with existing code
   featured?: boolean;
   popular?: boolean;
   tags?: string[];
   modifiers?: MenuItemModifierGroup[];
-  imageSearchTerm?: string; // Add this for Unsplash image searches
+  imageSearchTerm?: string; // Add this for image searches
   preparationTime?: string; // Add this for preparation time display
   nutritionInfo?: {
     calories: number;
@@ -45,7 +44,7 @@ export interface Category {
   name: string;
   image?: string;
   subCategories?: string[]; // Add this for compatibility with existing code
-  imageSearchTerm?: string; // Add this for Unsplash image searches
+  imageSearchTerm?: string; // Add this for image searches
   restaurantId?: string;
 }
 
