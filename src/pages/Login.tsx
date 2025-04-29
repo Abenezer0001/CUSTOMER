@@ -37,18 +37,10 @@ const Login: React.FC = () => {
     }
   };
   
-  const handleGoogleLogin = async () => {
-    setIsSubmitting(true);
-    
-    try {
-      const success = await googleLogin();
-      
-      if (success) {
-        navigate('/');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleGoogleLogin = () => {
+    // With the new implementation, googleLogin redirects to Google OAuth
+    // No need to handle success/failure here as the user will be redirected
+    googleLogin();
   };
   
   const handleGuestContinue = () => {
@@ -57,13 +49,8 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 mt-16">
-      <Link to="/" className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="mr-2" size={16} />
-        Back to main menu
-      </Link>
-      
-      <Card className="max-w-md mx-auto border-marian-blue/20 bg-background">
+    <div className="container min-h-screen flex items-center justify-center px-6">
+      <Card className="w-full border-marian-blue/20 bg-[#1F1D2B]">
         <CardHeader className="space-y-1 text-center pb-0">
           <div className="w-14 h-14 bg-marian-blue/10 rounded-full flex items-center justify-center mx-auto mb-2">
             <User className="h-6 w-6 text-marian-blue" />
@@ -135,16 +122,15 @@ const Login: React.FC = () => {
             <Button 
               type="button" 
               variant="outline" 
-              className="w-full mb-3 text-sm bg-background border-border"
+              className="w-full mb-3 text-sm bg-[#332A46] border-none text-white hover:bg-[#423859]"
               onClick={handleGoogleLogin}
               disabled={isSubmitting}
             >
-              <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-                <path fill="#FFC107" d="M43.6,20H24v8h11.3c-1.1,5.2-5.5,8-11.3,8c-6.6,0-12-5.4-12-12s5.4-12,12-12c3.1,0,5.8,1.2,8,3.1 l6.2-6.2C33.8,4.5,29.1,2,24,2C12.9,2,4,11,4,22s8.9,20,20,20s20-9,20-20C44,21.3,43.9,20.6,43.6,20z"></path>
-                <path fill="#FF3D00" d="M6.3,13.2l7.2,5.3C15.3,13.9,19.4,11,24,11c3.1,0,5.8,1.2,8,3.1l6.2-6.2C33.8,4.5,29.1,2,24,2 C16.1,2,9.2,6.6,6.3,13.2z"></path>
-                <path fill="#4CAF50" d="M24,44c5.1,0,9.8-2.4,12.9-6.4l-6.7-5.4c-2,1.8-4.6,2.8-7.2,2.8c-5.8,0-10.6-3.8-12.3-9h-7v5.5 C6.7,38.6,14.5,44,24,44z"></path>
-                <path fill="#1976D2" d="M12,24c0-1.3,0.2-2.6,0.6-3.8h-7V26h7C12.2,25.4,12,24.7,12,24z"></path>
-              </svg>
+              <img 
+                src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" 
+                alt="Google logo" 
+                className="mr-2 h-5 w-5" 
+              />
               Sign in with Google
             </Button>
             

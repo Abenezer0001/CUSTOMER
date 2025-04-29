@@ -5,34 +5,28 @@ export interface MenuItem {
   price: number;
   image: string;
   category: string;
-  categoryId?: string; // For compatibility with existing code
+  imageSearchTerm?: string; // Added for fallback image generation
   featured?: boolean;
   popular?: boolean;
   tags?: string[];
   modifiers?: MenuItemModifierGroup[];
-  imageSearchTerm?: string; // Add this for image searches
-  preparationTime?: string; // Add this for preparation time display
-  nutritionInfo?: {
-    calories: number;
-    protein?: string;
-    carbs?: string;
-    fats?: string;
-  }; // Add this for nutrition information
-  restaurantId?: string;
 }
 
-export interface MenuItemModifierGroup {
-  id: string;
-  name: string;
-  required?: boolean;
-  modifiers: MenuItemModifier[];
-}
-
-export interface MenuItemModifier {
-  id: string;
+// Represents an option within a modifier group (e.g., "Small", "Medium", "Large" for Size)
+export interface ModifierOption {
   name: string;
   price: number;
 }
+
+// Represents a group of modifiers for a menu item (e.g., "Size", "Toppings")
+export interface MenuItemModifierGroup {
+  name: string;
+  type: 'single-select' | 'multi-select'; // Determines how the options are presented
+  required?: boolean;
+  options: ModifierOption[]; // The available choices for this modifier group
+}
+
+// --- Removed old MenuItemModifier interface ---
 
 export interface CookingPreference {
   id: string;

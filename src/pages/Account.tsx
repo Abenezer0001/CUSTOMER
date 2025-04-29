@@ -30,12 +30,14 @@ const Account: React.FC = () => {
   }
   
   // Get initials for avatar fallback
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(part => part[0])
-      .join('')
-      .toUpperCase();
+  const getInitials = () => {
+    if (!user) return '';
+    
+    // Use firstName and lastName properties instead of expecting a name string
+    const firstInitial = user.firstName ? user.firstName[0] : '';
+    const lastInitial = user.lastName ? user.lastName[0] : '';
+    
+    return (firstInitial + lastInitial).toUpperCase();
   };
   
   const handleLogout = () => {
@@ -96,7 +98,7 @@ const Account: React.FC = () => {
               <div className="flex justify-between">
                 <Avatar className="h-16 w-16 mb-2">
                   <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-700 dark:text-emerald-100 text-lg">
-                    {getInitials(user.name)}
+                    {getInitials()}
                   </AvatarFallback>
                 </Avatar>
                 

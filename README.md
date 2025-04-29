@@ -1,3 +1,60 @@
+# InSeat Menu Application
+
+This is a menu application for the InSeat platform, allowing customers to browse and order food and drinks.
+
+## Prerequisites
+
+- Node.js 16+ and npm
+- MongoDB running locally or a connection to a MongoDB instance
+
+## Setup
+
+1. Clone the repository
+2. Install dependencies
+```bash
+npm install
+```
+3. Create a `.env` file with the following variables:
+```
+MONGO_URL=mongodb://localhost:27017/inseat
+```
+
+## Development
+
+Run the development server:
+```bash
+npm run dev
+```
+
+## Seeding the Database
+
+To populate your database with categories, subcategories, and menu items, run the seed script:
+```bash
+npm run seed
+```
+
+This will:
+1. Connect to your MongoDB database
+2. Create 8 categories (Food, Drinks, Wine, Cocktails, etc.)
+3. Create subcategories for each category
+4. Create menu items for each subcategory
+
+If you need to customize the seed data, edit the `src/seed-data.js` file.
+
+## Building for Production
+
+```bash
+npm run build
+```
+
+## Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+- `npm run seed` - Seed the database with sample data
+
 # Welcome to your Lovable project
 
 ## Project info

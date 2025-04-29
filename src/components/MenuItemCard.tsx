@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Link } from 'react-router-dom';
+// Removed Link import as we'll trigger a drawer instead
 import { MenuItem } from '@/types';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useCart } from '@/context/CartContext';
@@ -12,9 +12,13 @@ import { toast } from 'sonner';
 interface MenuItemCardProps {
   item: MenuItem;
   className?: string;
+  onOpenDetail: (item: MenuItem) => void; // Add prop to handle opening the detail drawer
 }
 
-export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) => {
+// TODO: Add quantity logic if needed later
+// For now, just using the add button as per Negroni example
+
+export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className, onOpenDetail }) => { // Destructure onOpenDetail
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const { addItem } = useCart();
   const isFav = isFavorite(item.id);
@@ -34,8 +38,9 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addItem(item, 1);
-    toast.success(`Added ${item.name} to cart`);
+    // Instead of adding directly, open the detail drawer to allow modifier selection
+    onOpenDetail(item);
+    // addItem(item, 1); // Original direct add logic removed
   };
 
   // Generate a consistent image URL based on the item's category or search term
@@ -54,12 +59,14 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
     return `https://foodish-api.herokuapp.com/images/${category}/${category}${itemNum}.jpg`;
   };
 
+  // Main card div now handles the click to open details
   return (
     <div
       className={cn(
-        'relative group bg-card rounded-lg overflow-hidden flex flex-col h-full text-card-foreground shadow-md',
+        'relative group bg-card rounded-lg overflow-hidden flex flex-col h-full text-card-foreground shadow-md cursor-pointer', // Added cursor-pointer
         className
       )}
+      onClick={() => onOpenDetail(item)} // Call the passed handler on click
     >
       {/* Favorite Button */}
       <button
@@ -73,10 +80,11 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
         <Heart size={20} className={isFav ? 'fill-current' : ''} />
       </button>
 
-      <Link to={`/menu/${item.id}`} className="block flex flex-col h-full">
-        <div className="relative aspect-[4/3] w-full overflow-hidden">
-          <img
-            src={item.image || getImageUrl()}
+      {/* Removed the Link component wrapper */}
+      {/* Image Section */}
+      <div className="relative aspect-[4/3] w-full overflow-hidden">
+        <img
+          src={item.image || `https://source.unsplash.com/random/300x200/?${item.imageSearchTerm || 'food'}`} // Use item's image
             alt={item.name}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
@@ -85,10 +93,11 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
               target.src = getImageUrl();
             }}
           />
-        </div>
+      </div>
 
-        <div className="p-2.5 flex flex-col flex-grow">
-          <div className="flex-grow mb-2">
+      {/* Content Section */}
+      <div className="p-2.5 flex flex-col flex-grow">
+        <div className="flex-grow mb-2">
             <h3 className="font-semibold text-sm mb-1 truncate" title={item.name}>
               {item.name}
             </h3>
@@ -114,7 +123,7 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className }) =
             </Button>
           </div>
         </div>
-      </Link>
+      {/* Removed closing Link tag */}
     </div>
   );
 };

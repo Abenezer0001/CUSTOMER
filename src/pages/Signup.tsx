@@ -36,7 +36,8 @@ const Signup: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      const success = await signup(`${firstName} ${lastName}`, email, password);
+      // Pass the parameters in the correct order: firstName, lastName, email, password
+      const success = await signup(firstName, lastName, email, password);
       
       if (success) {
         navigate('/');

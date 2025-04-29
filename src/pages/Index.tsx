@@ -67,10 +67,11 @@ const Index: React.FC = () => {
               <form onSubmit={handleSearch} className="relative">
                 <Input
                   type="text"
-                  placeholder="Search for food, drinks, desserts..."
+                  placeholder="Search in Noor Bar Electro"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 py-6 h-12 rounded-full bg-muted/50 focus-visible:ring-marian-blue"
+                  className="pl-10 py-5 h-10 rounded-full text-sm text-white"
+                  style={{ backgroundColor: 'rgba(65, 53, 89, 0.8)' }}
                 />
                 <button 
                   type="submit" 

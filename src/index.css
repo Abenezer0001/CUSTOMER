@@ -3,68 +3,106 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+  :root, html, body {
+    /* Dark purple theme based on the Figma design */
+    --background: 260 10% 10%; /* Dark purple-black background */
+    --foreground: 0 0% 98%; /* Almost white text */
     
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card: 260 12% 15%; /* Slightly lighter dark purple */
+    --card-foreground: 0 0% 100%;
     
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover: 260 12% 15%; /* Same as card */
+    --popover-foreground: 0 0% 100%;
     
-    --primary: 142 76% 36%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 265 50% 60%; /* Bright purple for accents/buttons */
+    --primary-foreground: 0 0% 100%;
     
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --secondary: 260 15% 20%; /* Slightly lighter than background */
+    --secondary-foreground: 0 0% 100%;
     
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted: 260 15% 25%; /* For subtle UI elements */
+    --muted-foreground: 0 0% 80%; /* Lighter gray for muted text */
     
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 265 50% 60%; /* Same as primary */
+    --accent-foreground: 0 0% 100%;
     
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 70% 50%; /* Red for destructive actions */
+    --destructive-foreground: 0 0% 100%;
     
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 142 76% 36%;
+    --border: 260 15% 20%; /* Subtle borders */
+    --input: 260 15% 20%;
+    --ring: 265 50% 60%; /* Match primary */
     
     --radius: 0.5rem;
+    
+    /* Custom brand colors from the Figma design */
+    --purple-primary: #7B61FF; /* Brand purple for icons and buttons */
+    --purple-dark: #1F1D2B; /* Main background color */
+    --purple-darker: #16141F; /* Bottom nav/darker areas */
+    --purple-light: #2D303E; /* Card backgrounds */
+    --white: #FFFFFF;
   }
   
-  .dark {
-    /* New Dark Theme Colors */
-    --background: 230 8% 6%; /* night (#0B0C0E) */
-    --foreground: 0 0% 98%; /* Almost white for better readability */
-
-    --card: 232 7% 13%; /* raisin-black (#1E1F23) */
-    --card-foreground: 0 0% 98%;
-
-    --popover: 232 7% 13%; /* raisin-black (#1E1F23) */
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 240 25% 30%; /* delft-blue (#3A3A61) */
-    --primary-foreground: 0 0% 98%;
-
-    --secondary: 232 7% 13%; /* raisin-black (#1E1F23) */
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 232 7% 13%; /* raisin-black (#1E1F23) */
-    --muted-foreground: 240 5% 65%; /* Lighter gray for muted text */
-
-    --accent: 241 30% 40%; /* marian-blue (#464587) */
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 72% 51%; /* Adjusted red for dark mode */
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 232 7% 20%; /* Slightly lighter raisin-black for borders */
-    --input: 232 7% 20%; /* Slightly lighter raisin-black for inputs */
-    --ring: 240 25% 30%; /* delft-blue (#3A3A61) */
+  /* Force dark mode for all elements */
+  html, body {
+    color-scheme: dark;
+    background-color: var(--purple-dark);
+    color: var(--white);
+  }
+  
+  /* Add specific styling for bottom navigation */
+  .bottom-nav {
+    background-color: var(--purple-darker);
+  }
+  
+  .bottom-nav-icon {
+    color: var(--purple-primary);
+  }
+  
+  /* Style subcategories to be visible */
+  .subcategory-scroll {
+    scrollbar-width: none;
+  }
+  
+  .subcategory-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .subcategory-button.active {
+    background-color: var(--purple-primary);
+    color: white;
+  }
+  
+  .subcategory-button {
+    border-color: var(--purple-primary);
+    color: var(--purple-primary);
   }
 }
 

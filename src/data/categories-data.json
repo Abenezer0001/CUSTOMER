@@ -3,14 +3,14 @@
   {
     "id": "promotions",
     "name": "PROMOTIONS",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/2983101/pexels-photo-2983101.jpeg",
     "imageSearchTerm": "restaurant promotion deal",
     "subCategories": ["Daily Deals", "Happy Hour", "Combo Offers", "Special Events"]
   },
   {
     "id": "food",
     "name": "FOOD",
-    "image": "https://images.unsplash.com/photo-1565299507177-b0ac66763828?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg",
     "imageSearchTerm": "gourmet food platter",
     "subCategories": [
       "NOODLES",
@@ -27,42 +27,42 @@
   {
     "id": "cinema_snacks",
     "name": "CINEMA SNACKS",
-    "image": "https://images.unsplash.com/photo-1505686994434-e3cc5abf1330?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/614117/pexels-photo-614117.jpeg",
     "imageSearchTerm": "cinema snacks popcorn nachos",
     "subCategories": ["Popcorn", "Nachos", "Candy", "Pretzels", "Soft Drinks"]
   },
   {
     "id": "mocktails",
     "name": "MOCKTAILS & FIZZ DRINKS",
-    "image": "https://images.unsplash.com/photo-1536935338788-846bb9981813?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/602750/pexels-photo-602750.jpeg",
     "imageSearchTerm": "colorful mocktails bar",
     "subCategories": ["Virgin Cocktails", "Smoothies", "Shakes", "Sparkling Drinks"]
   },
   {
     "id": "beers",
     "name": "BEERS",
-    "image": "https://images.unsplash.com/photo-1555658636-6e4a36218be7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/1552630/pexels-photo-1552630.jpeg",
     "imageSearchTerm": "craft beer selection",
     "subCategories": ["Draft Beers", "Bottled Beers", "Craft Beers", "Import Beers"]
   },
   {
     "id": "drinks",
     "name": "DRINKS",
-    "image": "https://images.unsplash.com/photo-1544145945-f90425340c7e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/3020919/pexels-photo-3020919.jpeg",
     "imageSearchTerm": "refreshing drinks variety",
     "subCategories": ["Coffee", "Tea", "Juices", "Soft Drinks", "Energy Drinks"]
   },
   {
     "id": "cocktails",
     "name": "COCKTAILS & ALCOHOLIC BEVERAGES",
-    "image": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/1170598/pexels-photo-1170598.jpeg",
     "imageSearchTerm": "classic cocktails bar setting",
     "subCategories": ["Signature Cocktails", "Classic Cocktails", "Spirits", "Liqueurs"]
   },
   {
     "id": "wine",
     "name": "WINE LIST",
-    "image": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA",
+    "image": "https://images.pexels.com/photos/3019019/pexels-photo-3019019.jpeg",
     "imageSearchTerm": "wine bottles cellar",
     "subCategories": ["Red Wine", "White Wine", "Rosé", "Sparkling Wine", "Champagne"]
   }
