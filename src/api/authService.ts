@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3000/api/auth';
+const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL;
 
 // Types
 export interface LoginCredentials {
