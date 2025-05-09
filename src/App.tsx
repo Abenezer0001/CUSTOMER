@@ -43,16 +43,16 @@ const App = () => {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark">
-          <AuthProvider>
-            <TableProvider>
-              <OrdersProvider>
-                <CartProvider>
-                  <FavoritesProvider>
-                    <TooltipProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <TableProvider>
+                <OrdersProvider>
+                  <CartProvider>
+                    <FavoritesProvider>
+                      <TooltipProvider>
                       <Toaster />
                       <Sonner position="top-right" closeButton />
-                      <BrowserRouter>
-                        <Routes>
+                      <Routes>
                           <Route element={<Layout />}>
                             <Route path="/" element={<Index />} />
                             <Route path="/menu" element={<Menu />} />
@@ -81,13 +81,13 @@ const App = () => {
                             <Route path="*" element={<NotFound />} />
                           </Route>
                         </Routes>
-                      </BrowserRouter>
                     </TooltipProvider>
                   </FavoritesProvider>
                 </CartProvider>
               </OrdersProvider>
             </TableProvider>
           </AuthProvider>
+          </BrowserRouter>
         </ThemeProvider>
       </QueryClientProvider>
     </React.StrictMode>

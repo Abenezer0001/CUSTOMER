@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3000/api/auth';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Types
 export interface LoginCredentials {
@@ -98,9 +98,22 @@ const authService = {
     }
   },
 
-  // Initiate Google OAuth login
+  // Initiate Google OAuth login with state parameter for security
   getGoogleAuthUrl(): string {
-    return `${API_BASE_URL}/google`;
+    // Generate a random state parameter to protect against CSRF
+    const state = Math.random().toString(36).substring(2, 15);
+    
+    // Store state in localStorage to verify when the user returns
+    localStorage.setItem('oauth_state', state);
+    
+    // Simplified approach - let the backend handle the redirect URI
+    // This avoids issues with redirect_uri_mismatch
+    console.log('API_BASE_URL:', API_BASE_URL);
+    
+    const fullUrl = `${API_BASE_URL}/auth/google?state=${state}`;
+    console.log('Simplified Google Auth URL:', fullUrl);
+    
+    return fullUrl;
   },
 
   // Check authentication status
