@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL;
 
 // Types
 export interface LoginCredentials {
