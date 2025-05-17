@@ -96,8 +96,8 @@ const MyOrders: React.FC = () => {
     // This is to fulfill the requirement
   }
 
-    return (
-    <div className="container px-4 py-8 mt-16">
+  return (
+    <div className="container px-4 py-8 mt-16 text-white">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">My Orders</h1>
         <Button variant="outline" className="border-marian-blue text-marian-blue hover:bg-marian-blue/10">
@@ -108,7 +108,7 @@ const MyOrders: React.FC = () => {
 
       {dummyOrders.length === 0 ? (
         <div className="text-center py-12">
-          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-[#2D303E] rounded-full flex items-center justify-center mx-auto mb-4">
             <ClipboardList className="h-8 w-8 text-muted-foreground" />
           </div>
           <h3 className="text-lg font-medium mb-2">No orders yet</h3>
@@ -122,31 +122,31 @@ const MyOrders: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {dummyOrders.map((order) => (
-            <div key={order.id} className="border border-border rounded-xl overflow-hidden bg-background">
+            <div key={order.id} className="border border-[#2D303E] rounded-xl overflow-hidden bg-[#262837]">
               {/* Order header */}
-              <div className="bg-muted/30 p-4 flex items-center justify-between">
+              <div className="bg-[#2D303E] p-4 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{order.id}</span>
                     <StatusBadge status={order.status} />
                   </div>
-                  <div className="flex items-center text-sm text-muted-foreground mt-1">
+                  <div className="flex items-center text-sm text-gray-400 mt-1">
                     <Clock size={14} className="mr-1" />
                     <span>{formatRelativeTime(order.date)}</span>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="font-bold">${order.total.toFixed(2)}</div>
-                  <div className="text-sm text-muted-foreground">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</div>
+                  <div className="text-sm text-gray-400">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</div>
                 </div>
               </div>
               
               {/* Order items */}
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-[#2D303E]">
                 {order.items.map((item) => (
                   <div key={item.id} className="p-4 flex items-center justify-between">
                     <div className="flex items-center">
-                      <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-medium">
+                      <div className="w-8 h-8 bg-[#2D303E] rounded-full flex items-center justify-center text-sm font-medium">
                         {item.quantity}
                       </div>
                       <span className="ml-3">{item.name}</span>
@@ -157,9 +157,9 @@ const MyOrders: React.FC = () => {
               </div>
               
               {/* Order footer */}
-              <div className="p-4 border-t border-border flex justify-between items-center">
+              <div className="p-4 border-t border-[#2D303E] flex justify-between items-center">
                 {order.status === 'preparing' && (
-                  <div className="flex items-center text-muted-foreground">
+                  <div className="flex items-center text-gray-400">
                     <Clock size={16} className="mr-1" />
                     <span>Estimated ready in 10-15 min</span>
                   </div>
@@ -171,19 +171,19 @@ const MyOrders: React.FC = () => {
                   </div>
                 )}
                 {order.status === 'delivered' && (
-                  <div className="flex items-center text-muted-foreground">
+                  <div className="flex items-center text-gray-400">
                     <CheckCircle2 size={16} className="mr-1" />
                     <span>Completed</span>
-              </div>
+                  </div>
                 )}
                 <Button variant="ghost" className="text-marian-blue hover:bg-marian-blue/10">
                   Details
                   <ChevronRight size={16} className="ml-1" />
                 </Button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
       )}
     </div>
   );

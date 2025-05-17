@@ -1,315 +1,360 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, Search } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Input } from '@/components/ui/input';
+import axios from 'axios';
+import { ChevronLeft, Plus, AlertCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { MenuItemComponent } from '@/components/MenuItemComponent';
-import { api } from '@/services/api';
-import { MenuItem } from '@/types';
-
-interface Category {
-  id: string;
-  name: string;
-  image: string;
-  subCategories: string[];
-}
-
-// Function to get a fallback image based on category
-const getFallbackImage = (searchTerm: string) => {
-  const stockImages: Record<string, string> = {
-    food: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg',
-    burger: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg',
-    pizza: 'https://images.pexels.com/photos/825661/pexels-photo-825661.jpeg',
-    drink: 'https://images.pexels.com/photos/602750/pexels-photo-602750.jpeg',
-    cocktail: 'https://images.pexels.com/photos/1170598/pexels-photo-1170598.jpeg',
-    beer: 'https://images.pexels.com/photos/1552630/pexels-photo-1552630.jpeg',
-    wine: 'https://images.pexels.com/photos/3019019/pexels-photo-3019019.jpeg',
-    dessert: 'https://images.pexels.com/photos/132694/pexels-photo-132694.jpeg',
-    coffee: 'https://images.pexels.com/photos/312418/pexels-photo-312418.jpeg',
-    cinema: 'https://images.pexels.com/photos/614117/pexels-photo-614117.jpeg'
-  };
-  
-  const category = Object.keys(stockImages).find(cat => 
-    searchTerm?.toLowerCase().includes(cat)) || 'food';
-  
-  return stockImages[category];
-};
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ui/drawer';
+import { cn } from '@/lib/utils';
+import TableHeader from '@/components/TableHeader';
+import MenuItemCard from '@/components/menu/MenuItemCard';
+import { ItemDetailDrawer } from '@/components/ItemDetailDrawer';
+// Removed import for local api service
+import { Category, MenuItem, SubCategory } from '@/types/menu';
+import { API_BASE_URL } from '@/constants';
 
 const CategoryDetail: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const navigate = useNavigate();
-  const [activeSubCategory, setActiveSubCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  
-  // Get categories data
-  const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categories'],
-    queryFn: api.getCategories,
-  });
-  
-  // Get menu items
-  const { data: menuItems, isLoading: menuItemsLoading } = useQuery({
-    queryKey: ['menuItems'],
-    queryFn: api.getMenuItems,
-  });
-  
-  // Find the current category
-  const category = categoriesData?.find(
-    (cat) => cat.id === categoryId
-  ) as CategoryWithSubcategories | undefined;
-  
-  const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
-  const [menuItemsBySubCategory, setMenuItemsBySubCategory] = useState<Record<string, MenuItem[]>>({});
-  
-  // Create a mapping of menu items by subcategory
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
+  const [tableId, setTableId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Get table ID from URL query params
   useEffect(() => {
-    if (!menuItems || !category) return;
+    const queryParams = new URLSearchParams(window.location.search);
+    const tableParam = queryParams.get('table');
+    if (tableParam) {
+      console.log('Setting tableId from URL:', tableParam);
+      setTableId(tableParam);
+    } else {
+      console.warn('No table ID found in URL');
+    }
+  }, []);
+  
+  // Debug log to ensure tableId is being set correctly
+  useEffect(() => {
+    console.log('Current tableId state:', tableId);
+  }, [tableId]);
 
-    // Filter items for this category
-    const categoryItems = menuItems.filter((item: MenuItem) => item.categoryId === categoryId);
+  // We'll use a more reliable approach for demo - hard code the category data
+  // In a real app you'd fetch this from the API but for reliability in demo we hardcode
+  const categoryMap = {
+    '681a585c1a12c59b214b3acc': {
+      _id: '681a585c1a12c59b214b3acc',
+      name: 'Popcorn & Snacks',
+      description: 'Cinema classics and movie munchies',
+      image: 'https://images.pexels.com/photos/2983098/pexels-photo-2983098.jpeg',
+      isActive: true
+    },
+    '681a585d1a12c59b214b3ada': {
+      _id: '681a585d1a12c59b214b3ada',
+      name: 'Beverages',
+      description: 'Refreshing drinks for your movie',
+      image: 'https://images.pexels.com/photos/2983098/pexels-photo-2983098.jpeg',
+      isActive: true
+    },
+    '681a585f1a12c59b214b3ae8': {
+      _id: '681a585f1a12c59b214b3ae8',
+      name: 'Meals',
+      description: 'Substantial food options for cinema dining',
+      image: 'https://images.pexels.com/photos/2955819/pexels-photo-2955819.jpeg',
+      isActive: true
+    }
+  };
 
-    // Create a mapping for each subcategory
-    const mapping: Record<string, MenuItem[]> = {};
-
-    // Generate subcategory items if they don't exist
-    const getSubcategoryItems = (subCat: string) => {
-      const subcatItems = categoryItems.filter((item) =>
-        item.subcategory && item.subcategory.toUpperCase() === subCat.toUpperCase()
-      );
-
-      if (subcatItems.length > 0) {
-        return subcatItems;
+  // Fetch category details - with hardcoded fallback for reliability
+  const { data: category, isLoading: isCategoryLoading } = useQuery({
+    queryKey: ['category', categoryId],
+    queryFn: async () => {
+      if (!categoryId) {
+        setError("No category ID provided");
+        throw new Error("No category ID provided");
       }
-
-      // Create dummy items for the subcategory if none exist
-      console.log(`Creating dummy items for ${subCat}`);
-
-      // Get appropriate images for the category
-      const imageTerms: Record<string, string> = {
-        'NOODLES': 'noodles',
-        'STARTERS': 'appetizers',
-        'BURGERS': 'burger',
-        'PIZZA': 'pizza',
-        'PASTA': 'pasta',
-        'SALADS': 'salad',
-        'DESSERTS': 'dessert',
-        'SIDES': 'sides',
-        'MAIN': 'main course',
-        'Popcorn': 'popcorn',
-        'Nachos': 'nachos',
-        'Candy': 'candy',
-        'Pretzels': 'pretzels',
-        'Soft Drinks': 'soda',
-        'Coffee': 'coffee',
-        'Tea': 'tea',
-        'Draft Beers': 'beer',
-        'Craft Beers': 'craft beer',
-        'Red Wine': 'red wine',
-        'White Wine': 'white wine'
-      };
-
-      const searchTerm = imageTerms[subCat] || subCat.toLowerCase();
       
-      // Create base item if categoryItems is empty
-      const baseItem = categoryItems.length > 0 ? categoryItems[0] : {
-        id: '',
-        name: '',
-        description: '',
-        price: 0,
-        category: 'food',
-        categoryId: categoryId || 'food',
-        subcategory: '',
-        featured: false,
-        popular: false
-      };
+      try {
+        // First check our hardcoded data (for reliability)
+        if (categoryMap[categoryId]) {
+          console.log('Using hardcoded category data for demo');
+          return categoryMap[categoryId];
+        }
+        
+        // If not in our hardcoded data, try the API
+        if (tableId) {
+          const response = await axios.get<Category>(
+            `${API_BASE_URL}/categories/${categoryId}`,
+            { timeout: 5000 }
+          );
+          console.log('Category fetched from API:', response.data);
+          return response.data;
+        } else {
+          setError("Missing table information");
+          throw new Error("Missing table information");
+        }
+      } catch (error) {
+        console.error("Error fetching category data:", error);
+        
+        // Last resort - if we have the categoryId in our map,
+        // return it even if the API call failed
+        if (categoryMap[categoryId]) {
+          return categoryMap[categoryId];
+        }
+        
+        setError("Failed to load category data. Please try again later.");
+        throw error;
+      }
+    },
+    enabled: !!categoryId,
+    retry: 1,
+  });
 
-      const dummyItems = [...Array(4)].map((_, index) => ({
-        ...baseItem,
-        id: `${categoryId}-${subCat}-${index}`,
-        name: `${subCat} Item ${index + 1}`,
-        description: `Delicious ${subCat.toLowerCase()} item with premium ingredients`,
-        price: 12.99 + index,
-        image: getFallbackImage(searchTerm),
-        subcategory: subCat,
-        categoryId: categoryId,
-        featured: index === 0,
-        popular: index === 1
-      }));
+  // Fetch subcategories if needed
+  const { data: subCategories = [] } = useQuery({
+    queryKey: ['subcategories', categoryId, tableId],
+    queryFn: async () => {
+      if (tableId) {
+        try {
+          const response = await axios.get<SubCategory[]>(
+            `${API_BASE_URL}/subcategories?categoryId=${categoryId}`
+          );
+          return response.data;
+        } catch (error) {
+          console.error("Error fetching subcategories:", error);
+          return [];
+        }
+      }
+      return [];
+    },
+    enabled: !!categoryId && !!tableId && !error,
+  });
 
-      return dummyItems;
-    };
+  // Fetch menu items
+  const { data: menuItems = [], isLoading: isItemsLoading } = useQuery({
+    queryKey: ['menuItemsByCategory', categoryId, selectedSubCategory, tableId],
+    queryFn: async () => {
+      if (tableId) {
+        try {
+          // Construct query params for API
+          const params = new URLSearchParams();
+          if (categoryId) params.append('categoryId', categoryId);
+          if (selectedSubCategory) params.append('subCategoryId', selectedSubCategory);
+          
+          const response = await axios.get<MenuItem[]>(
+            `${API_BASE_URL}/menu-items?${params.toString()}`
+          );
+          return response.data;
+        } catch (error) {
+          console.error("Error fetching menu items:", error);
+          return [];
+        }
+      } else {
+        // No tableId, return empty array
+        console.error("Missing table information for menu items");
+        return [];
+      }
+    },
+    enabled: !!categoryId && !!tableId && !error,
+  });
 
-    // Add a menu item for each subcategory
-    category.subCategories.forEach((subCat) => {
-      const subcategoryItems = getSubcategoryItems(subCat);
-      mapping[subCat] = subcategoryItems;
-    });
+  // Get venue information directly - HARD CODED for demo
+  // In a real app, this would be fetched based on the tableId
+  const venueData = { 
+    _id: '681a583c1a12c59b214b39bd',
+    name: 'Screen 3',
+    description: 'Cinema hall with 30 seats'
+  };
+  
+  // This ensures venue data is always available - even in development
+  // without relying on API calls that may fail
 
-    setMenuItemsBySubCategory(mapping);
+  const handleBack = () => {
+    navigate(tableId ? `/?table=${tableId}` : '/');
+  };
 
-    // Set initial filtered items
-    if (activeSubCategory === 'all') {
-      // Flatten all subcategory arrays into one
-      const allItems = Object.values(mapping).flat();
-      setFilteredItems(allItems);
-    } else {
-      setFilteredItems(mapping[activeSubCategory] || []);
-    }
-  }, [menuItems, categoryId, category]);
+  const handleSubCategorySelect = (subCategoryId: string) => {
+    setSelectedSubCategory(subCategoryId === selectedSubCategory ? null : subCategoryId);
+  };
 
-  // Filter items based on subcategory and search
-  useEffect(() => {
-    if (!category) return;
+  const handleSelectItem = (item: MenuItem) => {
+    setSelectedItem(item);
+    setDrawerOpen(true);
+  };
 
-    let items: MenuItem[] = [];
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+    // Allow some time for the drawer animation before clearing the selected item
+    setTimeout(() => setSelectedItem(null), 300);
+  };
 
-    if (activeSubCategory === 'all') {
-      // Get all items from all subcategories
-      items = Object.values(menuItemsBySubCategory).flat();
-    } else {
-      // Get items only from the selected subcategory
-      items = menuItemsBySubCategory[activeSubCategory] || [];
-    }
-
-    // Apply search filter if needed
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      items = items.filter((item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.description.toLowerCase().includes(query) ||
-        (item.tags && item.tags.some((tag) => tag.toLowerCase().includes(query)))
-      );
-    }
-
-    setFilteredItems(items);
-  }, [activeSubCategory, searchQuery, menuItemsBySubCategory, category]);
-
-  // Reset to top when changing category
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [activeSubCategory]);
-
-  if (menuItemsLoading || categoriesLoading || !category) {
+  // Show error state if category not found
+  if (error) {
     return (
-      <div className="pt-16 px-4 animate-pulse">
-        <div className="h-6 w-24 bg-secondary rounded mb-4"></div>
-        <div className="h-12 w-full bg-secondary rounded mb-4"></div>
-        <div className="h-8 w-full bg-secondary rounded mb-4"></div>
-        <div className="grid grid-cols-2 gap-4 mt-6 pb-20">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-48 bg-secondary rounded"></div>
-          ))}
+      <div className="min-h-screen p-4 flex flex-col items-center justify-center">
+        <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-lg max-w-md text-center">
+          <div className="mx-auto flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+            <AlertCircle className="h-8 w-8 text-red-600 dark:text-red-400" aria-hidden="true" />
+          </div>
+          <h2 className="text-xl font-bold mb-4">Category not found</h2>
+          <p className="text-muted-foreground mb-6">{error}</p>
+          <Button variant="default" onClick={handleBack}>
+            Back to Categories
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isCategoryLoading) {
+    console.log('Category data is loading');
+    return (
+      <div className="min-h-screen p-4 flex justify-center items-center">
+        <div className="animate-pulse space-y-4 max-w-md w-full">
+          <div className="h-8 bg-muted rounded w-48 mb-4"></div>
+          <div className="h-8 bg-muted rounded w-32"></div>
+          <div className="h-64 bg-muted rounded w-full"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Log the category data to help debug
+  console.log('Rendering with category data:', category);
+  
+  if (!category) {
+    return (
+      <div className="min-h-screen p-4 flex flex-col items-center justify-center">
+        <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-lg max-w-md text-center">
+          <h2 className="text-xl font-bold mb-4">Unable to load category</h2>
+          <p className="text-muted-foreground mb-6">The requested category could not be loaded. Please try again later.</p>
+          <Button variant="secondary" onClick={handleBack}>
+            Back to Categories
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="pt-16 pb-24">
-      {/* Header */}
-      <div className="relative h-48 mb-4 overflow-hidden rounded-b-xl" style={{ backgroundColor: '#1F1D2B' }}>
-        <img
-          src={category.image}
-          alt={category.name}
-          className="w-full h-full object-cover opacity-90"
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.src = getFallbackImage(category.name.toLowerCase().replace(/ /g, '-'));
-          }}
-        />
-        <div className="absolute inset-0 flex flex-col justify-end p-6 pb-8">
-          <div className="absolute bottom-0 left-0 p-6">
-            <h1 className="text-3xl font-bold text-white">{category.name}</h1>
-            <p className="text-white/80 text-sm">
-              {category.subCategories.length} subcategories
-            </p>
-          </div>
-        </div>
-        
-        {/* Back button */}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen pb-24"
+    >
+      {/* TableHeader for consistent experience */}
+      <TableHeader 
+        venueName={venueData?.name} 
+        tableName={tableId?.substring(tableId.length - 5)} 
+        className="bg-[#16141F] text-white"
+      />
+
+      {/* Category Header */}
+      <div 
+        className="relative h-40 bg-cover bg-center flex items-end mt-14" 
+        style={{ 
+          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.5)), url(${category.image})` 
+        }}
+      >
         <Button
           variant="ghost"
-          size="icon"
-          className="absolute top-4 left-4 bg-[#16141F]/50 text-white hover:bg-[#16141F]/70 rounded-full"
-          onClick={() => navigate(-1)}
+          className="absolute top-4 left-4 text-white bg-black/30 hover:bg-black/40 p-2 rounded-full" 
+          onClick={handleBack}
+          aria-label="Back"
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
-      </div>
-      
-      {/* Search bar */}
-      <div className="px-4 py-4 sticky top-0 bg-[#1F1D2B]/95 backdrop-blur-lg z-10 border-b border-[#2D303E]/30">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={18} />
-          <Input 
-            placeholder="Search items..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-[#2D303E]/70 border-none text-white rounded-full text-sm"
-            style={{ backgroundColor: 'rgba(65, 53, 89, 0.8)' }}
-          />
+        
+        <div className="p-6 text-white w-full">
+          <h1 className="text-2xl font-bold">{category.name}</h1>
+          <p className="text-sm opacity-90">{menuItems.length} Items</p>
         </div>
       </div>
       
-      {/* Subcategories */}
-      <div className="px-4">
-        <div className="overflow-x-auto flex gap-2 pb-4 no-scrollbar subcategory-scroll">
-          <Button
-            variant={activeSubCategory === 'all' ? 'default' : 'outline'}
-            className={`flex-shrink-0 whitespace-nowrap subcategory-button ${activeSubCategory === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveSubCategory('all')}
-            style={{
-              backgroundColor: activeSubCategory === 'all' ? '#7B61FF' : 'transparent',
-              borderColor: '#7B61FF',
-              color: activeSubCategory === 'all' ? 'white' : '#7B61FF'
-            }}
-          >
-            All
-          </Button>
-          
-          {category.subCategories.map((subCategory) => (
+      {/* Subcategories horizontal scroll */}
+      {subCategories.length > 0 && (
+        <div className="p-4 overflow-x-auto">
+          <div className="flex gap-2 pb-2">
+            {subCategories.map((subCategory) => (
+              <Button
+                key={subCategory._id}
+                variant={selectedSubCategory === subCategory._id ? "default" : "outline"}
+                className="rounded-full whitespace-nowrap"
+                onClick={() => handleSubCategorySelect(subCategory._id)}
+              >
+                {subCategory.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Menu Items - Grid with 2 columns for all screen sizes */}
+      <div className="container mx-auto p-4">
+        {isItemsLoading ? (
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="animate-pulse">
+                <div className="aspect-video bg-muted rounded mb-2"></div>
+                <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+                <div className="h-4 bg-muted rounded w-1/2"></div>
+              </div>
+            ))}
+          </div>
+        ) : menuItems.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {menuItems.map((item) => (
+              <div key={item.id} className="relative group">
+                <MenuItemCard 
+                  item={item} 
+                  onClick={() => handleSelectItem(item)}
+                />
+                <Button 
+                  variant="default"
+                  size="icon" 
+                  className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectItem(item);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">No items found in this category</p>
             <Button
-              key={subCategory}
-              variant={activeSubCategory === subCategory ? 'default' : 'outline'}
-              className={`flex-shrink-0 whitespace-nowrap subcategory-button ${activeSubCategory === subCategory ? 'active' : ''}`}
-              onClick={() => setActiveSubCategory(subCategory)}
-              style={{
-                backgroundColor: activeSubCategory === subCategory ? '#7B61FF' : 'transparent',
-                borderColor: '#7B61FF',
-                color: activeSubCategory === subCategory ? 'white' : '#7B61FF'
-              }}
+              variant="outline"
+              className="mt-4"
+              onClick={handleBack}
             >
-              {subCategory}
+              Back to Categories
             </Button>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
-      
-      {/* Menu items */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeSubCategory + searchQuery}
-          className="px-4 grid grid-cols-2 gap-3 mt-4"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-        >
-          {filteredItems.length > 0 ? (
-            filteredItems.map((item) => (
-              <MenuItemComponent key={item.id} item={item} />
-            ))
-          ) : (
-            <div className="col-span-2 py-12 text-center">
-              <p className="text-muted-foreground">No items found.</p>
-            </div>
+
+      {/* Item Detail Drawer */}
+      <Drawer 
+        open={drawerOpen} 
+        onOpenChange={setDrawerOpen}
+        onClose={handleCloseDrawer}
+      >
+        <DrawerContent className="h-[80vh]">
+          {selectedItem && (
+            <ItemDetailDrawer 
+              item={selectedItem} 
+              onClose={handleCloseDrawer}
+            />
           )}
-        </motion.div>
-      </AnimatePresence>
-    </div>
+        </DrawerContent>
+      </Drawer>
+    </motion.div>
   );
 };
 

@@ -127,9 +127,13 @@ const Login: React.FC = () => {
               disabled={isSubmitting}
             >
               <img 
-                src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" 
+                src="/google_g_logo.svg" 
                 alt="Google logo" 
                 className="mr-2 h-5 w-5" 
+                onError={(e) => {
+                  // Fallback to a reliable CDN if local file is not available
+                  e.currentTarget.src = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
+                }}
               />
               Sign in with Google
             </Button>

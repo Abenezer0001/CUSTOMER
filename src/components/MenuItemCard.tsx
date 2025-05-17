@@ -1,129 +1,174 @@
-
-import React from 'react';
-// Removed Link import as we'll trigger a drawer instead
-import { MenuItem } from '@/types';
-import { useFavorites } from '@/context/FavoritesContext';
-import { useCart } from '@/context/CartContext';
+import React, { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Heart, Plus } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Plus } from 'lucide-react';
+import { MenuItem } from '@/types';
+import { useCart } from '@/context/CartContext';
 import { toast } from 'sonner';
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ui/drawer';
+import { ItemDetailDrawer } from '@/components/ItemDetailDrawer';
 
 interface MenuItemCardProps {
   item: MenuItem;
   className?: string;
-  onOpenDetail: (item: MenuItem) => void; // Add prop to handle opening the detail drawer
+  showDetailDrawer?: boolean;
 }
 
-// TODO: Add quantity logic if needed later
-// For now, just using the add button as per Negroni example
-
-export const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className, onOpenDetail }) => { // Destructure onOpenDetail
-  const { isFavorite, addFavorite, removeFavorite } = useFavorites();
-  const { addItem } = useCart();
-  const isFav = isFavorite(item.id);
-
-  const handleFavoriteToggle = (e: React.MouseEvent) => {
-    e.preventDefault();
+const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className, showDetailDrawer = true }) => {
+  const { addToCart } = useCart();
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isFav) {
-      removeFavorite(item.id);
-      toast.info(`Removed ${item.name} from favorites`);
-    } else {
-      addFavorite(item.id);
-      toast.success(`Added ${item.name} to favorites`);
-    }
+    // Add to cart functionality
+    addToCart({
+      id: item._id || item.id,
+      name: item.name,
+      price: item.price,
+      image: item.image,
+      description: item.description
+    });
+    toast.success(`${item.name} added to cart`);
   };
-
-  const handleAdd = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Instead of adding directly, open the detail drawer to allow modifier selection
-    onOpenDetail(item);
-    // addItem(item, 1); // Original direct add logic removed
-  };
-
-  // Generate a consistent image URL based on the item's category or search term
-  const getImageUrl = () => {
-    // Use the Foodish API for images
-    const searchTerm = item.imageSearchTerm?.toLowerCase() || '';
-    const category = searchTerm.includes('burger') ? 'burger' : 
-                   searchTerm.includes('pasta') ? 'pasta' :
-                   searchTerm.includes('pizza') ? 'pizza' :
-                   searchTerm.includes('dessert') ? 'dessert' :
-                   searchTerm.includes('chicken') ? 'butter-chicken' :
-                   searchTerm.includes('rice') ? 'rice' : 'burger';
-    
-    // Use a deterministic number based on item id to get a consistent image
-    const itemNum = parseInt(item.id.replace(/\D/g, '')) % 30 + 1;
-    return `https://foodish-api.herokuapp.com/images/${category}/${category}${itemNum}.jpg`;
-  };
-
-  // Main card div now handles the click to open details
+  
+  // Format price
+  const formattedPrice = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(item.price);
+  
   return (
-    <div
-      className={cn(
-        'relative group bg-card rounded-lg overflow-hidden flex flex-col h-full text-card-foreground shadow-md cursor-pointer', // Added cursor-pointer
-        className
-      )}
-      onClick={() => onOpenDetail(item)} // Call the passed handler on click
-    >
-      {/* Favorite Button */}
-      <button
-        className={cn(
-          'absolute top-2 right-2 z-10 p-1.5 rounded-full transition-colors duration-200',
-          isFav ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'
-        )}
-        onClick={handleFavoriteToggle}
-        aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
-      >
-        <Heart size={20} className={isFav ? 'fill-current' : ''} />
-      </button>
+    <div className="relative">
+      {showDetailDrawer ? (
+        <Drawer open={isOpen} onOpenChange={setIsOpen}>
+          <DrawerTrigger asChild>
+            <Card 
+              className={`overflow-hidden cursor-pointer transition-all hover:shadow-md ${className || ''}`}
+            >
 
-      {/* Removed the Link component wrapper */}
-      {/* Image Section */}
-      <div className="relative aspect-[4/3] w-full overflow-hidden">
-        <img
-          src={item.image || `https://source.unsplash.com/random/300x200/?${item.imageSearchTerm || 'food'}`} // Use item's image
+        <div className="relative h-40 overflow-hidden">
+          <img
+            src={item.image || '/placeholder-item.jpg'}
             alt={item.name}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            className="w-full h-full object-cover"
             loading="lazy"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
-              target.src = getImageUrl();
+              target.src = '/placeholder-item.jpg';
             }}
           />
-      </div>
-
-      {/* Content Section */}
-      <div className="p-2.5 flex flex-col flex-grow">
-        <div className="flex-grow mb-2">
-            <h3 className="font-semibold text-sm mb-1 truncate" title={item.name}>
-              {item.name}
-            </h3>
-            {/* Display first few words of description or a generic placeholder */}
-            <p className="text-muted-foreground text-xs">
-              {item.description ? `${item.description.split(' ').slice(0, 3).join(' ')}...` : 'View details'}
-            </p>
+          {item.featured && (
+            <div className="absolute top-2 left-2 bg-primary text-white text-xs px-2 py-1 rounded-full">
+              Featured
+            </div>
+          )}
+        </div>
+        
+        <CardContent className="p-3">
+          <div className="flex justify-between items-start mb-1">
+            <h3 className="font-medium text-base line-clamp-1">{item.name}</h3>
+            <span className="font-semibold text-sm text-primary">{formattedPrice}</span>
           </div>
-
-          <div className="flex justify-between items-center mt-auto">
-            <span className="font-semibold text-sm">
-              ${item.price.toFixed(2)}
-            </span>
-
-            {/* Add Button */}
-            <Button
-              size="icon"
-              className="h-8 w-8 rounded-full bg-marian-blue hover:bg-marian-blue/90 text-primary-foreground"
-              onClick={handleAdd}
-              aria-label="Add to cart"
+          
+          <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+            {item.description}
+          </p>
+          
+          <div className="flex justify-between items-center">
+            {/* Display tags if available */}
+            {item.tags && item.tags.length > 0 && (
+              <div className="flex gap-1 flex-wrap">
+                {item.tags.slice(0, 2).map((tag, index) => (
+                  <span 
+                    key={index}
+                    className="text-xs bg-muted px-2 py-0.5 rounded-full"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+            
+            {/* Add to cart button */}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-9 w-9 ml-auto rounded-full bg-purple-600 hover:bg-purple-700 shadow-md"
+              onClick={handleAddToCart}
             >
-              <Plus size={18} />
+              <Plus className="h-5 w-5 text-white" />
             </Button>
           </div>
-        </div>
-      {/* Removed closing Link tag */}
+        </CardContent>
+      </Card>
+          </DrawerTrigger>
+          <DrawerContent>
+            <ItemDetailDrawer item={item} onClose={() => setIsOpen(false)} />
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Card 
+          className={`overflow-hidden cursor-pointer transition-all hover:shadow-md ${className || ''}`}
+          onClick={() => toast.info(`Selected: ${item.name}`)}
+        >
+          <div className="relative h-40 overflow-hidden">
+            <img
+              src={item.image || '/placeholder-item.jpg'}
+              alt={item.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.src = '/placeholder-item.jpg';
+              }}
+            />
+            {item.featured && (
+              <div className="absolute top-2 left-2 bg-primary text-white text-xs px-2 py-1 rounded-full">
+                Featured
+              </div>
+            )}
+          </div>
+          
+          <CardContent className="p-3">
+            <div className="flex justify-between items-start mb-1">
+              <h3 className="font-medium text-base line-clamp-1">{item.name}</h3>
+              <span className="font-semibold text-sm text-primary">{formattedPrice}</span>
+            </div>
+            
+            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+              {item.description}
+            </p>
+            
+            <div className="flex justify-between items-center">
+              {/* Display tags if available */}
+              {item.tags && item.tags.length > 0 && (
+                <div className="flex gap-1 flex-wrap">
+                  {item.tags.slice(0, 2).map((tag, index) => (
+                    <span 
+                      key={index}
+                      className="text-xs bg-muted px-2 py-0.5 rounded-full"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              {/* Add to cart button */}
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-9 w-9 ml-auto rounded-full bg-purple-600 hover:bg-purple-700 shadow-md"
+                onClick={handleAddToCart}
+              >
+                <Plus className="h-5 w-5 text-white" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
+
+export default MenuItemCard;

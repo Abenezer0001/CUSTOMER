@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useOrders } from '@/context/OrdersContext';
 import { Button } from '@/components/ui/button';
@@ -23,11 +22,11 @@ const Bill: React.FC = () => {
   // Only show the bill if there are orders
   if (orders.length === 0) {
     return (
-      <div className="px-4 py-8 mt-16">
+      <div className="px-4 py-8 mt-16 text-white">
         <h1 className="text-2xl font-semibold mb-6">Your Bill</h1>
         
         <div className="text-center py-12">
-          <p className="text-gray-500 mb-4">You don't have any orders to pay for yet</p>
+          <p className="text-gray-400 mb-4">You don't have any orders to pay for yet</p>
           
           <Button
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -59,14 +58,14 @@ const Bill: React.FC = () => {
 
   if (paid) {
     return (
-      <div className="px-4 py-8 mt-16 text-center">
-        <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-4">
-          <Check className="h-8 w-8 text-green-600" />
+      <div className="px-4 py-8 mt-16 text-center text-white">
+        <div className="w-16 h-16 bg-green-900 rounded-full mx-auto flex items-center justify-center mb-4">
+          <Check className="h-8 w-8 text-green-400" />
         </div>
         
         <h1 className="text-2xl font-semibold mb-2">Payment Complete!</h1>
         
-        <p className="text-gray-600 mb-8">
+        <p className="text-gray-400 mb-8">
           Thank you for dining with us. We hope to see you again soon!
         </p>
         
@@ -81,17 +80,17 @@ const Bill: React.FC = () => {
   }
 
   return (
-    <div className="px-4 py-4 mt-16">
+    <div className="px-4 py-4 mt-16 text-white">
       <h1 className="text-2xl font-semibold mb-6">Your Bill</h1>
       
-      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+      <div className="bg-[#262837] border border-[#2D303E] rounded-lg p-4 mb-6">
         <div className="text-center mb-4">
           <h2 className="font-bold text-xl">{restaurantName}</h2>
-          <p className="text-sm text-gray-500">Table {tableNumber}</p>
-          <p className="text-sm text-gray-500">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
+          <p className="text-sm text-gray-400">Table {tableNumber}</p>
+          <p className="text-sm text-gray-400">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
         </div>
         
-        <div className="border-t border-b py-4 my-4">
+        <div className="border-t border-b border-[#2D303E] py-4 my-4">
           {orders.map((order, index) => (
             <div key={index} className="mb-4">
               <h3 className="font-medium text-sm mb-2">Order #{order.id.split('-')[1]}</h3>
@@ -122,7 +121,7 @@ const Bill: React.FC = () => {
             <span>${serviceCharge.toFixed(2)}</span>
           </div>
           
-          <div className="flex justify-between font-bold text-lg pt-2 border-t">
+          <div className="flex justify-between font-bold text-lg pt-2 border-t border-[#2D303E]">
             <span>Total</span>
             <span>${total.toFixed(2)}</span>
           </div>
@@ -136,7 +135,7 @@ const Bill: React.FC = () => {
           <Button
             variant={paymentMethod === 'card' ? 'default' : 'outline'}
             className={`h-20 flex flex-col ${
-              paymentMethod === 'card' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''
+              paymentMethod === 'card' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'border-[#2D303E] text-white'
             }`}
             onClick={() => setPaymentMethod('card')}
           >
@@ -147,7 +146,7 @@ const Bill: React.FC = () => {
           <Button
             variant={paymentMethod === 'cash' ? 'default' : 'outline'}
             className={`h-20 flex flex-col ${
-              paymentMethod === 'cash' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''
+              paymentMethod === 'cash' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'border-[#2D303E] text-white'
             }`}
             onClick={() => setPaymentMethod('cash')}
           >
@@ -158,7 +157,7 @@ const Bill: React.FC = () => {
           <Button
             variant={paymentMethod === 'bank' ? 'default' : 'outline'}
             className={`h-20 flex flex-col ${
-              paymentMethod === 'bank' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''
+              paymentMethod === 'bank' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'border-[#2D303E] text-white'
             }`}
             onClick={() => setPaymentMethod('bank')}
           >

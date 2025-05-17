@@ -106,12 +106,13 @@ const authService = {
     // Store state in localStorage to verify when the user returns
     localStorage.setItem('oauth_state', state);
     
-    // Simplified approach - let the backend handle the redirect URI
-    // This avoids issues with redirect_uri_mismatch
+    // Ensure correct path construction by using the base URL without duplicate /auth
+    // API_BASE_URL should be http://localhost:3001/api/auth
     console.log('API_BASE_URL:', API_BASE_URL);
     
-    const fullUrl = `${API_BASE_URL}/auth/google?state=${state}`;
-    console.log('Simplified Google Auth URL:', fullUrl);
+    // Ensure we're using the correct URL structure - this should resolve to http://localhost:3001/api/auth/google
+    const fullUrl = `${API_BASE_URL}/google?state=${state}`;
+    console.log('Google Auth URL:', fullUrl);
     
     return fullUrl;
   },

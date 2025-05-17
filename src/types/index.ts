@@ -1,5 +1,6 @@
 export interface MenuItem {
   id: string;
+  _id?: string; // Added for API compatibility
   name: string;
   description: string;
   price: number;
@@ -100,4 +101,5 @@ export type OrdersContextType = {
 export interface TableInfo {
   tableNumber: string;
   restaurantName: string;
+  tableId?: string;
 }

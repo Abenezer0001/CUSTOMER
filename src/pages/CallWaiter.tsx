@@ -35,7 +35,7 @@ const CallWaiter: React.FC = () => {
   };
 
   return (
-    <div className="px-4 py-8 mt-16">
+    <div className="px-4 py-8 mt-16 text-white">
       <h1 className="text-2xl font-semibold mb-6">Call Waiter</h1>
       
       {submitted ? (
@@ -46,7 +46,7 @@ const CallWaiter: React.FC = () => {
           
           <h2 className="text-xl font-medium mb-2">Request Sent!</h2>
           
-          <p className="text-muted-foreground mb-4">
+          <p className="text-gray-400 mb-4">
             A waiter will come to table {tableNumber} shortly.
           </p>
           
@@ -59,7 +59,7 @@ const CallWaiter: React.FC = () => {
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
-          <div className="bg-background border border-border rounded-lg p-4 mb-6">
+          <div className="bg-[#262837] border border-[#2D303E] rounded-lg p-4 mb-6">
             <h2 className="font-medium mb-4">Select a reason</h2>
             
             <RadioGroup 
@@ -69,19 +69,19 @@ const CallWaiter: React.FC = () => {
             >
               <div className="flex items-center space-x-2 mb-3">
                 <RadioGroupItem value="assistance" id="assistance" className="text-marian-blue border-marian-blue" />
-                <Label htmlFor="assistance">Need Assistance</Label>
+                <Label htmlFor="assistance" className="text-white">Need Assistance</Label>
               </div>
               <div className="flex items-center space-x-2 mb-3">
                 <RadioGroupItem value="refill" id="refill" className="text-marian-blue border-marian-blue" />
-                <Label htmlFor="refill">Need a Refill</Label>
+                <Label htmlFor="refill" className="text-white">Need a Refill</Label>
               </div>
               <div className="flex items-center space-x-2 mb-3">
                 <RadioGroupItem value="utensils" id="utensils" className="text-marian-blue border-marian-blue" />
-                <Label htmlFor="utensils">Need Utensils</Label>
+                <Label htmlFor="utensils" className="text-white">Need Utensils</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="other" id="other" className="text-marian-blue border-marian-blue" />
-                <Label htmlFor="other">Other</Label>
+                <Label htmlFor="other" className="text-white">Other</Label>
               </div>
             </RadioGroup>
           </div>
@@ -96,7 +96,7 @@ const CallWaiter: React.FC = () => {
               value={additionalInfo}
               onChange={(e) => setAdditionalInfo(e.target.value)}
               rows={4}
-              className="border-border focus-visible:ring-marian-blue"
+              className="border-[#2D303E] bg-[#262837] text-white focus-visible:ring-marian-blue"
             />
           </div>
           

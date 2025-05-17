@@ -1,4 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useTableInfo } from './TableContext';
+import { toast } from 'sonner';
+
+export interface CartModifier {
+  id: string;
+  name: string;
+  price: number;
+}
 
 export interface CartItem {
   id: string;
@@ -9,16 +17,22 @@ export interface CartItem {
   description?: string;
   categoryId?: string;
   subcategoryId?: string;
-  modifiers?: {
-    id: string;
-    name: string;
-    price: number;
-  }[];
+  tableId?: string; // Associate item with a specific table
+  specialInstructions?: string;
+  modifiers?: CartModifier[]; 
+  dateAdded: number; // Timestamp for sorting
 }
 
 interface CartContextType {
   cartItems: CartItem[];
-  addToCart: (item: Omit<CartItem, 'quantity'>) => void;
+  addToCart: (item: Omit<CartItem, 'quantity' | 'dateAdded'>) => void;
+  addItem: (
+    item: any,
+    quantity: number,
+    modifiers?: CartModifier[],
+    options?: any,
+    specialInstructions?: string
+  ) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -37,17 +51,61 @@ export const useCart = (): CartContextType => {
 };
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Get table ID from context
+  const { tableId } = useTableInfo();
+  
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     const savedCart = localStorage.getItem('cart');
-    return savedCart ? JSON.parse(savedCart) : [];
+    const parsedCart = savedCart ? JSON.parse(savedCart) : [];
+    
+    // If we have a table ID, filter items to show only those for this table
+    if (tableId) {
+      return parsedCart.filter((item: CartItem) => 
+        !item.tableId || item.tableId === tableId
+      );
+    }
+    
+    return parsedCart;
   });
-
+  
   const [itemCount, setItemCount] = useState(0);
   const [cartTotal, setCartTotal] = useState(0);
 
+  // When tableId changes, filter cart items to only show items for this table
   useEffect(() => {
-    // Save cart to localStorage whenever it changes
-    localStorage.setItem('cart', JSON.stringify(cartItems));
+    if (tableId) {
+      const savedCart = localStorage.getItem('cart');
+      if (savedCart) {
+        const allItems = JSON.parse(savedCart);
+        const tableItems = allItems.filter((item: CartItem) => 
+          !item.tableId || item.tableId === tableId
+        );
+        setCartItems(tableItems);
+      }
+    }
+  }, [tableId]);
+
+  useEffect(() => {
+    // Get all existing cart items first
+    const savedCart = localStorage.getItem('cart');
+    const allItems = savedCart ? JSON.parse(savedCart) : [];
+    
+    // Replace or merge items for the current table
+    let updatedCart: CartItem[];
+    if (tableId) {
+      // Remove items for this table from the full cart
+      const otherTableItems = allItems.filter((item: CartItem) => 
+        item.tableId && item.tableId !== tableId
+      );
+      
+      // Add the current table's items
+      updatedCart = [...otherTableItems, ...cartItems];
+    } else {
+      updatedCart = cartItems;
+    }
+    
+    // Save all cart items back to localStorage
+    localStorage.setItem('cart', JSON.stringify(updatedCart));
     
     // Update cart count and total
     const count = cartItems.reduce((total, item) => total + item.quantity, 0);
@@ -61,26 +119,80 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return sum + itemTotal + modifiersTotal;
     }, 0);
     setCartTotal(total);
-  }, [cartItems]);
+  }, [cartItems, tableId]);
 
-  const addToCart = (item: Omit<CartItem, 'quantity'>) => {
-    setCartItems(prevItems => {
-      // Check if item already exists in cart
-      const existingItemIndex = prevItems.findIndex(cartItem => cartItem.id === item.id);
+  const addToCart = (item: Omit<CartItem, 'quantity' | 'dateAdded'>) => {
+    try {
+      setCartItems(prevItems => {
+        // Generate a unique ID if item has modifiers to avoid conflicts
+        const itemId = item.modifiers && item.modifiers.length > 0 
+          ? `${item.id}-${Date.now()}` 
+          : item.id;
+        
+        // Check if item already exists in cart
+        const existingItemIndex = prevItems.findIndex(cartItem => cartItem.id === itemId);
+        
+        if (existingItemIndex >= 0) {
+          // If item exists, increase quantity
+          const updatedItems = [...prevItems];
+          updatedItems[existingItemIndex] = {
+            ...updatedItems[existingItemIndex],
+            quantity: updatedItems[existingItemIndex].quantity + 1
+          };
+          return updatedItems;
+        } else {
+          // If item doesn't exist, add new item with quantity 1
+          const newItem = { 
+            ...item, 
+            id: itemId,
+            quantity: 1, 
+            tableId: tableId || undefined,
+            dateAdded: Date.now()
+          };
+          return [...prevItems, newItem];
+        }
+      });
       
-      if (existingItemIndex >= 0) {
-        // If item exists, increase quantity
-        const updatedItems = [...prevItems];
-        updatedItems[existingItemIndex] = {
-          ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + 1
-        };
-        return updatedItems;
-      } else {
-        // If item doesn't exist, add new item with quantity 1
-        return [...prevItems, { ...item, quantity: 1 }];
-      }
-    });
+      toast.success(`Added ${item.name} to cart`);
+    } catch (error) {
+      console.error('Error adding item to cart:', error);
+      toast.error('Failed to add item to cart');
+    }
+  };
+  
+  // New comprehensive addItem function for use with ItemDetailDrawer
+  const addItem = (
+    item: any,
+    quantity: number = 1,
+    modifiers?: CartModifier[],
+    options?: any,
+    specialInstructions?: string
+  ) => {
+    try {
+      // Generate unique ID for this specific item configuration
+      const uniqueId = modifiers && modifiers.length > 0
+        ? `${item.id || item._id}-${Date.now()}`
+        : item.id || item._id;
+      
+      const newItem: CartItem = {
+        id: uniqueId,
+        name: item.name,
+        price: item.price,
+        image: item.image,
+        description: item.description,
+        quantity: quantity,
+        modifiers: modifiers,
+        specialInstructions: specialInstructions,
+        tableId: tableId || undefined,
+        dateAdded: Date.now()
+      };
+      
+      setCartItems(prev => [...prev, newItem]);
+      toast.success(`Added ${quantity} × ${item.name} to cart`);
+    } catch (error) {
+      console.error('Error adding item to cart:', error);
+      toast.error('Failed to add item to cart');
+    }
   };
 
   const removeFromCart = (itemId: string) => {
@@ -96,12 +208,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const clearCart = () => {
-    setCartItems([]);
+    // If we have a tableId, only clear items for this table
+    if (tableId) {
+      // Get all cart items
+      const savedCart = localStorage.getItem('cart');
+      if (savedCart) {
+        const allItems = JSON.parse(savedCart);
+        // Keep items for other tables
+        const otherTableItems = allItems.filter((item: CartItem) => 
+          item.tableId && item.tableId !== tableId
+        );
+        localStorage.setItem('cart', JSON.stringify(otherTableItems));
+      }
+      
+      // Clear local state
+      setCartItems([]);
+    } else {
+      // Clear everything if no table ID
+      localStorage.removeItem('cart');
+      setCartItems([]);
+    }
   };
 
   const value = {
     cartItems,
     addToCart,
+    addItem,
     removeFromCart,
     updateQuantity,
     clearCart,

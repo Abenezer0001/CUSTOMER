@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -27,6 +26,7 @@ import Signup from "./pages/Signup";
 import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 import CategoryDetail from "./pages/CategoryDetail";
+import ScanTable from "./pages/ScanTable";
 
 // Create a new client with proper configuration
 const queryClient = new QueryClient({
@@ -46,15 +46,16 @@ const App = () => {
           <BrowserRouter>
             <AuthProvider>
               <TableProvider>
-                <OrdersProvider>
-                  <CartProvider>
+                <CartProvider>
+                  <OrdersProvider>
                     <FavoritesProvider>
                       <TooltipProvider>
-                      <Toaster />
-                      <Sonner position="top-right" closeButton />
-                      <Routes>
+                        <Toaster />
+                        <Sonner position="top-right" closeButton />
+                        <Routes>
                           <Route element={<Layout />}>
                             <Route path="/" element={<Index />} />
+                            <Route path="/scan" element={<ScanTable />} />
                             <Route path="/menu" element={<Menu />} />
                             <Route path="/menu/:id" element={<MenuItemDetail />} />
                             <Route path="/category/:categoryId" element={<CategoryDetail />} />
@@ -81,12 +82,12 @@ const App = () => {
                             <Route path="*" element={<NotFound />} />
                           </Route>
                         </Routes>
-                    </TooltipProvider>
-                  </FavoritesProvider>
+                      </TooltipProvider>
+                    </FavoritesProvider>
+                  </OrdersProvider>
                 </CartProvider>
-              </OrdersProvider>
-            </TableProvider>
-          </AuthProvider>
+              </TableProvider>
+            </AuthProvider>
           </BrowserRouter>
         </ThemeProvider>
       </QueryClientProvider>
