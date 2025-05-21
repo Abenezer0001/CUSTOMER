@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { MenuItem as UIMenuItem } from '@/types/menu';
+import { API_BASE_URL } from '@/config/api';
 
-// API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+// API Base URL imported from centralized configuration
 
 // Restaurant ID - Cinema City Arabian Centre
 const RESTAURANT_ID = "68187734a6d5090de7422456";

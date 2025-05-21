@@ -13,7 +13,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { login, googleLogin } = useAuth();
+  const { login, googleLogin, customerLogin, customerGoogleLogin, guestLogin } = useAuth();
   const navigate = useNavigate();
   
   const handleLogin = async (e: React.FormEvent) => {
@@ -27,10 +27,20 @@ const Login: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      const success = await login(email, password);
+      // Try customer login first (new customer authentication system)
+      const success = await customerLogin(email, password);
       
       if (success) {
-        navigate('/');
+        navigate('/login/success');
+        return;
+      }
+      
+      // Fall back to regular login if customer login fails
+      // This maintains backward compatibility
+      const regularSuccess = await login(email, password);
+      
+      if (regularSuccess) {
+        navigate('/login/success');
       }
     } finally {
       setIsSubmitting(false);
@@ -38,14 +48,37 @@ const Login: React.FC = () => {
   };
   
   const handleGoogleLogin = () => {
-    // With the new implementation, googleLogin redirects to Google OAuth
-    // No need to handle success/failure here as the user will be redirected
-    googleLogin();
+    // Try customer Google login first (new customer authentication system)
+    try {
+      customerGoogleLogin();
+    } catch (error) {
+      console.error('Customer Google login failed, falling back to regular Google login', error);
+      // Fall back to regular Google login if customer Google login fails
+      googleLogin();
+    }
   };
   
-  const handleGuestContinue = () => {
-    toast.info('Continuing as guest');
+  const handleGuestContinue = async () => {
+    setIsSubmitting(true);
+    try {
+      // Get table ID from local storage (if previously scanned)
+      const tableId = localStorage.getItem('tableId');
+      
+      // Call guestLogin function to create a guest token
+      const success = await guestLogin(tableId || undefined);
+      
+      if (success) {
+        toast.success('Continuing as guest');
     navigate('/');
+      } else {
+        toast.error('Failed to create guest session');
+      }
+    } catch (error) {
+      console.error('Error creating guest session:', error);
+      toast.error('Failed to create guest session');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -143,8 +176,16 @@ const Login: React.FC = () => {
               variant="outline" 
               className="w-full mb-3 text-sm bg-background border-border hover:bg-muted"
               onClick={handleGuestContinue}
+              disabled={isSubmitting}
             >
-              Continue as Guest
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating guest session...
+                </>
+              ) : (
+                'Continue as Guest'
+              )}
             </Button>
           </CardContent>
         </form>

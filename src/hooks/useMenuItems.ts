@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MenuItem } from '@/types/menu';
+import { api } from '@/services/api';
 
 export const useMenuItems = () => {
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -9,20 +10,11 @@ export const useMenuItems = () => {
   useEffect(() => {
     const loadItems = async () => {
       try {
-        const response = await fetch('/src/data/menu-items.json');
-        const data = await response.json();
-        
-        // Ensure all items have the required fields
-        const processedItems = data.items.map((item: any) => ({
-          ...item,
-          imageSearchTerm: item.imageSearchTerm || item.name.toLowerCase(),
-          tags: item.tags || [],
-          featured: item.featured || false,
-          popular: item.popular || false,
-        }));
-        
-        setItems(processedItems);
+        setIsLoading(true);
+        const menuItems = await api.getMenuItems();
+        setItems(menuItems);
       } catch (err) {
+        console.error('Error loading menu items:', err);
         setError(err instanceof Error ? err : new Error('Failed to load menu items'));
       } finally {
         setIsLoading(false);

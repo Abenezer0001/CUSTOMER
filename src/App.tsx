@@ -22,11 +22,14 @@ import Bill from "./pages/Bill";
 import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import Login from "./pages/Login";
+import LoginSuccess from "./pages/LoginSuccess";
 import Signup from "./pages/Signup";
 import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 import CategoryDetail from "./pages/CategoryDetail";
 import ScanTable from "./pages/ScanTable";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCancel from "./pages/PaymentCancel";
 
 // Create a new client with proper configuration
 const queryClient = new QueryClient({
@@ -72,7 +75,10 @@ const App = () => {
                               </ProtectedRoute>
                             } />
                             <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                            <Route path="/payment/success" element={<PaymentSuccess />} />
+                            <Route path="/payment/cancel" element={<PaymentCancel />} />
                             <Route path="/login" element={<Login />} />
+                            <Route path="/login/success" element={<LoginSuccess />} />
                             <Route path="/signup" element={<Signup />} />
                             <Route path="/account" element={
                               <ProtectedRoute>

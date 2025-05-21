@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import debounce from 'lodash/debounce';
+import { useCart } from '@/context/CartContext';
 
 interface TableHeaderProps {
   venueName?: string;
@@ -22,6 +23,7 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const { clearCart } = useCart();
   const [isLoading, setIsLoading] = useState(false);
   
   // Create a debounced version of setTableInfo to avoid rapid consecutive updates
@@ -90,9 +92,12 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
   
   // Handle scanning a new table
   const handleScanClick = () => {
-    console.log('Clearing all table information');
+    console.log('Clearing all table information and cart');
     // Clear all table information
     clearTableInfo();
+    
+    // Clear the cart as well when table info is cleared
+    clearCart();
     
     // Remove from localStorage
     localStorage.removeItem('tableInfo');

@@ -13,12 +13,13 @@ import { ItemDetailDrawer } from '@/components/ItemDetailDrawer';
 // Removed import for local api service
 import { Category, MenuItem, SubCategory } from '@/types/menu';
 import { API_BASE_URL } from '@/constants';
+import { useTableInfo } from '@/context/TableContext';
 
 const CategoryDetail: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const navigate = useNavigate();
+  const { tableId, restaurantName } = useTableInfo();
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
-  const [tableId, setTableId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,7 @@ const CategoryDetail: React.FC = () => {
     const tableParam = queryParams.get('table');
     if (tableParam) {
       console.log('Setting tableId from URL:', tableParam);
-      setTableId(tableParam);
+      // Removed setting tableId from URL
     } else {
       console.warn('No table ID found in URL');
     }
@@ -159,16 +160,8 @@ const CategoryDetail: React.FC = () => {
     enabled: !!categoryId && !!tableId && !error,
   });
 
-  // Get venue information directly - HARD CODED for demo
-  // In a real app, this would be fetched based on the tableId
-  const venueData = { 
-    _id: '681a583c1a12c59b214b39bd',
-    name: 'Screen 3',
-    description: 'Cinema hall with 30 seats'
-  };
-  
-  // This ensures venue data is always available - even in development
-  // without relying on API calls that may fail
+  // Get venue information from the context
+  // Fallback to 'Screen 3' if not available
 
   const handleBack = () => {
     navigate(tableId ? `/?table=${tableId}` : '/');
@@ -246,8 +239,7 @@ const CategoryDetail: React.FC = () => {
     >
       {/* TableHeader for consistent experience */}
       <TableHeader 
-        venueName={venueData?.name} 
-        tableName={tableId?.substring(tableId.length - 5)} 
+        venueName={restaurantName || 'Screen 3'} 
         className="bg-[#16141F] text-white"
       />
 

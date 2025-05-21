@@ -12,8 +12,13 @@ export const BottomNav: React.FC = () => {
   
   // Special case for menu button to ensure we always pass the table ID
   const handleMenuClick = () => {
-    const storedTableId = localStorage.getItem('currentTableId');
+    // Check all possible sources of table ID
+    const storedTableId = localStorage.getItem('currentTableId') || 
+                         localStorage.getItem('table_id') || 
+                         localStorage.getItem('tableId');
     const effectiveTableId = tableId || storedTableId || '';
+    
+    console.log('Navigating to menu with table ID:', effectiveTableId);
     
     if (effectiveTableId) {
       navigate(`/?table=${effectiveTableId}`);
@@ -61,7 +66,7 @@ export const BottomNav: React.FC = () => {
   const currentPath = location.pathname === '/' || location.pathname === '/menu' ? '/' : location.pathname;
   
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#16141F] border-t border-[#2D303E] py-2">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#1F1D2B] border-t border-[#2D303E] py-2">
       <div className="flex items-center justify-around w-full">
         {navItems.map((item) => {
           // Check if path is active without considering query parameters
@@ -78,16 +83,16 @@ export const BottomNav: React.FC = () => {
             >
               <div 
                 className={`p-1.5 transition-all duration-200 ${
-                  isActive ? 'scale-105' : ''
+                  isActive ? 'bg-[#252836] rounded-lg' : ''
                 }`}
               >
-                <div className={isActive ? 'text-[#7B61FF]' : 'text-gray-400'}>
+                <div className={isActive ? 'text-[#6C5ECF]' : 'text-gray-400'}>
                   {item.icon}
                 </div>
               </div>
 
               <span 
-                className={`text-xs mt-0.5 ${isActive ? 'text-[#7B61FF]' : 'text-gray-400'}`}
+                className={`text-xs mt-0.5 ${isActive ? 'text-[#6C5ECF] font-medium' : 'text-gray-400'}`}
               >
                 {item.label}
               </span>
