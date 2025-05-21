@@ -18,7 +18,8 @@ export const api = {
   // Get all categories
   getCategories: async (): Promise<Category[]> => {
     try {
-      const response = await apiClient.get(`${API_BASE_URL}/api/categories`);
+      // Don't use API_BASE_URL since apiClient already has the base URL configured
+      const response = await apiClient.get('/api/categories');
       if (response?.data?.success) {
         return response.data.data;
       }
@@ -32,7 +33,8 @@ export const api = {
   // Get all menu items
   getMenuItems: async (): Promise<MenuItem[]> => {
     try {
-      const response = await apiClient.get(`${API_BASE_URL}/api/menu-items`);
+      // Don't use API_BASE_URL since apiClient already has the base URL configured
+      const response = await apiClient.get('/api/menu-items');
       if (response?.data?.success) {
         return response.data.data.map(mapMenuItem);
       }
@@ -46,7 +48,8 @@ export const api = {
   // Get menu items by category
   getMenuItemsByCategory: async (categoryId: string): Promise<MenuItem[]> => {
     try {
-      const response = await apiClient.get(`${API_BASE_URL}/api/categories/${categoryId}/menu-items`);
+      // Don't use API_BASE_URL since apiClient already has the base URL configured
+      const response = await apiClient.get(`/api/categories/${categoryId}/menu-items`);
       if (response?.data?.success) {
         return response.data.data.map(mapMenuItem);
       }

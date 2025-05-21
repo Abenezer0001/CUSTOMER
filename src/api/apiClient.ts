@@ -51,9 +51,14 @@ const apiClient = axios.create({
 // Add request interceptor to include Authorization header when token is available
 apiClient.interceptors.request.use(
   (config) => {
-    // Ensure we have the complete path
-    if (config.url && !config.url.startsWith('/api/')) {
-      config.url = `/api/${config.url.startsWith('/') ? config.url.substring(1) : config.url}`;
+    // FIXED: Do not automatically add /api/ prefix as it causes issues with double prefixes
+    // URLs should already have the correct /api/ path when needed
+    // Keep track of URLs with multiple /api/ segments for debugging
+    if (config.url && config.url.includes('/api/api/')) {
+      console.warn('⚠️ Double /api/ prefix detected in URL:', config.url);
+      // Fix URLs with double /api/ prefix
+      config.url = config.url.replace('/api/api/', '/api/');
+      console.log('🔧 Fixed URL:', config.url);
     }
 
     // Track request method for debugging

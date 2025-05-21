@@ -43,7 +43,12 @@ const ScanTable: React.FC = () => {
       // Set video source
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        // Wait for loadedmetadata event before playing to avoid interrupt errors
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(err => {
+            console.error('Error playing video:', err);
+          });
+        };
       }
       
       // Start scanning for QR codes
@@ -97,7 +102,10 @@ const ScanTable: React.FC = () => {
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     
-    if (!context || video.videoWidth === 0) return;
+    if (!context || video.videoWidth === 0 || video.videoHeight === 0) return;
+    
+    // Add debugging
+    console.log('Scanning QR code, video dimensions:', video.videoWidth, 'x', video.videoHeight);
     
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth;

@@ -1,5 +1,10 @@
 // API Base URL
-export const API_BASE_URL = 'http://localhost:3001';
+// Get API URL from environment variables, with fallback to localhost
+const envApiUrl = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE_URL = envApiUrl || 'http://localhost:3001';
+
+// Log the API URL being used
+console.log('Using API base URL:', API_BASE_URL);
 
 // Auth API URL
 export const AUTH_API_URL = `${API_BASE_URL}/api/auth`;

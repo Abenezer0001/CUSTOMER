@@ -445,7 +445,7 @@ export const fetchUserOrders = async (): Promise<OrdersResponse['data']> => {
     
     try {
       // Try to get user info first with explicit headers
-      console.log('Attempting to fetch user from /api/auth/me endpoint');
+      console.log('Attempting to fetch user from auth/me endpoint');
       const userResponse = await apiClient.get('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`
