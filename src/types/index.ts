@@ -1,5 +1,6 @@
 export interface MenuItem {
   id: string;
+  _id?: string; // Added for API compatibility
   name: string;
   description: string;
   price: number;
@@ -44,16 +45,21 @@ export interface Category {
 
 export interface CartItem {
   id: string;
-  menuItemId: string;
+  menuItemId?: string;  // Make optional as it might be derived from id in some cases
   name: string;
   price: number;
   quantity: number;
-  image: string;
+  image?: string;  // Make optional as it might not be available from API
   modifiers?: CartItemModifier[];
   cookingPreference?: string;
   specialInstructions?: string;
+  // Helper method to calculate the total price including modifiers
+  getItemTotal?: () => number;
 }
 
+/**
+ * Represents a modifier selected for a cart item
+ */
 export interface CartItemModifier {
   id: string;
   name: string;
@@ -62,25 +68,46 @@ export interface CartItemModifier {
 
 export interface Order {
   id: string;
+  orderNumber: string;
   items: CartItem[];
   subtotal: number;
   tax: number;
+  serviceFee: number;
+  tip: number;
   total: number;
   status: OrderStatus;
+  paymentStatus: PaymentStatus;
   timestamp: Date;
-  tableNumber: string;
+  tableId: string; // Changed from tableNumber to match API
+  specialInstructions?: string;
 }
 
-export type OrderStatus = 'preparing' | 'ready' | 'delivered' | 'completed';
+// Export new enum types to replace the string literal types
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  PREPARING = 'PREPARING',
+  READY = 'READY',
+  DELIVERED = 'DELIVERED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  PAID = 'PAID',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED'
+}
 
 export type CartContextType = {
-  items: CartItem[];
+  cartItems: CartItem[];  // Renamed from items to cartItems for consistency with API
   addItem: (item: MenuItem, quantity: number, modifiers?: CartItemModifier[], cookingPreference?: string, specialInstructions?: string) => void;
-  removeItem: (id: string) => void;
+  removeFromCart: (id: string) => void;  // Renamed from removeItem for clarity
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
-  totalItems: number;
-  subtotal: number;
+  itemCount: number;  // Renamed from totalItems for clarity
+  cartTotal: number;  // Renamed from subtotal to cartTotal for clarity
 };
 
 export type FavoritesContextType = {
@@ -90,14 +117,21 @@ export type FavoritesContextType = {
   isFavorite: (itemId: string) => boolean;
 };
 
-export type OrdersContextType = {
+export interface OrdersContextType {
   orders: Order[];
+  loading: boolean;
   addOrder: (order: Order) => void;
-  getOrderById: (id: string) => Order | undefined;
+  getOrderById: (id: string) => Promise<Order | null>;
+  updateOrder?: (id: string, updates: Partial<Order>) => void;
   clearOrders: () => void;
-};
+}
 
 export interface TableInfo {
-  tableNumber: string;
+  tableNumber?: string; // Make optional since we'll use tableId
   restaurantName: string;
+  tableId: string; // Make required to match API
 }
+
+// Re-export all types
+export * from './menu';
+export * from './Order';

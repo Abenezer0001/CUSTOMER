@@ -11,6 +11,10 @@ export interface User {
   firstName: string;
   lastName: string;
   role: string;
+  loyaltyPoints?: number;
+  name?: string;
+  createdAt?: string;
+  orders?: any[];
 }
 
 // Login credentials interface
@@ -29,6 +33,32 @@ export interface RegisterCredentials {
 
 // Configure axios to include credentials
 axios.defaults.withCredentials = true;
+
+// Function to get the auth token from cookies or localStorage
+const getEffectiveToken = (): string | null => {
+  // First check cookies
+  const cookies = document.cookie.split(';');
+  const tokenCookie = cookies.find(cookie => 
+    cookie.trim().startsWith('auth_token=') || 
+    cookie.trim().startsWith('access_token=')
+  );
+  
+  if (tokenCookie) {
+    return tokenCookie.split('=')[1].trim();
+  }
+  
+  // Then check localStorage
+  return localStorage.getItem('auth_token');
+};
+
+// Function to get Authorization header with properly formatted token
+export const getAuthHeader = (): { Authorization: string } | {} => {
+  const token = getEffectiveToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+};
 
 export const AuthService = {
   // Login user
@@ -93,7 +123,9 @@ export const AuthService = {
   // Check if user is authenticated
   isAuthenticated: async (): Promise<boolean> => {
     try {
-      const response = await axios.get(`${API_URL}/auth/check`);
+      const response = await axios.get(`${API_URL}/auth/check`, {
+        headers: { ...getAuthHeader() }
+      });
       return response.data.isAuthenticated;
     } catch (error) {
       console.error('Auth check error:', error);
@@ -104,7 +136,9 @@ export const AuthService = {
   // Get current user
   getCurrentUser: async (): Promise<User | null> => {
     try {
-      const response = await axios.get(`${API_URL}/auth/me`);
+      const response = await axios.get(`${API_URL}/auth/me`, {
+        headers: { ...getAuthHeader() }
+      });
       
       if (response.data.success) {
         return response.data.user;
@@ -125,6 +159,55 @@ export const AuthService = {
     } catch (error) {
       console.error('Token refresh error:', error);
       return false;
+    }
+  },
+  
+  // Guest login with table ID
+  guestLogin: async (tableId: string): Promise<{ success: boolean; token?: string; user?: User; error?: string }> => {
+    try {
+      // Create a device ID if not already stored
+      const deviceId = localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      if (!localStorage.getItem('device_id')) {
+        localStorage.setItem('device_id', deviceId);
+      }
+      
+      // Use the correct endpoint: guest-token
+      const response = await axios.post(`${API_URL}/auth/guest-token`, {
+        tableId,
+        deviceId
+      });
+      
+      if (response.data.success && response.data.token) {
+        // Store the token in localStorage as a fallback
+        localStorage.setItem('auth_token', response.data.token);
+        
+        // Set token in cookie for cross-page consistency
+        document.cookie = `auth_token=${response.data.token}; path=/; max-age=86400; SameSite=Lax`;
+        document.cookie = `access_token=${response.data.token}; path=/; max-age=86400; SameSite=Lax`;
+        
+        // Create a guest user object from the response data
+        const guestUser: User = {
+          id: response.data.user?.id || `guest-${deviceId}`,
+          email: response.data.user?.email || `${deviceId}@guest.inseat.com`,
+          firstName: response.data.user?.firstName || 'Guest',
+          lastName: response.data.user?.lastName || 'User',
+          role: 'guest'
+        };
+        
+        return {
+          success: true,
+          token: response.data.token,
+          user: guestUser
+        };
+      }
+      
+      return { success: false, error: 'Guest login failed' };
+    } catch (error: any) {
+      console.error('Guest login error:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Guest login failed. Please try again.'
+      };
     }
   },
   

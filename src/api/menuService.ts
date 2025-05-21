@@ -1,7 +1,5 @@
 import axios, { AxiosError } from 'axios';
-
-// Base URL for API requests
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+import { API_BASE_URL } from '@/constants';
 
 // Custom error types for better error handling
 export class ApiError extends Error {
@@ -132,10 +130,23 @@ export const verifyTableStatus = async (tableId: string): Promise<{
   table?: Table;
 }> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/tables/${tableId}/verify`);
+    console.log(`Verifying table status for table ID: ${tableId}`);
+    const response = await axios.get(`${API_BASE_URL}/tables/${tableId}/verify`, {
+      timeout: 5000 // Add a 5 second timeout for faster feedback
+    });
     return response.data;
   } catch (error) {
     console.error('Error verifying table:', error);
+    
+    // Check for specific error types
+    if (axios.isAxiosError(error)) {
+      // If it's a 404 Not Found, the table doesn't exist
+      if (error.response?.status === 404) {
+        throw new TableNotFoundError(tableId);
+      }
+    }
+    
+    // For all other errors, throw an appropriate error
     handleApiError(error, `Failed to verify table status for table ID ${tableId}`);
   }
 };

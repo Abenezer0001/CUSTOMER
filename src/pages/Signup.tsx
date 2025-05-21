@@ -17,7 +17,7 @@ const Signup: React.FC = () => {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { signup, googleLogin } = useAuth();
+  const { signup, googleLogin, customerSignup, customerGoogleLogin } = useAuth();
   const navigate = useNavigate();
   
   const handleSignup = async (e: React.FormEvent) => {
@@ -36,10 +36,21 @@ const Signup: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Pass the parameters in the correct order: firstName, lastName, email, password
-      const success = await signup(firstName, lastName, email, password);
+      // Try customer signup first (new customer authentication system)
+      const success = await customerSignup(firstName, lastName, email, password);
       
       if (success) {
+        toast.success('Account created successfully!');
+        navigate('/');
+        return;
+      }
+      
+      // Fall back to regular signup if customer signup fails
+      // This maintains backward compatibility
+      const regularSuccess = await signup(firstName, lastName, email, password);
+      
+      if (regularSuccess) {
+        toast.success('Account created successfully!');
         navigate('/');
       }
     } finally {
@@ -51,10 +62,17 @@ const Signup: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      const success = await googleLogin();
-      
-      if (success) {
-        navigate('/');
+      // Try customer Google login first (new customer authentication system)
+      try {
+        // Google login redirects, so we don't need to check return value
+        customerGoogleLogin();
+        // No need to navigate as Google OAuth will redirect
+        return;
+      } catch (error) {
+        console.error('Customer Google signup failed, falling back to regular Google login', error);
+        // Fall back to regular Google login if customer Google login fails
+        // googleLogin may return a boolean or redirect
+        googleLogin();
       }
     } finally {
       setIsSubmitting(false);

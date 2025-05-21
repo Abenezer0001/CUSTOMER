@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQRScanner, TableError } from '@/hooks/useQRScanner';
+import { useCart } from '@/context/CartContext';
 import { MenuItem } from '@/api/menuService';
 import { ChevronRightIcon, ArrowLeftIcon, QrCodeIcon, SearchIcon, Loader2Icon, AlertTriangleIcon } from 'lucide-react';
 
@@ -177,16 +178,28 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScanComplete }) => {
     selectCategory, 
     selectSubcategory, 
     selectSubSubcategory,
-    resetError 
+    resetError,
+    resetState
   } = useQRScanner();
   
   const [tableId, setTableId] = useState('');
+  const { clearCart } = useCart();
+
+  // Reset scanner and clear cart
+  const resetScanner = useCallback(() => {
+    clearCart();
+    resetState();
+    setTableId('');
+  }, [clearCart, resetState]);
 
   // Handle form submission for manual table ID input
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tableId.trim()) return;
 
+    // Clear the cart before scanning new table
+    clearCart();
+    
     try {
       await handleScan(tableId.trim());
       if (onScanComplete) {
@@ -205,6 +218,8 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScanComplete }) => {
     if (level === null) {
       // Reset to top level (categories)
       if (data.tableData?.table) {
+        // Clear cart when navigating back to top level with table scan
+        resetScanner();
         await handleScan(data.tableData.table._id);
       }
       return;

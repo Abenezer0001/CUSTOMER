@@ -1,21 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useCart } from '@/context/CartContext';
-import { useOrders } from '@/context/OrdersContext';
 import { useAuth } from '@/context/AuthContext';
+import { useTableInfo } from '@/context/TableContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, X, MinusCircle, PlusCircle, ShoppingCart, ChevronRight } from 'lucide-react';
+import { ArrowLeft, X, MinusCircle, PlusCircle, ShoppingCart, ChevronRight, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { createOrder } from '@/api/orderService';
+import { createStripeCheckoutSession } from '@/api/paymentService';
+import { useOrders } from '@/context/OrdersContext';
 
 const CartPage: React.FC = () => {
-  const { cartItems, removeFromCart, updateQuantity, clearCart, cartTotal } = useCart();
-  const { createOrder } = useOrders();
-  const { user } = useAuth();
+  const { cartItems, removeFromCart, updateQuantity, clearCart, cartTotal, itemCount } = useCart();
+  const { user, token, isAuthenticated } = useAuth();
+  const { tableId, restaurantName } = useTableInfo();
+  const { addOrder } = useOrders();
   const navigate = useNavigate();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleQuantityChange = (itemId: string, newQuantity: number) => {
     if (newQuantity > 0) {
@@ -25,10 +30,16 @@ const CartPage: React.FC = () => {
     }
   };
 
-  const handleCheckout = () => {
-    if (!user) {
-      toast.error('Please login to checkout');
-      navigate('/login');
+  const handlePlaceOrder = async () => {
+    if (!tableId) {
+      toast.error('Table information is missing. Please scan a table QR code first.');
+      navigate('/scan-table');
+      return;
+    }
+
+    if (!isAuthenticated || !token) {
+      toast.error('Please login to place your order');
+      navigate('/login', { state: { returnUrl: '/cart' } });
       return;
     }
 
@@ -37,20 +48,64 @@ const CartPage: React.FC = () => {
       return;
     }
 
+    setIsProcessing(true);
+    
     try {
-      createOrder({
+      // Determine restaurant ID (either from context or extract from tableId)
+      const restaurantId = restaurantName === 'InSeat' 
+        ? '65f456b06c9dfd001b6b1234' 
+        : tableId.split('-')[0];
+      
+      // Step 1: Create the order in our system
+      const orderResponse = await createOrder(
+        cartItems,
+        tableId,
+        restaurantId,
+        token
+      );
+      
+      if (!orderResponse || !orderResponse._id) {
+        throw new Error('Failed to create order');
+      }
+      
+      // Add the order to local context
+      addOrder({
+        id: orderResponse._id,
         items: cartItems,
-        total: cartTotal,
+        subtotal: cartTotal,
+        tax: cartTotal * 0.1,
+        total: cartTotal * 1.1,
         status: 'pending',
-        createdAt: new Date().toISOString(),
-        userId: user.id
+        timestamp: new Date(orderResponse.createdAt),
+        tableNumber: tableId
       });
       
-      toast.success('Order placed successfully!');
+      toast.success('Order created successfully! Redirecting to payment...');
+        
+      // Step 2: Create Stripe checkout session
+      const stripeSession = await createStripeCheckoutSession(
+        cartItems,
+        tableId,
+        restaurantId
+      );
+      
+      if (!stripeSession || !stripeSession.url) {
+        throw new Error('Failed to create payment session');
+      }
+      
+      // Store order ID in localStorage for retrieval after payment
+      localStorage.setItem('pending_order_id', orderResponse._id);
+      
+      // Clear the cart
       clearCart();
-      navigate('/orders');
+      
+      // Redirect to Stripe checkout
+      window.location.href = stripeSession.url;
+      
     } catch (error) {
-      toast.error('Failed to create order. Please try again.');
+      console.error('Order creation failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create your order');
+      setIsProcessing(false);
     }
   };
 
@@ -60,7 +115,7 @@ const CartPage: React.FC = () => {
   }).format(cartTotal);
 
   return (
-    <div className="container mx-auto px-4 py-6 mt-16 mb-20">
+    <div className="container mx-auto px-4 py-6 mt-16 mb-20 bg-raisin-black">
       <div className="flex justify-between items-center mb-6">
         <Link 
           to="/" 
@@ -223,22 +278,28 @@ const CartPage: React.FC = () => {
             
             <CardFooter className="flex flex-col gap-2">
               <Button 
-                onClick={handleCheckout}
-                className="w-full"
-                disabled={cartItems.length === 0}
+                onClick={handlePlaceOrder}
+                className="w-full bg-delft-blue hover:bg-delft-blue/90"
+                disabled={cartItems.length === 0 || isProcessing}
               >
-                Proceed to Checkout
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...
+                  </>
+                ) : (
+                  'Place Order'
+                )}
               </Button>
               
               <Button 
                 variant="outline" 
-                className="w-full" 
+                className="w-full border-delft-blue text-delft-blue hover:bg-delft-blue/10" 
                 onClick={() => navigate('/')}
               >
                 Continue Shopping
               </Button>
               
-              {!user && (
+              {!isAuthenticated && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   You need to be logged in to complete your order
                 </p>
@@ -262,7 +323,7 @@ const CartPage: React.FC = () => {
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="w-full"
+                      className="w-full border-delft-blue text-delft-blue hover:bg-delft-blue/10"
                       onClick={() => navigate('/account')}
                     >
                       <span>View Rewards</span>

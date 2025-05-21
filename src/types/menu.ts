@@ -3,23 +3,59 @@ export interface MenuItem {
   name: string;
   description: string;
   price: number;
-  image: string;
-  imageSearchTerm: string;
-  category: string;
+  image?: string;
+  imageSearchTerm?: string;
   categoryId: string;
-  subcategory?: string;
-  featured: boolean;
-  popular: boolean;
-  tags: string[];
+  subCategoryId?: string;
+  featured?: boolean;
+  tags?: string[];
   preparationTime?: string;
-  modifiers?: Array<{
+  rating?: number;
+  modifiers?: MenuItemModifierGroup[];
+}
+
+export interface TableVerification {
+  exists: boolean;
+  isAvailable: boolean;
+  table?: {
+    _id: string;
+    number: string;
+    venueId: string;
+  };
+  venue?: {
+    _id: string;
     name: string;
-    type: 'single-select' | 'multi-select';
-    required: boolean;
-    options: Array<{
-      name: string;
-      price: number;
-    }>;
-  }>;
+    description?: string;
+  };
+}
+
+export interface Category {
+  _id: string;
+  name: string;
+  image?: string;
+  isActive?: boolean;
+  subCategories?: string[];
+}
+
+export interface SubCategory {
+  _id: string;
+  name: string;
+  categoryId?: string;
+  subSubCategories?: string[];
+}
+
+export interface Menu {
+  _id: string;
+  name: string;
+  description: string;
+  restaurantId: string;
+  venueId: {
+    _id: string;
+    name: string;
+  };
+  categories: Category[];
+  subCategories: SubCategory[];
+  createdAt: string;
+  updatedAt: string;
 }
 

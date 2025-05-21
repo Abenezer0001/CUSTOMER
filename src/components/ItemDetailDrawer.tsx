@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MenuItem, CartItemModifier, MenuItemModifierGroup, ModifierOption } from '@/types';
-import { SharedImage } from './shared/SharedImage';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { DrawerHeader, DrawerFooter, DrawerClose } from './ui/drawer';
-import { Clock, X, Minus, Plus, ShoppingCart } from 'lucide-react';
+import { DrawerClose } from './ui/drawer';
+import { Clock, X, Minus, Plus, ShoppingCart, Star, Tag, Check } from 'lucide-react';
 import { Checkbox } from './ui/checkbox';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Label } from './ui/label';
 import { useCart } from '@/context/CartContext';
 import { Textarea } from './ui/textarea';
 import { ScrollArea } from './ui/scroll-area';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface ItemDetailDrawerProps {
   item: MenuItem;
@@ -23,20 +24,28 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, ModifierOption | ModifierOption[]>>({});
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Calculate total price using useMemo for efficiency
   const totalPrice = useMemo(() => {
-    let calculatedPrice = item.price;
-    Object.values(selectedModifiers).forEach(modOrMods => {
-      if (Array.isArray(modOrMods)) {
-        // Sum prices of selected options in a multi-select group
-        calculatedPrice += modOrMods.reduce((sum, mod) => sum + mod.price, 0);
-      } else if (modOrMods) {
-        // Add price of the selected option in a single-select group
-        calculatedPrice += modOrMods.price;
-      }
-    });
-    return calculatedPrice * quantity;
+    try {
+      let calculatedPrice = item.price;
+      Object.values(selectedModifiers).forEach(modOrMods => {
+        if (Array.isArray(modOrMods)) {
+          // Sum prices of selected options in a multi-select group
+          calculatedPrice += modOrMods.reduce((sum, mod) => sum + (mod?.price || 0), 0);
+        } else if (modOrMods) {
+          // Add price of the selected option in a single-select group
+          calculatedPrice += modOrMods.price || 0;
+        }
+      });
+      return calculatedPrice * quantity;
+    } catch (err) {
+      console.error("Error calculating price:", err);
+      return item.price * quantity; // Fallback to base price if calculation fails
+    }
   }, [selectedModifiers, quantity, item.price]);
 
   // Handle modifier selection based on group type
@@ -45,137 +54,287 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
     option: ModifierOption, // Now receiving the specific option
     checked: boolean | string // Checkbox sends boolean, RadioGroup sends value string (option.name)
   ) => {
-    setSelectedModifiers(prev => {
-      const newSelection = { ...prev };
-      const groupName = group.name; // Use group name as key
-      const currentGroupSelection = newSelection[groupName];
+    try {
+      setSelectedModifiers(prev => {
+        const newSelection = { ...prev };
+        const groupName = group.name; // Use group name as key
+        const currentGroupSelection = newSelection[groupName];
 
-      if (group.type === 'multi-select') {
-        const currentArray = Array.isArray(currentGroupSelection) ? currentGroupSelection : [];
-        if (checked === true) {
-          // Add option if checked
-          newSelection[groupName] = [...currentArray, option];
-        } else {
-          // Remove option if unchecked
-          newSelection[groupName] = currentArray.filter(o => o.name !== option.name);
-          // If array becomes empty, remove the key entirely (optional, but cleaner)
-          if (newSelection[groupName].length === 0) {
-            delete newSelection[groupName];
+        if (group.type === 'multi-select') {
+          const currentArray = Array.isArray(currentGroupSelection) ? currentGroupSelection : [];
+          if (checked === true) {
+            // Add option if checked
+            newSelection[groupName] = [...currentArray, option];
+          } else {
+            // Remove option if unchecked
+            newSelection[groupName] = currentArray.filter(o => o.name !== option.name);
+            // If array becomes empty, remove the key entirely (optional, but cleaner)
+            if (newSelection[groupName].length === 0) {
+              delete newSelection[groupName];
+            }
           }
+        } else if (group.type === 'single-select') {
+          // For RadioGroup, 'checked' is the value (option.name) of the selected item
+          if (typeof checked === 'string' && checked === option.name) {
+             // Set the selected option directly
+             newSelection[groupName] = option;
+          }
+          // No 'else' needed as RadioGroup handles deselection implicitly by selecting another
         }
-      } else if (group.type === 'single-select') {
-        // For RadioGroup, 'checked' is the value (option.name) of the selected item
-        if (typeof checked === 'string' && checked === option.name) {
-           // Set the selected option directly
-           newSelection[groupName] = option;
-        }
-        // No 'else' needed as RadioGroup handles deselection implicitly by selecting another
-      }
-      return newSelection;
-    });
+        return newSelection;
+      });
+    } catch (err) {
+      console.error("Error updating modifiers:", err);
+    }
   };
 
    // Set default selections for required single-select groups
    useEffect(() => {
-    const defaultSelections: Record<string, ModifierOption> = {};
-    item.modifiers?.forEach(group => {
-      if (group.type === 'single-select' && group.required && group.options.length > 0) {
-        // Select the first option by default if none is selected for this required group
-        if (!selectedModifiers[group.name]) {
-           defaultSelections[group.name] = group.options[0];
+    try {
+      const defaultSelections: Record<string, ModifierOption> = {};
+      item.modifiers?.forEach(group => {
+        if (group.type === 'single-select' && group.required && group.options.length > 0) {
+          // Select the first option by default if none is selected for this required group
+          if (!selectedModifiers[group.name]) {
+             defaultSelections[group.name] = group.options[0];
+          }
         }
+      });
+      if (Object.keys(defaultSelections).length > 0) {
+         setSelectedModifiers(prev => ({ ...prev, ...defaultSelections }));
       }
-    });
-    if (Object.keys(defaultSelections).length > 0) {
-       setSelectedModifiers(prev => ({ ...prev, ...defaultSelections }));
+    } catch (err) {
+      console.error("Error setting default selections:", err);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.modifiers]); // Run only when item modifiers change
 
+  // Reset state when drawer closes
+  useEffect(() => {
+    return () => {
+      // This cleanup function runs when the component unmounts
+      setSelectedModifiers({});
+      setSpecialInstructions('');
+      setQuantity(1);
+      setImageLoaded(false);
+      setSubmitError(null);
+    };
+  }, []);
 
   const handleAddToCart = () => {
-    // Flatten selected modifiers into the CartItemModifier[] format
-    // Assuming ModifierOption has the same shape as CartItemModifier ({ name, price })
-    const cartModifiers: CartItemModifier[] = Object.values(selectedModifiers)
-                                                  .flat() // Flattens arrays from multi-select
-                                                  .filter(Boolean) // Removes undefined/null entries
-                                                  .map(mod => ({ id: mod.name, name: mod.name, price: mod.price })); // Map to CartItemModifier structure if needed
+    setIsLoading(true);
+    setSubmitError(null);
+    
+    // Simulate a small delay for better UX
+    setTimeout(() => {
+      try {
+        // Validate required modifiers if needed
+        const missingRequiredGroups = item.modifiers?.filter(group => 
+          group.required && (!selectedModifiers[group.name] || 
+            (Array.isArray(selectedModifiers[group.name]) && 
+              (selectedModifiers[group.name] as ModifierOption[]).length === 0))
+        );
+        
+        if (missingRequiredGroups && missingRequiredGroups.length > 0) {
+          setSubmitError(`Please select options for: ${missingRequiredGroups.map(g => g.name).join(', ')}`);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Flatten selected modifiers into the CartItemModifier[] format
+        const cartModifiers: CartItemModifier[] = [];
+        
+        Object.entries(selectedModifiers).forEach(([groupName, selection]) => {
+          if (Array.isArray(selection)) {
+            // Add all selections from multi-select groups
+            selection.forEach(option => {
+              if (option && option.name) {
+                cartModifiers.push({
+                  id: option.name,
+                  name: option.name,
+                  price: option.price || 0
+                });
+              }
+            });
+          } else if (selection && selection.name) {
+            // Add single selection from single-select groups
+            cartModifiers.push({
+              id: selection.name,
+              name: selection.name,
+              price: selection.price || 0
+            });
+          }
+        });
 
-    addItem(
-      item, // The base menu item
-      quantity,
-      cartModifiers.length > 0 ? cartModifiers : undefined,
-      undefined, // Cooking preference removed, handle via modifiers if needed
-      specialInstructions || undefined
-    );
-    // Drawer will close automatically due to DrawerClose wrapper on button
+        addItem(
+          item, // The base menu item
+          quantity,
+          cartModifiers.length > 0 ? cartModifiers : undefined,
+          undefined, // Cooking preference removed, handle via modifiers if needed
+          specialInstructions || undefined
+        );
+        
+        // Show success toast
+        toast.success(`${quantity} × ${item.name} added to cart`);
+        
+        // Close drawer after successful add (use onClose if provided)
+        if (onClose) {
+          setTimeout(() => {
+            onClose();
+          }, 300);
+        }
+        
+      } catch (error) {
+        console.error('Error adding item to cart:', error);
+        setSubmitError('Failed to add item to cart. Please try again.');
+        toast.error('Failed to add item to cart');
+      } finally {
+        setIsLoading(false);
+      }
+    }, 500);
   };
 
+  if (!item || !item.name) {
+    return (
+      <div className="flex flex-col h-full p-4 items-center justify-center">
+        <p>Item information not available</p>
+        <Button onClick={onClose} className="mt-4">Close</Button>
+      </div>
+    );
+  }
+
   return (
-    // Use ScrollArea for content scrolling within the drawer
-    // Removed h-full as drawer height is controlled externally by the Drawer component
-    <ScrollArea className="px-1 max-h-[80vh]"> {/* Limit height for scroll */}
-       {/* DrawerClose button is standard for shadcn Drawer */}
-       <DrawerClose asChild className="absolute top-4 right-4 z-10">
-         <Button variant="ghost" size="icon" aria-label="Close">
-           <X className="h-5 w-5" />
-         </Button>
-       </DrawerClose>
-
-      {/* Item Image */}
-      <div className="mb-4 aspect-video relative -mx-1"> {/* Adjust margin for edge-to-edge */}
-        <img
-          src={item.image || `https://source.unsplash.com/random/400x300/?${item.imageSearchTerm || 'food'}`}
-          alt={item.name}
-          className="w-full h-full object-cover" // Removed rounded-lg to fit drawer edges
-          loading="lazy"
-        />
-      </div>
-
-      {/* Item Name and Description */}
-      <div className="mb-4 px-2">
-        <h2 className="text-2xl font-semibold mb-2">{item.name}</h2>
-        <p className="text-muted-foreground">{item.description}</p>
-      </div>
-
-      {/* Modifier Groups */}
-      {item.modifiers && item.modifiers.length > 0 && (
-        <div className="mb-6 px-2 space-y-4">
-          {item.modifiers.map((group) => (
-            <div key={group.name}> {/* Use group.name as key */}
-              <h3 className="font-medium mb-3">
-                {group.name}
-                {group.required && <span className="text-destructive ml-1">*</span>}
-                {group.type === 'multi-select' && !group.required && <span className="text-muted-foreground text-sm ml-1">(Optional, select multiple)</span>}
-                {group.type === 'single-select' && !group.required && <span className="text-muted-foreground text-sm ml-1">(Optional, select one)</span>}
-              </h3>
-              {/* Render RadioGroup for single-select */}
-              {group.type === 'single-select' ? (
-                <RadioGroup
-                  value={ (selectedModifiers[group.name] as ModifierOption)?.name } // Controlled component: value is the name of the selected option
-                  onValueChange={(value) => {
-                    // Find the option object corresponding to the selected value (name)
-                    const selectedOption = group.options.find(opt => opt.name === value);
-                    if (selectedOption) {
-                      handleModifierChange(group, selectedOption, value);
-                    }
-                  }}
-                  className="space-y-2"
-                >
-                  {group.options.map(option => (
-                    <div key={option.name} className="flex items-center justify-between bg-muted/50 p-3 rounded-md">
-                      <div className="flex items-center gap-2">
-                         {/* Value must be unique string, using option.name */}
-                        <RadioGroupItem value={option.name} id={`${group.name}-${option.name}`} />
-                        <Label htmlFor={`${group.name}-${option.name}`}>{option.name}</Label>
+    <div className="flex flex-col h-full" style={{ backgroundColor: '#1F1D2B', color: 'white' }}>
+      {/* Close button - outside ScrollArea for better positioning */}
+      <Button 
+        variant="outline" 
+        size="icon" 
+        className="absolute top-4 right-4 z-10 rounded-full bg-white bg-opacity-80 backdrop-blur-sm hover:bg-opacity-100 shadow-sm"
+        aria-label="Close"
+        onClick={onClose}
+      >
+        <X className="h-5 w-5" />
+      </Button>
+      
+      {/* Use ScrollArea for content scrolling within the drawer */}
+      <ScrollArea className="px-1 flex-1 overflow-y-auto">
+        {/* Item Image with loading state */}
+        <div className="relative mb-4 -mx-1">
+          <div className={cn(
+            "aspect-[4/3] overflow-hidden transition-opacity duration-300",
+            !imageLoaded && "animate-pulse bg-muted"
+          )}>
+            <img
+              src={item.image || `https://source.unsplash.com/random/600x400/?${item.imageSearchTerm || 'food'}`}
+              alt={item.name}
+              className={cn(
+                "w-full h-full object-cover transition-transform duration-500",
+                imageLoaded ? "opacity-100" : "opacity-0"
+              )}
+              loading="lazy"
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageLoaded(true)} // Also set loaded on error to remove skeleton
+            />
+          </div>
+          
+          {/* Featured badge */}
+          {item.featured && (
+            <div className="absolute top-4 left-4 bg-purple-600 text-white text-xs px-3 py-1 rounded-full">
+              Featured
+            </div>
+          )}
+        </div>
+        
+        {/* Item Name and Description */}
+        <div className="mb-4 px-4">
+          <div className="flex justify-between items-start mb-2">
+            <h2 className="text-2xl font-semibold">{item.name}</h2>
+            <span className="text-xl font-bold text-purple-600">${item.price.toFixed(2)}</span>
+          </div>
+          
+          {/* Tags and metadata */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {item.preparationTime && (
+              <Badge variant="outline" className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {item.preparationTime}
+              </Badge>
+            )}
+            
+            {item.rating && (
+              <Badge variant="outline" className="flex items-center gap-1 bg-amber-50 text-amber-700 border-amber-200">
+                <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                {item.rating}
+              </Badge>
+            )}
+            
+            {item.tags && item.tags.length > 0 && item.tags.map((tag, index) => (
+              <Badge key={index} variant="outline" className="flex items-center gap-1">
+                <Tag className="h-3 w-3" />
+                {tag}
+              </Badge>
+            ))}
+          </div>
+          
+          <p className="text-muted-foreground text-sm">{item.description}</p>
+        </div>
+        
+        {/* Divider */}
+        <div className="border-t border-border mb-4 mx-4"></div>
+        
+        {/* Error message */}
+        {submitError && (
+          <div className="mb-4 mx-4 p-3 bg-red-100 border border-red-200 rounded-md text-red-800">
+            <p className="text-sm">{submitError}</p>
+          </div>
+        )}
+        
+        {/* Modifier Groups */}
+        {item.modifiers && item.modifiers.length > 0 && (
+          <div className="mb-6 px-4 space-y-6">
+            {item.modifiers.map((group) => (
+              <div key={group.name} className="animation-fade-in"> 
+                <h3 className="font-medium mb-3 flex items-center">
+                  {group.name}
+                  {group.required && <span className="text-destructive ml-1">*</span>}
+                  {group.type === 'multi-select' && !group.required && (
+                    <span className="text-muted-foreground text-xs ml-2 bg-muted px-2 py-0.5 rounded-full">
+                      Select multiple
+                    </span>
+                  )}
+                  {group.type === 'single-select' && !group.required && (
+                    <span className="text-muted-foreground text-xs ml-2 bg-muted px-2 py-0.5 rounded-full">
+                      Select one
+                    </span>
+                  )}
+                </h3>
+                
+                {/* Render RadioGroup for single-select */}
+                {group.type === 'single-select' ? (
+                  <RadioGroup
+                    value={(selectedModifiers[group.name] as ModifierOption)?.name} // Controlled component: value is the name of the selected option
+                    onValueChange={(value) => {
+                      // Find the option object corresponding to the selected value (name)
+                      const selectedOption = group.options.find(opt => opt.name === value);
+                      if (selectedOption) {
+                        handleModifierChange(group, selectedOption, value);
+                      }
+                    }}
+                    className="space-y-2"
+                  >
+                    {group.options.map(option => (
+                      <div key={option.name} className="flex items-center justify-between bg-muted/50 p-3 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem value={option.name} id={`${group.name}-${option.name}`} />
+                          <Label htmlFor={`${group.name}-${option.name}`} className="cursor-pointer">{option.name}</Label>
+                        </div>
+                        <span className="text-sm font-medium text-purple-600">
+                          {option.price > 0 ? `+$${option.price.toFixed(2)}` : (group.required ? '' : 'Included')}
+                        </span>
                       </div>
-                      <span className="text-sm font-medium text-primary">
-                        {option.price > 0 ? `+$${option.price.toFixed(2)}` : (group.required ? '' : 'Included')} {/* Show price diff or 'Included' */}
-                      </span>
-                    </div>
-                  ))}
-                </RadioGroup>
-              ) : (
+                    ))}
+                  </RadioGroup>
+                ) : (
                 // Render Checkboxes for multi-select
                 <div className="space-y-2">
                   {group.options.map(option => {
@@ -193,8 +352,8 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
                           />
                           <Label htmlFor={`${group.name}-${option.name}`}>{option.name}</Label>
                         </div>
-                        <span className="text-sm font-medium text-primary">
-                          {option.price > 0 ? `+$${option.price.toFixed(2)}` : 'Included'} {/* Show price diff or 'Included' */}
+                        <span className="text-sm font-medium text-purple-600">
+                          {option.price > 0 ? `+$${option.price.toFixed(2)}` : 'Included'}
                         </span>
                       </div>
                     );
@@ -207,7 +366,7 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
       )}
 
       {/* Special Instructions */}
-      <div className="mb-6 px-2">
+      <div className="mb-6 px-4">
         <h3 className="font-medium mb-2">Special Instructions</h3>
         <Textarea
           placeholder="Any allergies or special requests? (e.g., 'no onions')"
@@ -218,7 +377,7 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
       </div>
 
       {/* Quantity Selector */}
-      <div className="mb-6 px-2 flex items-center justify-between">
+      <div className="mb-6 px-4 flex items-center justify-between">
         <h3 className="font-medium">Quantity</h3>
         <div className="flex items-center gap-2">
           <Button
@@ -243,22 +402,32 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
           </Button>
         </div>
       </div>
+      </ScrollArea>
 
-      {/* Footer with Price and Add to Cart Button */}
-      {/* This div acts as a sticky footer within the scrollable area */}
-      <div className="sticky bottom-0 bg-background py-4 px-2 mt-auto border-t -mx-1"> {/* Adjust margin */}
-         <DrawerClose asChild> {/* Close drawer on add */}
-           <Button
-             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-lg py-6"
-             onClick={handleAddToCart}
-             // Disable if a required single-select group doesn't have a selection
-             disabled={item.modifiers?.some(g => g.type === 'single-select' && g.required && !selectedModifiers[g.name])}
-           >
-             <ShoppingCart className="mr-2 h-5 w-5" />
-             Add {quantity} to Cart - ${totalPrice.toFixed(2)} {/* Use calculated totalPrice */}
-           </Button>
-         </DrawerClose>
+      {/* Footer with Price and Add to Cart Button - outside ScrollArea for sticky positioning */}
+      <div className="sticky bottom-0 bg-background py-4 px-4 mt-auto border-t"> 
+        <Button
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white text-lg py-6"
+          onClick={handleAddToCart}
+          // Disable if a required single-select group doesn't have a selection or is loading
+          disabled={
+            isLoading || 
+            item.modifiers?.some(g => g.type === 'single-select' && g.required && !selectedModifiers[g.name])
+          }
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center">
+              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+              Adding to cart...
+            </div>
+          ) : (
+            <>
+              <ShoppingCart className="mr-2 h-5 w-5" />
+              Add {quantity} to Cart - ${totalPrice.toFixed(2)}
+            </>
+          )}
+        </Button>
       </div>
-    </ScrollArea>
+    </div>
   );
 };

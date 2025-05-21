@@ -12,12 +12,14 @@ import { ArrowLeft, LogOut, Gift, History, User, Award, Edit } from 'lucide-reac
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { useTableInfo } from '@/context/TableContext';
 
 const Account: React.FC = () => {
   const { user, logout, addLoyaltyPoints } = useAuth();
   const { orders } = useOrders();
   const [activeTab, setActiveTab] = useState("profile");
   const navigate = useNavigate();
+  const { tableId } = useTableInfo();
   
   if (!user) {
     return (
@@ -70,14 +72,23 @@ const Account: React.FC = () => {
     addLoyaltyPoints(50);
     toast.success('Added 50 test loyalty points!');
   };
-  
+  const handleGoBack = () =>{
+    const storedTableId = localStorage.getItem('currentTableId');
+    const effectiveTableId = tableId || storedTableId || '';
+    navigate(`/?table=${effectiveTableId}`);
+  }
   return (
     <div className="container mx-auto px-4 py-6 mt-16 mb-20">
       <div className="flex justify-between items-center mb-6">
-        <Link to="/" className="inline-flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">
+        <Button 
+          variant="ghost" 
+          size="sm"
+          onClick={handleGoBack}
+          className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+        >
           <ArrowLeft className="mr-2" size={16} />
           Back to menu
-        </Link>
+        </Button>
         
         <Button 
           variant="ghost" 
@@ -142,13 +153,13 @@ const Account: React.FC = () => {
                 <div className="text-sm">
                   <span className="text-muted-foreground">Member since:</span>
                   <span className="float-right">
-                    {format(new Date(user.createdAt), 'MMM dd, yyyy')}
+                    {user.createdAt ? format(new Date(user.createdAt), 'MMM dd, yyyy') : 'N/A'}
                   </span>
                 </div>
                 
                 <div className="text-sm">
                   <span className="text-muted-foreground">Total orders:</span>
-                  <span className="float-right">{user.orders.length}</span>
+                  <span className="float-right">{user.orders ? user.orders.length : 0}</span>
                 </div>
               </div>
             </CardContent>
@@ -309,7 +320,7 @@ const Account: React.FC = () => {
                                   Order #{order.id.substring(0, 8)}
                                 </span>
                                 <span className="text-xs text-muted-foreground block">
-                                  {format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a')}
+                                  {order.timestamp ? format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a') : 'N/A'}
                                 </span>
                               </div>
                               <Badge variant={
