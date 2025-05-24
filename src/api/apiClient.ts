@@ -7,7 +7,7 @@ const extractedBaseUrl = typeof API_BASE_URL === 'string' && API_BASE_URL.includ
   : API_BASE_URL;
 
 // Define the final BASE_URL used for API requests
-const BASE_URL = extractedBaseUrl || 'http://localhost:3001';
+const BASE_URL = extractedBaseUrl || 'https://api.inseat.achievengine.com';
 
 // For debugging
 console.log('API_BASE_URL:', API_BASE_URL);

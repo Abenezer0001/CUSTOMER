@@ -335,7 +335,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
   const googleLogin = (): void => {
     // Get the base URL without the /api/auth path
-    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || 'http://localhost:3001';
+    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || 'https://api.inseat.achievengine.com';
     const googleAuthUrl = `${baseUrl}/api/auth/google`;
     console.log('Google login redirecting to:', googleAuthUrl);
     window.location.href = googleAuthUrl;
@@ -579,7 +579,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   };
   
   const customerGoogleLogin = () => {
-    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || 'http://localhost:3001';
+    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || 'https://api.inseat.achievengine.com';
     const googleAuthUrl = `${baseUrl}/api/customer/google`;
     console.log('Customer Google login redirecting to:', googleAuthUrl);
     window.location.href = googleAuthUrl;

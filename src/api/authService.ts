@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
 
 // Extract the base URL without any /api/auth path if present
 const BASE_URL = API_BASE_URL.includes('/api/auth') 

@@ -27,10 +27,10 @@ if (missingEnvVars.length > 0) {
 
 // API configuration
 export const apiConfig: ApiConfig = {
-  baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api',
-  authUrl: import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth',
-  socketUrl: import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001',
-  customerUrl: import.meta.env.VITE_CUSTOMER_URL || 'http://localhost:8080',
+  baseUrl: import.meta.env.VITE_API_BASE_URL || 'https://api.inseat.achievengine.com/api',
+  authUrl: import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth',
+  socketUrl: import.meta.env.VITE_SOCKET_URL || 'https://api.inseat.achievengine.com',
+  customerUrl: import.meta.env.VITE_CUSTOMER_URL || 'https://menu.inseat.achievengine.com',
 };
 
 // Export individual URLs for convenience

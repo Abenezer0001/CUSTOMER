@@ -96,7 +96,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       console.log('Attempting guest login with tableId:', tableId);
       
       // Get API base URL from environment variables
-      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
+      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
       
       // Request a guest token directly from the server endpoint
       const response = await fetch(`${apiBaseUrl}/guest-token`, {
@@ -350,7 +350,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
           }
           
           // Request a guest token from the server - use the correct endpoint
-          const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
+          const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
           const guestTokenResponse = await fetch(`${apiBaseUrl}/guest-token`, {
             method: 'POST',
             headers: {
@@ -381,7 +381,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       // If we still don't have a token, make a regular auth check
       if (!token) {
         console.log('Attempting regular auth check as fallback...');
-        const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
+        const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
         const authResponse = await fetch(`${apiBaseUrl}/me`, {
           method: 'GET',
           credentials: 'include'
@@ -416,7 +416,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         // Create a promise wrapper around XMLHttpRequest with proper typing
         const result = await new Promise<OrderResponseData>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || 'http://localhost:3001/api/orders';
+          const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || 'https://api.inseat.achievengine.com/api/orders';
           xhr.open('POST', orderApiUrl, true);
           xhr.withCredentials = true; // Essential for sending cookies
           xhr.setRequestHeader('Content-Type', 'application/json');

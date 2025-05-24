@@ -1,7 +1,7 @@
 // API Base URL
-// Get API URL from environment variables, with fallback to localhost
+// Get API URL from environment variables, default to production URL
 const envApiUrl = import.meta.env.VITE_API_BASE_URL;
-export const API_BASE_URL = envApiUrl || 'http://localhost:3001';
+export const API_BASE_URL = envApiUrl || 'https://api.inseat.achievengine.com/api';
 
 // Log the API URL being used
 console.log('Using API base URL:', API_BASE_URL);
