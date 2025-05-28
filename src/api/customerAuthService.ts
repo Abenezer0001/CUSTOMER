@@ -2,10 +2,10 @@ import axios, { AxiosError, AxiosResponse } from 'axios';
 import { getEffectiveToken } from './authService';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
+const API_BASE_URL = 'https://api.inseat.achievengine.com/api/auth';
 
 // Extract the base URL without the auth path
-const BASE_URL = API_BASE_URL.split('/api/auth')[0] || 'http://localhost:3001';
+const BASE_URL = API_BASE_URL.split('/api/auth')[0] || 'https://api.inseat.achievengine.com';
 
 // Customer API endpoint is at /api/customer
 const CUSTOMER_API_ENDPOINT = `${BASE_URL}/api/customer`;

@@ -1,5 +1,5 @@
 // API Base URL
-// Get API URL from environment variables, with fallback to localhost
+// Get API URL from environment variables, default to production URL
 const envApiUrl = import.meta.env.VITE_API_BASE_URL;
 
 // Ensure API_BASE_URL is the true root (e.g., http://localhost:3001)

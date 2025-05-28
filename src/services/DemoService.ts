@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.inseat.achievengine.com/api';
 
 // Check if we're in demo mode (URL contains a demo token)
 export const isDemoMode = (): boolean => {
