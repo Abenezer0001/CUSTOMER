@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { AuthService, getAuthHeader } from '@/services/AuthService';
 import customerAuthService from '@/api/customerAuthService';
 import { useNavigate } from 'react-router-dom';
+import CartContext, { useCart } from '@/context/CartContext';
 
 // Define types for authentication
 interface AuthUser {
@@ -136,9 +137,10 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
           return;
         }
         
-        // Try to get user data from the /api/auth/me endpoint
+        // Try to get user data from the auth/me endpoint (avoiding double /api/ prefix)
         try {
           console.log('Attempting to fetch user profile');
+          // Make sure we're using the correct endpoint without duplicate /api/ prefix
           const userData = await AuthService.getCurrentUser();
           
           if (userData) {
@@ -324,6 +326,18 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       await AuthService.logout();
       setUser(null);
       setToken(null);
+      setIsAuthenticated(false);
+      
+      // Clear the cart when logging out
+      // We need to do this through localStorage directly since we can't use the hook here
+      localStorage.removeItem('cartItems');
+      console.log('Cleared cart items from localStorage on logout');
+      
+      // Clear all auth-related cookies
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      
       toast.info('You have been logged out');
     } catch (error) {
       console.error('Logout error:', error);
@@ -335,7 +349,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
   const googleLogin = (): void => {
     // Get the base URL without the /api/auth path
-    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || 'http://localhost:3001';
+    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || import.meta.env.VITE_API_BASE_URL || 'https://api.inseat.achievengine.com';
     const googleAuthUrl = `${baseUrl}/api/auth/google`;
     console.log('Google login redirecting to:', googleAuthUrl);
     window.location.href = googleAuthUrl;
@@ -485,6 +499,11 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     try {
       setLoading(true);
       
+      // Clear any existing auth state
+      setUser(null);
+      setIsAuthenticated(false);
+      setToken(null);
+      
       const response = await customerAuthService.login({ email, password });
       
       if (response.success && response.user) {
@@ -503,33 +522,108 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
           orders: userData.orders || []
         };
         
+        // Update auth state
         setUser(formattedUser);
         setIsAuthenticated(true);
-        setToken(response.token || null);
         
-        // Store token in localStorage
-        if (response.token) {
-          localStorage.setItem('auth_token', response.token);
+        // Store token if available
+        const authToken = response.token || response.accessToken || response.jwt;
+        if (authToken) {
+          setToken(authToken);
+          localStorage.setItem('auth_token', authToken);
+          console.log('Auth token stored in localStorage');
+        }
+        
+        // Store refresh token if available
+        if (response.refreshToken) {
+          localStorage.setItem('refresh_token', response.refreshToken);
+          console.log('Refresh token stored in localStorage');
         }
         
         toast.success('Logged in successfully');
+        
+        // Handle redirection
+        handlePostAuthRedirect();
+        
         return true;
       } else {
-        toast.error(response.message || 'Login failed');
+        // Clear any partial auth state on failure
+        setUser(null);
+        setIsAuthenticated(false);
+        setToken(null);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        
+        toast.error(response.message || 'Login failed. Please check your credentials and try again.');
         return false;
       }
     } catch (error) {
       console.error('Customer login error:', error);
-      toast.error('Login failed. Please try again.');
+      
+      // Clear auth state on error
+      setUser(null);
+      setIsAuthenticated(false);
+      setToken(null);
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      
+      toast.error('An error occurred during login. Please try again.');
       return false;
     } finally {
       setLoading(false);
     }
   };
   
+  // Helper function to handle post-authentication redirect
+  const handlePostAuthRedirect = () => {
+    // First check tableInfo in localStorage (has priority)
+    const tableInfo = localStorage.getItem('tableInfo');
+    console.log('Post-auth table info:', tableInfo);
+    
+    // Also check for currentTableId as a fallback
+    const currentTableId = localStorage.getItem('currentTableId');
+    console.log('Current table ID from localStorage:', currentTableId);
+    
+    // Logic for redirection:
+    // 1. Try to use tableInfo.id if available
+    // 2. Fall back to currentTableId if available
+    // 3. Redirect to /scan if no table information is found
+    
+    if (tableInfo) {
+      try {
+        const parsedTableInfo = JSON.parse(tableInfo);
+        if (parsedTableInfo?.id) {
+          // Store the table ID in currentTableId for consistency
+          localStorage.setItem('currentTableId', parsedTableInfo.id);
+          console.log(`Redirecting to table page with ID: ${parsedTableInfo.id}`);
+          navigate(`/?table=${parsedTableInfo.id}`, { replace: true });
+          return;
+        }
+      } catch (e) {
+        console.error('Error parsing table info:', e);
+      }
+    }
+    
+    // If tableInfo didn't work, try currentTableId
+    if (currentTableId) {
+      console.log(`Using currentTableId for redirection: ${currentTableId}`);
+      navigate(`/?table=${currentTableId}`, { replace: true });
+      return;
+    }
+    
+    // Default redirect if no valid table info
+    console.log('No valid table info, redirecting to scan page');
+    navigate('/scan', { replace: true });
+  };
+  
   const customerSignup = async (firstName: string, lastName: string, email: string, password: string): Promise<boolean> => {
     try {
       setLoading(true);
+      
+      // Clear any existing auth state
+      setUser(null);
+      setIsAuthenticated(false);
+      setToken(null);
       
       const response = await customerAuthService.register({
         firstName,
@@ -554,24 +648,52 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
           orders: userData.orders || []
         };
         
+        // Update auth state
         setUser(formattedUser);
         setIsAuthenticated(true);
-        setToken(response.token || null);
         
-        // Store token in localStorage
-        if (response.token) {
-          localStorage.setItem('auth_token', response.token);
+        // Store token if available
+        const authToken = response.token || response.accessToken || response.jwt;
+        if (authToken) {
+          setToken(authToken);
+          localStorage.setItem('auth_token', authToken);
+          console.log('Auth token stored in localStorage');
+        }
+        
+        // Store refresh token if available
+        if (response.refreshToken) {
+          localStorage.setItem('refresh_token', response.refreshToken);
+          console.log('Refresh token stored in localStorage');
         }
         
         toast.success('Account created successfully');
+        
+        // Handle redirection
+        handlePostAuthRedirect();
+        
         return true;
       } else {
-        toast.error(response.message || 'Registration failed');
+        // Clear any partial auth state on failure
+        setUser(null);
+        setIsAuthenticated(false);
+        setToken(null);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        
+        toast.error(response.message || 'Registration failed. Please try again.');
         return false;
       }
     } catch (error) {
       console.error('Customer signup error:', error);
-      toast.error('Registration failed. Please try again.');
+      
+      // Clear auth state on error
+      setUser(null);
+      setIsAuthenticated(false);
+      setToken(null);
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      
+      toast.error('An error occurred during registration. Please try again.');
       return false;
     } finally {
       setLoading(false);
@@ -579,7 +701,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   };
   
   const customerGoogleLogin = () => {
-    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || 'http://localhost:3001';
+    const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || import.meta.env.VITE_API_BASE_URL || 'https://api.inseat.achievengine.com';
     const googleAuthUrl = `${baseUrl}/api/customer/google`;
     console.log('Customer Google login redirecting to:', googleAuthUrl);
     window.location.href = googleAuthUrl;

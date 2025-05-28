@@ -216,7 +216,7 @@ const Index: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen bg-background"
+            className="min-h-screen bg-[#16141F] text-white"
           >
             {/* Table Header with venue and table information */}
             <TableHeader 

@@ -2,7 +2,14 @@ import axios from 'axios';
 import { toast } from 'sonner';
 
 // API URL configuration
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Extract base URL without any trailing /api to prevent double prefixes
+let API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// Remove any trailing /api if present to avoid double prefix
+if (API_BASE.endsWith('/api')) {
+  API_BASE = API_BASE.slice(0, -4);
+}
+const API_URL = `${API_BASE}/api`;
+console.log('Auth Service API URL:', API_URL);
 
 // User interface
 export interface User {
@@ -36,19 +43,35 @@ axios.defaults.withCredentials = true;
 
 // Function to get the auth token from cookies or localStorage
 const getEffectiveToken = (): string | null => {
-  // First check cookies
-  const cookies = document.cookie.split(';');
-  const tokenCookie = cookies.find(cookie => 
-    cookie.trim().startsWith('auth_token=') || 
-    cookie.trim().startsWith('access_token=')
-  );
+  // First check cookies for access_token (set by backend after Google auth)
+  const cookies = document.cookie.split(';').map(c => c.trim());
+  const accessTokenCookie = cookies.find(c => c.startsWith('access_token='));
   
-  if (tokenCookie) {
-    return tokenCookie.split('=')[1].trim();
+  if (accessTokenCookie) {
+    const token = accessTokenCookie.split('=')[1];
+    console.log('Found access_token in cookies');
+    // Also save to localStorage as a backup
+    localStorage.setItem('auth_token', token);
+    return token;
   }
   
-  // Then check localStorage
-  return localStorage.getItem('auth_token');
+  // Then check for auth_token in cookies
+  const authTokenCookie = cookies.find(c => c.startsWith('auth_token='));
+  if (authTokenCookie) {
+    const token = authTokenCookie.split('=')[1];
+    console.log('Found auth_token in cookies');
+    return token;
+  }
+  
+  // Fallback to localStorage
+  const localToken = localStorage.getItem('auth_token');
+  if (localToken) {
+    console.log('Found auth_token in localStorage');
+    return localToken;
+  }
+  
+  console.log('No authentication token found');
+  return null;
 };
 
 // Function to get Authorization header with properly formatted token
@@ -213,6 +236,20 @@ export const AuthService = {
   
   // Google OAuth login
   loginWithGoogle: (): void => {
-    window.location.href = `${API_URL}/auth/google`;
+    // Store current table ID before redirecting
+    const tableId = localStorage.getItem('currentTableId') || 
+                   localStorage.getItem('tableId') || 
+                   localStorage.getItem('table_id');
+    
+    if (tableId) {
+      // Store in sessionStorage to survive the redirect
+      sessionStorage.setItem('tableId', tableId);
+      console.log('Stored table ID in session storage before Google login:', tableId);
+      
+      // Add table ID to the redirect URL as a query parameter
+      window.location.href = `${API_URL}/auth/google?table=${tableId}`;
+    } else {
+      window.location.href = `${API_URL}/auth/google`;
+    }
   }
 }; 

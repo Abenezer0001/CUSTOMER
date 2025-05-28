@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '@/constants';
 import { useCart } from '@/context/CartContext';
 import { useOrders } from '@/context/OrdersContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -53,6 +54,8 @@ interface CartItem {
   price: number;
   quantity: number;
   specialInstructions?: string;
+  modifiers?: Array<{ id: string, name: string, price: number }>;
+  image?: string;
 }
 
 interface OrderData {
@@ -65,6 +68,7 @@ interface OrderData {
     price: number;
     subtotal: number;
     specialInstructions: string;
+    modifiers?: Array<{ name: string, price: number }>; 
   }>;
   subtotal: number;
   tax: number;
@@ -90,48 +94,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
   const { addOrder } = useOrders();
   const navigate = useNavigate();
   
-  // Handle guest login
-  const handleGuestLogin = React.useCallback(async (tableId: string) => {
-    try {
-      console.log('Attempting guest login with tableId:', tableId);
-      
-      // Get API base URL from environment variables
-      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
-      
-      // Request a guest token directly from the server endpoint
-      const response = await fetch(`${apiBaseUrl}/guest-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          tableId: tableId || '',
-          deviceId: localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`
-        }),
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.token) {
-          console.log('Guest token received:', data.token.substring(0, 10) + '...');
-          
-          // Store token in both localStorage and cookies for redundancy
-          localStorage.setItem('auth_token', data.token);
-          document.cookie = `auth_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-          document.cookie = `access_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-          
-          return true;
-        }
-      }
-      
-      console.error('Guest login failed: No token in response');
-      return false;
-    } catch (error) {
-      console.error('Guest login error:', error);
-      return false;
-    }
-  }, []);
   const [stage, setStage] = useState<'cart' | 'checkout'>('cart');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -157,128 +119,11 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
   
-  const handleCheckout = () => {
-    if (cartItems.length === 0) {
-      toast.error("Your cart is empty");
-      return;
-    }
-    
-    // Move to checkout stage
-    setStage('checkout');
-  };
-  
-  const handlePlaceOrder = async () => {
-    console.log('handlePlaceOrder function entered - CartDrawer.tsx');
-    if (cartItems.length === 0) {
-      toast.error("Your cart is empty");
-      return;
-    }
-    
-    if (!tableId) {
-      toast.error("Table information is missing. Please scan a table QR code first.");
-      onClose();
-      navigate('/scan-table');
-      return;
-    }
-    
-    setIsProcessing(true);
-    setError('');
-    
-    try {
-      console.log('Starting order placement process...');
-      
-      // Check if user is authenticated
-      const isAuthenticated = await authService.checkAuthStatus();
-      console.log('Auth check result:', isAuthenticated);
-      
-      if (!isAuthenticated) {
-        console.log('User not authenticated, checking for stored customer credentials...');
-        
-        // First check if we have a stored customer token
-        const storedToken = localStorage.getItem('auth_token');
-        
-        if (storedToken) {
-          console.log('Found stored token, trying to use it for order placement...');
-          // Token exists, we'll try to use it directly in the order request
-          // No need to do anything here, the token will be used in the API call
-        } else {
-          console.log('No stored token, attempting guest login...');
-          
-          try {
-            // Attempt guest login
-            const guestLoginSuccess = await handleGuestLogin(tableId);
-            
-            if (!guestLoginSuccess) {
-              console.warn('Guest login failed, redirecting to login page...');
-              toast.error('Please log in to place an order');
-              setIsProcessing(false);
-              onClose();
-              navigate('/login', { state: { returnUrl: '/cart' } });
-              return;
-            }
-            
-            console.log('Guest login successful, continuing with order placement...');
-            toast.success('Continuing as guest');
-          } catch (guestLoginError) {
-            console.error('Error during guest login:', guestLoginError);
-            toast.error('Please log in to place an order');
-            setIsProcessing(false);
-            onClose();
-            navigate('/login', { state: { returnUrl: '/cart' } });
-            return;
-          }
-        }
-      }
-      
-      console.log('User is authenticated, proceeding with order placement...');
-      
-      console.log('Proceeding to process order...');
-      await processOrder();
-      
-    } catch (error) {
-      console.error('Error during order placement:', error);
-      let errorMessage = 'Failed to process your order';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        console.error('Error details:', {
-          message: error.message,
-          name: error.name,
-          stack: error.stack
-        });
-      }
-      
-      // Handle authentication-related errors
-      const isAuthError = errorMessage.toLowerCase().includes('session') || 
-                         errorMessage.toLowerCase().includes('auth') || 
-                         errorMessage.toLowerCase().includes('token') ||
-                         errorMessage.toLowerCase().includes('401') ||
-                         errorMessage.toLowerCase().includes('403');
-      
-      if (isAuthError) {
-        // Clear all auth tokens
-        console.log('Clearing auth tokens due to authentication error');
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('access_token');
-        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        
-        toast.error('Your session has expired. Please log in again.');
-        setIsProcessing(false);
-        onClose();
-        navigate('/login', { state: { returnUrl: '/cart' } });
-      } else {
-        // For other errors, just show the message
-        console.error('Non-auth error during order placement:', errorMessage);
-        toast.error(errorMessage);
-        setIsProcessing(false);
-      }
-    }
-  };
-  
   // Helper function to process the order
   const processOrder = async () => {
     try {
+      console.log('Processing order with orderService...');
+      
       // Determine restaurant ID (either from context or extract from tableId)
       const localRestaurantId = restaurantName === 'InSeat' 
         ? '65f456b06c9dfd001b6b1234' 
@@ -298,7 +143,8 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
           quantity: item.quantity,
           price: item.price,
           subtotal: item.price * item.quantity,
-          specialInstructions: item.specialInstructions || specialInstructions || ''
+          specialInstructions: item.specialInstructions || specialInstructions || '',
+          modifiers: item.modifiers
         };
       });
       
@@ -318,188 +164,36 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         paymentStatus: PaymentStatus.PENDING, // Required field - using enum value
         orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}` // Required field
       };
-
-      console.log('Placing order...');
-      console.log('Order data for service:', JSON.stringify(constructedOrderData));
       
-      // Try to get a token from all possible sources
-      let token = localStorage.getItem('auth_token');
+      console.log('Order data prepared:', JSON.stringify(constructedOrderData));
       
-      // If no token found yet, try to extract from cookies
-      if (!token) {
-        const cookies = document.cookie.split(';');
-        const tokenCookie = cookies.find(cookie => 
-          cookie.trim().startsWith('auth_token=') || 
-          cookie.trim().startsWith('access_token=')
-        );
+      // Check authentication status before attempting to create order
+      if (!isAuthenticated) {
+        // Store cart state for retrieval after login
+        localStorage.setItem('pendingCart', JSON.stringify({
+          items: cartItems,
+          tableId,
+          restaurantId: localRestaurantId
+        }));
         
-        if (tokenCookie) {
-          token = tokenCookie.split('=')[1].trim();
-        }
+        // Redirect to login with return URL
+        toast.error('Please log in to place an order');
+        onClose(); // Close the cart drawer
+        navigate(`/login?returnTo=/table/${tableId}`);
+        return null;
       }
       
-      // If still no token, try to get one from the guest token endpoint
-      if (!token) {
-        console.log('No token found, attempting to get a guest token...');
-        
-        try {
-          // Create a device ID if not already stored
-          const deviceId = localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-          if (!localStorage.getItem('device_id')) {
-            localStorage.setItem('device_id', deviceId);
-          }
-          
-          // Request a guest token from the server - use the correct endpoint
-          const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
-          const guestTokenResponse = await fetch(`${apiBaseUrl}/guest-token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              tableId: tableId || '',
-              deviceId
-            }),
-            credentials: 'include'
-          });
-          
-          if (guestTokenResponse.ok) {
-            const guestData = await guestTokenResponse.json();
-            
-            if (guestData.success && guestData.token) {
-              console.log('Guest token obtained successfully');
-              token = guestData.token;
-              localStorage.setItem('auth_token', guestData.token);
-              document.cookie = `auth_token=${guestData.token}; path=/; max-age=86400; SameSite=Lax`;
-            }
-          }
-        } catch (error) {
-          console.error('Error getting guest token:', error);
-        }
+      // Use the enhanced createOrder function from orderService
+      const result = await createOrder(cartItems, tableId, localRestaurantId, constructedOrderData, navigate);
+      
+      if (!result) {
+        console.log('Order creation returned null - authentication failed and user redirected');
+        return null;
       }
       
-      // If we still don't have a token, make a regular auth check
-      if (!token) {
-        console.log('Attempting regular auth check as fallback...');
-        const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
-        const authResponse = await fetch(`${apiBaseUrl}/me`, {
-          method: 'GET',
-          credentials: 'include'
-        });
-        
-        if (authResponse.ok) {
-          const authData = await authResponse.json();
-          console.log('Auth check successful:', authData);
-          
-          if (authData.token) {
-            token = authData.token;
-            localStorage.setItem('auth_token', authData.token);
-          }
-        } else {
-          console.error('Authentication check failed:', await authResponse.text());
-          // Don't throw here, we'll try to continue with the order anyway
-        }
-      }
-      
-      console.log('Using token for order placement:', token ? 'Token available' : 'No token available');
-      
-      // If we have a token, make sure it's saved to localStorage for future requests
-      if (token && !localStorage.getItem('auth_token')) {
-        localStorage.setItem('auth_token', token);
-        console.log('Saved token to localStorage');
-      }
-      
-      try {
-        // Use XMLHttpRequest which might handle CORS differently than fetch
-        console.log('Using XMLHttpRequest for order creation...');
-        
-        // Create a promise wrapper around XMLHttpRequest with proper typing
-        const result = await new Promise<OrderResponseData>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || 'http://localhost:3001/api/orders';
-          xhr.open('POST', orderApiUrl, true);
-          xhr.withCredentials = true; // Essential for sending cookies
-          xhr.setRequestHeader('Content-Type', 'application/json');
-          
-          // Add Authorization header if token is available
-          if (token) {
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-            console.log('Added Authorization header with token');
-          } else {
-            console.warn('No token available for Authorization header');
-            
-            // Last attempt to get token from cookies directly
-            const cookieToken = document.cookie
-              .split(';')
-              .find(cookie => cookie.trim().startsWith('auth_token='))
-              ?.split('=')[1];
-              
-            if (cookieToken) {
-              xhr.setRequestHeader('Authorization', `Bearer ${cookieToken}`);
-              console.log('Added Authorization header with cookie token');
-            } else {
-              console.warn('No authentication token available. Order creation may fail.');
-            }
-          }
-          
-          xhr.onload = function() {
-            console.log('XHR response received:', {
-              status: xhr.status,
-              responseText: xhr.responseText
-            });
-            
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                // The response could be in different formats depending on the API
-                const parsedResponse = JSON.parse(xhr.responseText);
-                console.log('Parsed response:', parsedResponse);
-                
-                // Check if response has success property (API v1 format)
-                if (parsedResponse.success !== undefined) {
-                  if (parsedResponse.success) {
-                    resolve(parsedResponse.data);
-                  } else {
-                    console.error('Order creation failed despite 200 status:', parsedResponse.error);
-                    reject(new Error(parsedResponse.error?.message || 'Order creation failed'));
-                  }
-                } 
-                // If no success property but has _id, it's a direct order object (API v2 format)
-                else if (parsedResponse._id) {
-                  console.log('Direct order object returned:', parsedResponse);
-                  // Use the order object directly
-                  resolve(parsedResponse);
-                } 
-                // Unknown response format
-                else {
-                  console.error('Unknown response format:', parsedResponse);
-                  reject(new Error('Unknown response format'));
-                }
-              } catch (e) {
-                console.error('Failed to parse response:', e);
-                reject(new Error('Failed to parse response'));
-              }
-            } else {
-              console.error(`Order creation failed with status: ${xhr.status}`, xhr.responseText);
-              try {
-                const errorData = JSON.parse(xhr.responseText);
-                reject(new Error(errorData.error || `Order creation failed with status: ${xhr.status}`));
-              } catch (e) {
-                reject(new Error(`Order creation failed with status: ${xhr.status}`));
-              }
-            }
-          };
-          
-          xhr.onerror = function() {
-            console.error('XHR error:', xhr);
-            reject(new Error('Network error occurred'));
-          };
-          
-          xhr.send(JSON.stringify(constructedOrderData));
-        });
-        
-        console.log('Order placed successfully:', result);
-        toast.success('Order placed successfully!');
-      
+      console.log('Order placed successfully:', result);
+      toast.success('Order placed successfully!');
+    
       // Transform OrderResponseData to Order type for the context
       const orderForContext: Order = {
         id: result._id, // Map _id to id
@@ -552,36 +246,115 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         console.log('Redirecting to my-orders page with table ID:', tableId);
         navigate(`/my-orders?table=${tableId}`);
       }, 1000);
-      } catch (orderError) {
-        console.error('Error in order creation process:', orderError);
-        toast.error(orderError instanceof Error ? orderError.message : 'Failed to create your order');
-        setIsProcessing(false);
-      }
-    } catch (error) {
-      console.error('Order creation failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create your order';
-      toast.error(errorMessage);
-      
-      // Handle authentication errors specifically
-      if (errorMessage.includes('session has expired') || 
-          errorMessage.includes('Authentication') || 
-          errorMessage.includes('Unauthorized')) {
-        // Clear invalid tokens
-        localStorage.removeItem('auth_token');
-        // Redirect to login
-        onClose();
-        navigate('/login', { state: { returnUrl: '/cart' } });
-      }
-      
+    } catch (orderError) {
+      console.error('Error in order creation process:', orderError);
+      toast.error(orderError instanceof Error ? orderError.message : 'Failed to create your order');
       setIsProcessing(false);
+      setError(orderError instanceof Error ? orderError.message : 'Failed to create your order');
+      throw orderError; // Re-throw to be caught by the caller
+    }
+  };
+
+  // Handle guest login
+  const handleGuestLogin = React.useCallback(async (tableId: string) => {
+    try {
+      console.log('Attempting guest login with tableId:', tableId);
+      
+      // Get API base URL from environment variables
+      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || `${API_BASE_URL}/api/auth`;
+      
+      // Request a guest token directly from the server endpoint
+      const response = await fetch(`${apiBaseUrl}/guest-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tableId: tableId || '',
+          deviceId: localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`
+        }),
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.token) {
+          console.log('Guest token received:', data.token.substring(0, 10) + '...');
+          
+          // Store token in both localStorage and cookies for redundancy
+          localStorage.setItem('auth_token', data.token);
+          document.cookie = `auth_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+          document.cookie = `access_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+          
+          return true;
+        }
+      }
+      
+      console.error('Guest login failed: No token in response');
+      return false;
+    } catch (error) {
+      console.error('Guest login error:', error);
+      return false;
+    }
+  }, []);
+  
+  const handleCheckout = () => {
+    if (cartItems.length === 0) {
+      toast.error("Your cart is empty");
+      return;
+    }
+    
+    // Move to checkout stage
+    setStage('checkout');
+  };
+  
+  const handlePlaceOrder = async (): Promise<void> => {
+    console.log('handlePlaceOrder function entered - CartDrawer.tsx');
+    try {
+      // Validate cart is not empty
+      if (cartItems.length === 0) {
+        toast.error('Your cart is empty. Please add items to place an order.');
+        return;
+      }
+      
+      // Validate table ID is present
+      if (!tableId) {
+        toast.error("Table information is missing. Please scan a table QR code first.");
+        onClose();
+        navigate('/scan');
+        return;
+      }
+      
+      if (!tableId) {
+        toast.error("Table information is missing. Please scan a table QR code first.");
+        onClose();
+        navigate('/scan');
+        return;
+      }
+      
+      setIsProcessing(true);
+      
+      // Process the order (this will create the order in the backend and get the order ID)
+      await processOrder();
+    } catch (error) {
+      console.error('Error placing order:', error);
+      setIsProcessing(false);
+      toast.error(error instanceof Error ? error.message : 'Failed to place order');
+      setError(error instanceof Error ? error.message : 'Failed to place order');
     }
   };
   
   const handleClose = () => {
-    onClose();
+    if (isProcessing) {
+      // If processing is in progress, show a confirmation dialog
+      if (window.confirm("Your order is still being processed. Are you sure you want to close?")) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
   };
-
-  // Conditional rendering based on stage
+  
   let content;
   
   if (stage === 'checkout') {
@@ -590,64 +363,85 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       <div className="flex flex-col h-full">
         <SheetHeader className="p-4 border-b border-[#2D303E]">
           <div className="flex items-center justify-between">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setStage('cart')}
-              className="mr-2"
+            <SheetTitle className="text-xl font-semibold">Checkout</SheetTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleClose}
+              disabled={isProcessing}
             >
               <X className="h-5 w-5" />
             </Button>
-            <SheetTitle className="text-xl font-semibold">Checkout</SheetTitle>
-            <div className="w-8" /> {/* Empty div for alignment */}
           </div>
         </SheetHeader>
         
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-6">
-            {/* Order summary */}
-            <div className="space-y-3">
-              <h3 className="font-medium text-lg">Order Summary</h3>
-              <div className="bg-muted rounded-lg p-4 space-y-2">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="flex justify-between">
-                    <span className="text-sm">
-                      {item.quantity} × {item.name}
-                    </span>
-                    <span className="text-sm font-medium">
-                      ${(item.price * item.quantity).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            {/* Order Type */}
-            <div className="space-y-3">
-              <h3 className="font-medium text-lg">Order Type</h3>
+        <ScrollArea className="flex-1">
+          <div className="p-4 space-y-6">
+            {/* Order type selection */}
+            <div className="space-y-2">
+              <h3 className="font-medium">Order Type</h3>
               <div className="flex gap-2">
-                <Button 
-                  variant={orderType === OrderType.DINE_IN ? 'default' : 'outline'}
+                <Button
+                  variant={orderType === OrderType.DINE_IN ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    orderType === OrderType.DINE_IN 
+                      ? "bg-delft-blue hover:bg-delft-blue/90" 
+                      : ""
+                  )}
                   onClick={() => setOrderType(OrderType.DINE_IN)}
-                  className="flex-1"
+                  disabled={isProcessing}
                 >
                   Dine In
                 </Button>
-                <Button 
-                  variant={orderType === OrderType.TAKEOUT ? 'default' : 'outline'}
+                <Button
+                  variant={orderType === OrderType.TAKEOUT ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    orderType === OrderType.TAKEOUT 
+                      ? "bg-delft-blue hover:bg-delft-blue/90" 
+                      : ""
+                  )}
                   onClick={() => setOrderType(OrderType.TAKEOUT)}
-                  className="flex-1"
+                  disabled={isProcessing}
                 >
                   Takeout
                 </Button>
               </div>
             </div>
             
-            {/* Special Instructions */}
-            <div className="space-y-3">
-              <h3 className="font-medium text-lg">Special Instructions</h3>
+            {/* Cart items summary */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <h3 className="font-medium">Order Items</h3>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-delft-blue"
+                  onClick={() => setStage('cart')}
+                  disabled={isProcessing}
+                >
+                  Edit
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {cartItems.map((item) => (
+                  <div key={item.id} className="flex justify-between text-sm">
+                    <div className="flex">
+                      <span className="font-medium">{item.quantity}x</span>
+                      <span className="ml-2">{item.name}</span>
+                    </div>
+                    <span>${(item.price * item.quantity).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Order notes */}
+            <div className="space-y-2">
+              <h3 className="font-medium">Special Instructions</h3>
               <Textarea 
-                placeholder="Add any special requests or allergies..."
+                placeholder="Add any special instructions for your order..."
                 value={specialInstructions}
                 onChange={(e) => setSpecialInstructions(e.target.value)}
                 className="resize-none"

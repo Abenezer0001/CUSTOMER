@@ -45,30 +45,32 @@ export interface AuthResponse {
 }
 
 // Helper function to get token from localStorage
-const getEffectiveToken = (): string | null => {
+export const getEffectiveToken = (): string | null => {
   try {
-    // First check cookies since they are more secure
-    const cookies = document.cookie.split(';');
-    const tokenCookie = cookies.find(cookie => 
-      cookie.trim().startsWith('access_token=') || 
-      cookie.trim().startsWith('auth_token=')
-    );
-    
-    if (tokenCookie) {
-      const token = tokenCookie.split('=')[1].trim();
-      console.log('Found token in cookies, storing in localStorage');
-      localStorage.setItem('auth_token', token);
-      return token;
-    }
-    
-    // If not in cookies, check localStorage
+    // Check localStorage first as cookies might be HttpOnly
     const localToken = localStorage.getItem('auth_token');
     if (localToken && localToken.length > 10) { // Basic validation that it's a real token
-      console.log('Found token in localStorage');
+      console.log('Found auth_token in localStorage');
       return localToken;
     }
     
-    console.log('No token found in cookies or localStorage');
+    // With HttpOnly cookies, we can't directly access them with JS
+    // But we can make a test request to see if we're authenticated
+    console.log('No token found in localStorage, cookies might be HttpOnly');
+    
+    // Note: For HttpOnly cookies, we won't be able to get the token value,
+    // but we can still indicate that authentication might be available
+    // The actual token will be sent automatically with fetch/axios requests
+    // if credentials: 'include' is set
+    
+    // Return an indicator that tokens might be in HttpOnly cookies
+    // We'll need to rely on the API calls with credentials: 'include'
+    if (document.cookie.includes('auth_token') || document.cookie.includes('access_token')) {
+      console.log('Found auth_token or access_token in cookie string (might be HttpOnly)');
+      return 'http-only-cookie-present';
+    }
+    
+    console.log('No token indicators found in cookies or localStorage');
     return null;
   } catch (error) {
     console.error('Error in getEffectiveToken:', error);
@@ -76,13 +78,12 @@ const getEffectiveToken = (): string | null => {
   }
 };
 
-// Export getEffectiveToken for use in components
-export { getEffectiveToken };
+// getEffectiveToken is already exported above
 
 // Axios instance with credentials (for cookies)
 const api = axios.create({
   baseURL: AUTH_API_URL,
-  withCredentials: false, // We're not using cookies anymore
+  withCredentials: true, // We're not using cookies anymore
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest'
@@ -226,7 +227,13 @@ const authService = {
       // Always clear local storage
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user');
-      console.log('Cleared authentication data from localStorage');
+      
+      // Clear cookies by setting them to expire in the past
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      
+      console.log('Cleared authentication data from localStorage and cookies');
     }
   },
 

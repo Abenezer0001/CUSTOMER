@@ -306,7 +306,7 @@ const CategoryDetail: React.FC = () => {
                 <Button 
                   variant="default"
                   size="icon" 
-                  className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-700 transition-opacity"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleSelectItem(item);

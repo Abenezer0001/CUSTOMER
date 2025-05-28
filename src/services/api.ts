@@ -20,9 +20,24 @@ export const api = {
     try {
       // Don't use API_BASE_URL since apiClient already has the base URL configured
       const response = await apiClient.get('/api/categories');
-      if (response?.data?.success) {
-        return response.data.data;
+      
+      // More flexible response handling
+      if (response?.data) {
+        // Handle success response with data property
+        if (response.data.success && Array.isArray(response.data.data)) {
+          return response.data.data;
+        }
+        // Handle direct array response
+        else if (Array.isArray(response.data)) {
+          return response.data;
+        }
+        // Handle object with categories property
+        else if (response.data.categories && Array.isArray(response.data.categories)) {
+          return response.data.categories;
+        }
       }
+      
+      console.error('Unexpected categories response format:', response?.data);
       throw new Error('Failed to fetch categories');
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -35,9 +50,28 @@ export const api = {
     try {
       // Don't use API_BASE_URL since apiClient already has the base URL configured
       const response = await apiClient.get('/api/menu-items');
-      if (response?.data?.success) {
-        return response.data.data.map(mapMenuItem);
+      
+      // More flexible response handling
+      if (response?.data) {
+        // Handle success response with data property
+        if (response.data.success && Array.isArray(response.data.data)) {
+          return response.data.data.map(mapMenuItem);
+        }
+        // Handle direct array response
+        else if (Array.isArray(response.data)) {
+          return response.data.map(mapMenuItem);
+        }
+        // Handle object with menuItems property
+        else if (response.data.menuItems && Array.isArray(response.data.menuItems)) {
+          return response.data.menuItems.map(mapMenuItem);
+        }
+        // Handle object with items property
+        else if (response.data.items && Array.isArray(response.data.items)) {
+          return response.data.items.map(mapMenuItem);
+        }
       }
+      
+      console.error('Unexpected menu items response format:', response?.data);
       throw new Error('Failed to fetch menu items');
     } catch (error) {
       console.error('Error fetching menu items:', error);

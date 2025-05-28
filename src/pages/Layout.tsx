@@ -4,11 +4,12 @@ import { TableHeader } from '@/components/TableHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { useTableInfo } from '@/context/TableContext';
 import { useTheme } from 'next-themes';
-import { ScanLine, ShoppingCart } from 'lucide-react';
+import { ScanLine, ShoppingCart, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 import CartDrawer from '@/components/CartDrawer';
+import AIChatDrawer from '@/components/AIChatDrawer';
 
 const Layout: React.FC = () => {
   const { tableNumber, setTableInfo } = useTableInfo();
@@ -59,23 +60,7 @@ const Layout: React.FC = () => {
       <div className="relative">
         {!isScanPage && <TableHeader />}
         
-        {/* Scan button in header */}
-        {!isScanPage && (
-          <div className="absolute top-3 left-24 z-50">
-            <Link to="/scan">
-              <Button
-                variant="outline"
-                size="icon"
-                className={cn(
-                  "rounded-full bg-purple-600 hover:bg-purple-700 border-purple-300"
-                )}
-                aria-label="Scan QR Code"
-              >
-                <ScanLine className="h-5 w-5 text-white" />
-              </Button>
-            </Link>
-          </div>
-        )}
+        {/* Scan button removed as per user request */}
       </div>
       
       {/* Floating cart icon */}
@@ -98,6 +83,7 @@ const Layout: React.FC = () => {
       
       {/* Cart Drawer */}
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      <AIChatDrawer />
       
       {/* Set main content background to dark color and ensure proper text color */}
       <main className="flex-grow pb-20" style={{ backgroundColor: '#16141F' }}> 

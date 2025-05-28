@@ -10,6 +10,10 @@ export enum OrderType {
   DELIVERY = 'DELIVERY'
 }
 
+// Constants for calculations
+const TAX_RATE = 0.08;
+const SERVICE_FEE_RATE = 0.05;
+
 // Order item interface for API
 export interface OrderItem {
   menuItem: string;
@@ -36,6 +40,17 @@ export interface OrderData {
   total: number;
   orderType: OrderType;
   specialInstructions?: string;
+}
+
+/**
+ * Interface for decoded JWT payload
+ */
+interface JWTPayload {
+  id: string;
+  email: string;
+  role: string;
+  exp: number;
+  iat: number;
 }
 
 /**
@@ -140,36 +155,33 @@ interface UpdatePaymentStatusResponse {
   };
 }
 
-/**
- * Extract restaurant ID safely from table ID or use default
- * Note: This is a fallback function in case restaurantId isn't provided directly
- */
-const extractRestaurantIdFromTableId = (tableId: string): string => {
-  const [restaurantId] = tableId.split('-');
-  return restaurantId || tableId;
+// Extract restaurant ID safely from table ID or use default
+// Note: This is a fallback function in case restaurantId isn't provided directly
+export const extractRestaurantIdFromTableId = (tableId: string): string => {
+  if (!tableId || tableId.indexOf('-') === -1) {
+    return '65f456b06c9dfd001b6b1234'; // Default restaurant ID
+  }
+  return tableId.split('-')[0];
 };
 
-/**
- * Helper function to generate a stable ID from modifier name
- */
-const generateModifierId = (name: string): string => {
-  return `mod-${name.toLowerCase().replace(/\s+/g, '-')}`;
+// Helper function to generate a stable ID from modifier name
+export const generateModifierId = (name: string): string => {
+  return `mod_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 };
 
-/**
- * Converts API order response to frontend Order type
- */
-const convertApiOrderToFrontend = (apiOrder: OrderResponseData): Order => ({
+// Converts API order response to frontend Order type
+export const convertApiOrderToFrontend = (apiOrder: OrderResponseData): Order => ({
   id: apiOrder._id,
   orderNumber: apiOrder.orderNumber,
   items: apiOrder.items.map(item => ({
     id: item.menuItem,
+    menuItemId: item.menuItem,
     name: item.name,
     price: item.price,
     quantity: item.quantity,
     specialInstructions: item.specialInstructions,
     modifiers: item.modifiers?.map(mod => ({
-      id: generateModifierId(mod.name),  // Generate a stable ID from the name
+      id: generateModifierId(mod.name),
       name: mod.name,
       price: mod.price
     }))
@@ -187,12 +199,166 @@ const convertApiOrderToFrontend = (apiOrder: OrderResponseData): Order => ({
 });
 
 /**
+ * Utility function to parse cookies into an object
+ * @returns Object with cookie name-value pairs
+ */
+const parseCookies = (): { [key: string]: string } => {
+  try {
+    // Debug the raw cookie string
+    console.log('Raw document.cookie:', document.cookie);
+    
+    // Skip parsing if cookie string is empty
+    if (!document.cookie) {
+      console.log('No cookies found in document.cookie');
+      return {};
+    }
+    
+    const cookies = document.cookie
+      .split(';')
+      .map(c => c.trim())
+      .reduce((acc: {[key: string]: string}, curr) => {
+        // More robust parsing - handle edge cases
+        if (!curr) return acc;
+        
+        const eqPos = curr.indexOf('=');
+        if (eqPos === -1) return acc;
+        
+        const key = curr.substring(0, eqPos).trim();
+        const value = curr.substring(eqPos + 1).trim();
+        
+        if (key && value) acc[key] = value;
+        return acc;
+      }, {});
+      
+    // Debug the parsed cookies
+    console.log('Parsed cookies:', cookies);
+    return cookies;
+  } catch (error) {
+    console.error('Error parsing cookies:', error);
+    return {};
+  }
+};
+
+// Test helper functions - only included in development
+if (process.env.NODE_ENV === 'development') {
+  // Expose functions needed for testing
+  (window as any).parseCookies = parseCookies;
+  
+  (window as any).validateJwtToken = (token: string) => {
+    try {
+      // Split token and validate format
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Invalid token format: missing segments');
+      }
+      
+      const [, payload] = tokenParts;
+      if (!payload) throw new Error('Invalid token format: missing payload');
+      
+      // Add padding to base64 if needed
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+      
+      const decodedPayload = JSON.parse(atob(padded)) as JWTPayload;
+      
+      // Validate required fields
+      if (!decodedPayload.id || !decodedPayload.exp || !decodedPayload.role) {
+        throw new Error('Invalid token payload: missing required fields');
+      }
+      
+      // Check if role is allowed
+      if (!['customer', 'admin', 'staff'].includes(decodedPayload.role)) {
+        throw new Error('Invalid token payload: invalid role');
+      }
+      
+      const tokenExpiry = decodedPayload.exp * 1000;
+      const currentTime = Date.now();
+      
+      return {
+        isAuthenticated: tokenExpiry > currentTime,
+        userId: decodedPayload.id,
+        role: decodedPayload.role,
+        expiresIn: Math.floor((tokenExpiry - currentTime) / 1000)
+      };
+      
+    } catch (error) {
+      console.warn('Token validation failed:', error instanceof Error ? error.message : 'Unknown error');
+      return {
+        isAuthenticated: false,
+        userId: null,
+        role: null,
+        expiresIn: 0
+      };
+    }
+  };
+  
+  // Only expose parseCookies and validateJwtToken here
+  console.log('Initial test helper functions initialized in development mode');
+}
+
+/**
+ * Helper function to prepare request headers with auth token
+ * Only checks for access_token in cookies and sets proper Bearer token
+ * @returns Object with appropriate headers including auth token if available
+ */
+const getAuthHeaders = (): HeadersInit => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json'
+  };
+  
+  // Get token using authService's method
+  const token = getEffectiveToken();
+  if (token && token !== 'http-only-cookie-present') {
+    headers['Authorization'] = `Bearer ${token}`;
+    console.log('Added Authorization header with token');
+  } else {
+    // Try to directly extract tokens from cookie string as a fallback
+    const rawCookie = document.cookie;
+    console.log('Raw cookie string in getAuthHeaders:', rawCookie);
+    
+    // Parse cookies using our utility function
+    const cookies = parseCookies();
+    console.log('All parsed cookies:', Object.keys(cookies));
+    
+    // Check for access_token first (for backward compatibility)
+    if (cookies['access_token']) {
+      headers['Authorization'] = `Bearer ${cookies['access_token']}`;
+      console.log('Using access_token from cookies for request');
+    // Then check for auth_token if access_token isn't found
+    } else if (cookies['auth_token']) {
+      headers['Authorization'] = `Bearer ${cookies['auth_token']}`;
+      console.log('Using auth_token from cookies for request');
+    } else {
+      // Fallback: Try to manually extract the token from raw cookie string
+      const accessTokenMatch = rawCookie.match(/access_token=([^;]+)/);
+      const authTokenMatch = rawCookie.match(/auth_token=([^;]+)/);
+      
+      if (accessTokenMatch && accessTokenMatch[1]) {
+        headers['Authorization'] = `Bearer ${accessTokenMatch[1]}`;
+        console.log('Using access_token extracted directly from cookie string');
+      } else if (authTokenMatch && authTokenMatch[1]) {
+        headers['Authorization'] = `Bearer ${authTokenMatch[1]}`;
+        console.log('Using auth_token extracted directly from cookie string');
+      } else {
+        console.log('No auth token found in cookies (checked parsed cookies and raw string)');
+      }
+    }
+  }
+  
+  // Log the final headers being used
+  console.log('Final authorization header set:', headers.Authorization ? 'Yes' : 'No');
+  
+  return headers;
+};
+
+/**
  * Creates a new order in the system
  * 
  * @param cartItems - Array of cart items to be included in the order
  * @param tableId - ID of the table where the order is placed
  * @param restaurantId - ID of the restaurant
- * @param orderData - Optional custom order data
+ * @param customOrderData - Optional custom order data
+ * @param navigate - Optional navigation function for redirecting if auth fails
  * @returns Promise resolving to the created order data
  * @throws Error if API request fails
  */
@@ -200,21 +366,61 @@ export const createOrder = async (
   cartItems: CartItem[], 
   tableId: string, 
   restaurantId: string,
-  orderData?: OrderData
-): Promise<OrderResponse['data']> => {
+  customOrderData?: OrderData,
+  navigate?: (path: string, options?: any) => void
+): Promise<OrderResponseData> => {
   try {
-    console.log('createOrder called (token parameter removed, relying on HttpOnly cookies)');
+    console.log('createOrder called with credentials included');
     console.log('tableId:', tableId);
     console.log('restaurantId:', restaurantId);
+    
+    // Check authentication status first
+    const token = getEffectiveToken();
+    if (!token || token === 'http-only-cookie-present') {
+      console.log('No valid token found, attempting to refresh...');
+      const refreshSuccess = await authService.refreshToken();
+      if (!refreshSuccess) {
+        console.log('Token refresh failed, redirecting to login');
+        if (cartItems.length > 0) {
+          localStorage.setItem('pendingCart', JSON.stringify({
+            items: cartItems,
+            tableId
+          }));
+        }
+        
+        if (navigate) {
+          navigate('/login', { state: { from: '/cart', tableId } });
+        } else {
+          window.location.href = `/login?redirect=${encodeURIComponent('/cart')}&tableId=${tableId}`;
+        }
+        throw new Error('Authentication required. Please log in to place an order.');
+      }
+    }
+    
+    // Get or generate a device ID for guest users
+    const getDeviceId = (): string => {
+      // Check localStorage for existing device ID
+      let deviceId = localStorage.getItem('device_id');
+      
+      if (!deviceId) {
+        // Generate a new device ID if none exists
+        deviceId = `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+        localStorage.setItem('device_id', deviceId);
+      }
+      
+      return deviceId;
+    };
+    
+    const deviceId = getDeviceId();
+    console.log('Device ID for order:', deviceId);
+    
+    // Prepare order data
+    let formattedOrderData: OrderData;
 
-    // If custom order data is provided, use it
-    // Otherwise, calculate and format the order data
-    let formattedOrderData = orderData;
-
-    if (!formattedOrderData) {
-      // Calculate totals
+    if (customOrderData) {
+      formattedOrderData = customOrderData;
+    } else {
       const subtotal = cartItems.reduce((total, item) => {
-        // Use getItemTotal if available, otherwise calculate
         if (item.getItemTotal) {
           return total + item.getItemTotal();
         }
@@ -224,16 +430,12 @@ export const createOrder = async (
         return total + ((item.price + modifierPrice) * item.quantity);
       }, 0);
       
-      const taxRate = 0.08; // 8% tax
-      const serviceFeeRate = 0.05; // 5% service fee
-      const tax = subtotal * taxRate;
-      const serviceFee = subtotal * serviceFeeRate;
-      const tipAmount = 0; // Default tip amount
+      const tax = subtotal * TAX_RATE;
+      const serviceFee = subtotal * SERVICE_FEE_RATE;
+      const tipAmount = 0;
       const total = subtotal + tax + serviceFee + tipAmount;
 
-      // Format items for API
       const formattedItems = cartItems.map(item => {
-        // Calculate item total price with modifiers
         const itemTotal = item.getItemTotal 
           ? item.getItemTotal() 
           : (item.price * item.quantity) + (item.modifiers?.reduce((sum, mod) => sum + mod.price, 0) || 0);
@@ -252,7 +454,6 @@ export const createOrder = async (
         };
       });
 
-      // Simplified restaurant ID handling
       const safeRestaurantId = restaurantId === 'InSeat' 
         ? '65f456b06c9dfd001b6b1234' 
         : restaurantId || extractRestaurantIdFromTableId(tableId);
@@ -266,161 +467,98 @@ export const createOrder = async (
         serviceFee,
         tip: tipAmount,
         total,
-        orderType: OrderType.DINE_IN, // Default to DINE_IN
+        orderType: OrderType.DINE_IN,
         specialInstructions: ''
       };
     }
 
-    // Add required fields for order creation
+    // Prepare complete order data with device ID
     const completeOrderData = {
       ...formattedOrderData,
-      status: OrderStatus.PENDING, // Required field
-      paymentStatus: PaymentStatus.PENDING, // Required field
-      orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}` // Required field
+      status: OrderStatus.PENDING,
+      paymentStatus: PaymentStatus.PENDING,
+      orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      deviceId // Include device ID for tracking
     };
+    
+    // Log data preparation
+    console.log('Prepared order data:', {
+      orderNumber: completeOrderData.orderNumber,
+      hasDeviceId: Boolean(deviceId)
+    });
 
-    console.log('Order request body:', JSON.stringify(completeOrderData));
-    console.log('Sending request to:', `${API_BASE_URL}/api/orders`);
+    // Get fresh headers after potential token refresh
+    const headers = getAuthHeaders();
     
-    // Create a direct authentication function for order placement
-    const getOrderAuthToken = async (): Promise<string | null> => {
-      // First try to get an existing token
-      let token = getEffectiveToken();
-      if (token) {
-        console.log('Found existing token for order placement');
-        return token;
-      }
-      
-      console.log('No existing token found, creating a direct JWT token for order placement...');
-      
-      try {
-        // Make a direct request to get a JWT token for order placement
-        // This endpoint should create a temporary guest user and return a token
-        const directAuthResponse = await fetch(`${API_BASE_URL}/api/auth/guest-token`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            tableId: tableId || '',
-            deviceId: localStorage.getItem('device_id') || `device_${Date.now()}`
-          }),
-          credentials: 'include'
-        });
-        
-        if (directAuthResponse.ok) {
-          const authData = await directAuthResponse.json();
-          console.log('Direct auth successful:', authData);
-          
-          if (authData.token) {
-            // Store the token
-            localStorage.setItem('auth_token', authData.token);
-            console.log('Saved direct auth token to localStorage');
-            return authData.token;
-          }
-        }
-        
-        // Fallback to creating a guest account if direct auth fails
-        console.log('Direct auth failed or no token returned, attempting guest registration...');
-        
-        // Create a guest account with the table ID
-        const guestData = {
-          email: `guest_${Date.now()}@inseat.com`,
-          password: `guest${Math.random().toString(36).substring(2, 10)}`,
-          firstName: 'Guest',
-          lastName: 'User',
-          tableId: tableId || ''
-        };
-        
-        // Store device ID for future requests
-        if (!localStorage.getItem('device_id')) {
-          const deviceId = `device_${Date.now()}`;
-          localStorage.setItem('device_id', deviceId);
-        }
-        
-        console.log('Attempting to register as guest user:', guestData.email);
-        
-        // Try to register as a guest
-        const registerResponse = await fetch(`${API_BASE_URL}/api/auth/register`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(guestData),
-          credentials: 'include'
-        });
-        
-        if (registerResponse.ok) {
-          const registerData = await registerResponse.json();
-          console.log('Guest registration successful:', registerData);
-          
-          if (registerData.token) {
-            localStorage.setItem('auth_token', registerData.token);
-            console.log('Saved guest token to localStorage');
-            return registerData.token;
-          }
-        }
-        
-        return null;
-      } catch (error) {
-        console.error('Error during authentication for order placement:', error);
-        return null;
-      }
-    };
+    console.log('Sending order request with credentials included');
+    console.log('Request headers prepared:', {
+      hasAuthorization: !!headers.Authorization,
+      contentType: headers['Content-Type']
+    });
     
-    // Get a token for order placement
-    let token = await getOrderAuthToken();
+    // Log the request details for debugging
+    console.log('Order request details:', {
+      url: `${API_BASE_URL}/api/orders`,
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(completeOrderData).substring(0, 100) + '...',
+      withCredentials: true
+    });
     
-    // If we didn't get a token from the auth process, try one more time from storage
-    if (!token) {
-      token = getEffectiveToken();
-    }
-    
-    if (!token) {
-      console.error('Failed to obtain authentication token after multiple attempts');
-      throw new Error('Authentication required. Please log in to place an order.');
-    }
-    
-    console.log('Using authentication token for order creation');
-    
-    // Prepare headers with Authorization token
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    };
-    
-    console.log('Added Authorization header with token:', headers['Authorization'].substring(0, 15) + '...');
-    
-    const fetchResponse = await fetch(`${API_BASE_URL}/api/orders`, {
+    // Send the request with credentials: 'include' to send cookies
+    const response = await fetch(`${API_BASE_URL}/api/orders`, {
       method: 'POST',
       headers,
       body: JSON.stringify(completeOrderData),
-      credentials: 'include' // Essential for sending cookies
+      credentials: 'include' // This ensures cookies are sent automatically
     });
     
-    if (!fetchResponse.ok) {
-      let errorMessage = `Order creation failed with status: ${fetchResponse.status}`;
+    if (!response.ok) {
+      let errorMessage: string;
       try {
-        const errorData = await fetchResponse.json();
-        errorMessage = errorData.message || errorMessage;
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || `Order creation failed with status: ${response.status}`;
       } catch (e) {
-        // If we can't parse the error as JSON, just use the status code
+        errorMessage = `Order creation failed with status: ${response.status}`;
         console.error('Could not parse error response:', e);
       }
-      console.error('Fetch API error:', errorMessage);
+      
+      // Special handling for authentication errors
+      if (response.status === 401) {
+        console.log('Authentication required - redirecting to login');
+        console.log('Server requires authentication despite cookies being sent automatically');
+        
+        // Save cart state before redirect
+        if (cartItems.length > 0) {
+          localStorage.setItem('pendingCart', JSON.stringify({
+            items: cartItems,
+            tableId
+          }));
+        }
+        
+        // Use navigate function if provided, otherwise use default redirect
+        if (navigate) {
+          navigate('/login', { state: { from: '/cart', tableId } });
+        } else {
+          // Default fallback redirect
+          if (typeof window !== 'undefined') {
+            window.location.href = `/login?redirect=${encodeURIComponent('/cart')}&tableId=${tableId}`;
+          }
+        }
+        
+        throw new Error('Authentication required. Please log in to place an order.');
+      }
+      
       throw new Error(errorMessage);
     }
     
-    const data = await fetchResponse.json();
-    console.log('Order created successfully:', data.data);
-    return data.data;
-
+    const data = await response.json();
+    const orderData = data.data || data; // Handle different response formats
+    console.log('Order created successfully:', orderData);
+    return orderData;
   } catch (error) {
-    console.error('Error in createOrder:', error);
-    if (error instanceof Error) {
-      throw error; 
-    }
-    throw new Error('An unexpected error occurred during order creation.');
+    console.error('Error creating order:', error);
+    throw error instanceof Error ? error : new Error('An unexpected error occurred during order creation.');
   }
 };
 
@@ -431,245 +569,49 @@ export const createOrder = async (
  * @throws Error if API request fails
  */
 export const fetchUserOrders = async (): Promise<OrdersResponse['data']> => {
-  console.log('Fetching user orders...');
-  
   try {
-    // Get a valid token with automatic refresh if needed
-    const token = await authService.getValidToken();
-    console.log('Token available for orders fetch:', !!token);
+    console.log('Fetching user orders with credentials included');
     
-    if (!token) {
-      console.log('No valid token available, user might need to log in');
-      throw new Error('Authentication required');
+    const response = await fetch(`${API_BASE_URL}/api/orders/my-orders`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include' // Send cookies
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      throw new Error(`Failed to fetch orders: ${response.status}`);
     }
     
-    try {
-      // Try to get user info first with explicit headers
-      console.log('Attempting to fetch user from auth/me endpoint');
-      const userResponse = await apiClient.get('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
+    const data = await response.json();
+    
+    // Handle different response formats
+    if (Array.isArray(data)) {
+      return {
+        orders: data,
+        pagination: {
+          total: data.length,
+          limit: data.length,
+          page: 1,
+          pages: 1
         }
-      });
-      
-      // Extract user data from response
-      const userData = userResponse.data?.user || userResponse.data;
-      
-      if (!userData?.id && !userData?._id) {
-        console.log('Invalid user data received from auth endpoint');
-        throw new Error('Invalid user data received');
-      }
-      
-      // Get user ID from response
-      const userId = userData.id || userData._id;
-      console.log('Fetching orders for user ID:', userId);
-      
-      // Fetch orders for the user with explicit headers
-      const ordersResponse = await apiClient.get(`/api/orders/user/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      // Handle both response formats: direct array or nested object
-      if (Array.isArray(ordersResponse.data)) {
-        // Direct array response
-        console.log(`Found ${ordersResponse.data.length} orders`); 
-        return {
-          orders: ordersResponse.data,
-          pagination: {
-            total: ordersResponse.data.length,
-            limit: ordersResponse.data.length,
-            page: 1,
-            pages: 1
-          }
-        };
-      } else if (ordersResponse.data?.success) {
-        // Object with success property and nested data
-        return ordersResponse.data.data;
-      } else if (ordersResponse.data && !ordersResponse.data.error) {
-        // Direct object response
-        return {
-          orders: [ordersResponse.data],
-          pagination: {
-            total: 1,
-            limit: 1,
-            page: 1,
-            pages: 1
-          }
-        };
-      }
-      
-      throw new Error(ordersResponse.data?.error?.message || 'Failed to fetch orders');
-    } catch (userError: any) {
-      // If we get here, the /api/auth/me endpoint failed
-      console.error('Failed to get user info from auth endpoint:', userError);
-      
-      // Try to refresh token and retry once
-      if (userError.response?.status === 401) {
-        console.log('Unauthorized error, attempting to refresh token...');
-        const refreshed = await authService.refreshToken();
-        if (refreshed) {
-          const newToken = authService.getToken();
-          if (newToken) {
-            try {
-              console.log('Retrying with new token...');
-              const retryResponse = await apiClient.get('/api/auth/me', {
-                headers: {
-                  'Authorization': `Bearer ${newToken}`
-                }
-              });
-              
-              const retryUserData = retryResponse.data?.user || retryResponse.data;
-              if (retryUserData?.id || retryUserData?._id) {
-                const userId = retryUserData.id || retryUserData._id;
-                console.log('Retry successful, fetching orders with new token...');
-                
-                const ordersResponse = await apiClient.get(`/api/orders/user/${userId}`, {
-                  headers: {
-                    'Authorization': `Bearer ${newToken}`
-                  }
-                });
-                
-                if (ordersResponse.data?.success) {
-                  return ordersResponse.data.data;
-                }
-              }
-            } catch (retryError) {
-              console.error('Retry after token refresh failed:', retryError);
-            }
-          }
-        }
-      }
-      
-      // Try to get user ID from local storage as fallback
-      const localUser = localStorage.getItem('user');
-      if (localUser) {
-        try {
-          const userData = JSON.parse(localUser);
-          if (userData?.id) {
-            console.log('Using user ID from localStorage:', userData.id);
-            const ordersResponse = await apiClient.get(`/api/orders/user/${userData.id}`);
-            
-            if (ordersResponse.data?.success) {
-              return ordersResponse.data.data;
-            }
-          }
-        } catch (parseError) {
-          console.error('Error parsing user data from localStorage:', parseError);
-        }
-      }
+      };
+    } else if (data.success) {
+      return data.data;
+    } else if (data.orders) {
+      return data;
     }
     
-    // If we have a table ID, try to fetch orders for the table instead
-    const tableId = localStorage.getItem('table_id');
-    if (tableId) {
-      console.log('Fetching orders for table ID:', tableId);
-      
-      try {
-        console.log('Attempting to fetch from /api/orders/table/:tableId endpoint');
-        const tableOrdersResponse = await apiClient.get(`/api/orders/table/${tableId}`);
-        
-        // Handle both response formats: direct array or nested object
-        if (Array.isArray(tableOrdersResponse.data)) {
-          // Direct array response
-          console.log(`Found ${tableOrdersResponse.data.length} orders for table`);
-          return {
-            orders: tableOrdersResponse.data,
-            pagination: {
-              total: tableOrdersResponse.data.length,
-              limit: tableOrdersResponse.data.length,
-              page: 1,
-              pages: 1
-            }
-          };
-        } else if (tableOrdersResponse.data?.success) {
-          // Object with success property
-          return tableOrdersResponse.data.data;
-        } else if (tableOrdersResponse.data && !tableOrdersResponse.data.error) {
-          // Direct object response
-          return {
-            orders: [tableOrdersResponse.data],
-            pagination: {
-              total: 1,
-              limit: 1,
-              page: 1,
-              pages: 1
-            }
-          };
-        }
-      } catch (tableError) {
-        console.error('Error fetching orders for table:', tableError);
-        
-        // Try alternative format
-        console.log('First table endpoint failed, trying alternative format');
-        
-        try {
-          // Try restaurant-based endpoint
-          const restaurantId = localStorage.getItem('restaurant_id') || tableId;
-          console.log(`Trying restaurant-based endpoint with restaurantId ${restaurantId} and tableId ${tableId}`);
-          
-          const altResponse = await apiClient.get(
-            `/api/orders/restaurant/${restaurantId}/table/${tableId}`
-          );
-          
-          // Handle both response formats: direct array or nested object
-          if (Array.isArray(altResponse.data)) {
-            // Direct array response
-            console.log(`Found ${altResponse.data.length} orders for restaurant/table`);
-            return {
-              orders: altResponse.data,
-              pagination: {
-                total: altResponse.data.length,
-                limit: altResponse.data.length,
-                page: 1,
-                pages: 1
-              }
-            };
-          } else if (altResponse.data?.success) {
-            // Object with success property
-            return altResponse.data.data;
-          } else if (altResponse.data && !altResponse.data.error) {
-            // Direct object response
-            return {
-              orders: [altResponse.data],
-              pagination: {
-                total: 1,
-                limit: 1,
-                page: 1,
-                pages: 1
-              }
-            };
-          }
-        } catch (altError) {
-          console.error('Error fetching orders from alternative table endpoint:', altError);
-        }
-      }
-    }
-    
-    // If we get here, we couldn't get orders from any source
-    console.log('No orders found from any source');
     return {
       orders: [],
-      pagination: {
-        total: 0,
-        limit: 10,
-        page: 1,
-        pages: 0
-      }
+      pagination: { total: 0, limit: 10, page: 1, pages: 0 }
     };
+    
   } catch (error) {
     console.error('Error fetching user orders:', error);
-    // Return empty orders instead of throwing to prevent UI errors
-    return {
-      orders: [],
-      pagination: {
-        total: 0,
-        limit: 10,
-        page: 1,
-        pages: 0
-      }
-    };
+    throw error instanceof Error ? error : new Error('Failed to fetch orders');
   }
 };
 
@@ -681,21 +623,21 @@ export const fetchUserOrders = async (): Promise<OrdersResponse['data']> => {
  * @throws Error if API request fails
  */
 export const cancelOrder = async (orderId: string): Promise<void> => {
-  console.log(`Cancelling order ${orderId} (relying on HttpOnly cookies)`);
-  
   try {
-    // Using apiClient instead of fetch
-    const response = await apiClient.put(`/api/orders/${orderId}/cancel`, {
-      status: OrderStatus.CANCELLED,
-      cancellationReason: 'Customer cancelled order'
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/cancel`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include'
     });
-
-    if (!response.data.success) {
-      throw new Error(response.data.error?.message || 'Failed to cancel order');
+    
+    if (!response.ok) {
+      throw new Error(`Failed to cancel order: ${response.status}`);
     }
+    
+    console.log('Order cancelled successfully');
   } catch (error) {
     console.error('Error cancelling order:', error);
-    throw error instanceof Error ? error : new Error('Unknown error cancelling order');
+    throw error instanceof Error ? error : new Error('Failed to cancel order');
   }
 };
 
@@ -707,21 +649,31 @@ export const cancelOrder = async (orderId: string): Promise<void> => {
  * @throws Error if API request fails
  */
 export const getOrderById = async (orderId: string): Promise<Order> => {
-  console.log(`Fetching order by ID ${orderId} (relying on HttpOnly cookies)`);
-  
   try {
-    // Using apiClient instead of fetch
-    const response = await apiClient.get(`/api/orders/${orderId}`);
-
-    if (!response.data.success) {
-      throw new Error(response.data.error?.message || 'Failed to fetch order');
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch order: ${response.status}`);
     }
-
-    // Convert API response to frontend Order type
-    return convertApiOrderToFrontend(response.data.data);
+    
+    const data = await response.json();
+    
+    // Handle different response formats
+    if (data.success) {
+      return convertApiOrderToFrontend(data.data);
+    } else if (data._id) {
+      return convertApiOrderToFrontend(data);
+    }
+    
+    throw new Error('Invalid order data received');
+    
   } catch (error) {
-    console.error('Error fetching order details:', error);
-    throw error instanceof Error ? error : new Error('Unknown error fetching order details');
+    console.error('Error fetching order:', error);
+    throw error instanceof Error ? error : new Error('Failed to fetch order');
   }
 };
 
@@ -737,20 +689,24 @@ export const updateOrderStatus = async (
   orderId: string,
   status: OrderStatus
 ): Promise<UpdateOrderStatusResponse['data']> => {
-  console.log(`Updating order status for ${orderId} to ${status} (relying on HttpOnly cookies)`);
-  
   try {
-    // Using apiClient instead of fetch
-    const response = await apiClient.put(`/api/orders/${orderId}/status`, { status });
-
-    if (!response.data.success) {
-      throw new Error(response.data.error?.message || 'Failed to update order status');
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status }),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to update order status: ${response.status}`);
     }
-
-    return response.data.data;
+    
+    const data = await response.json();
+    return data.data;
+    
   } catch (error) {
     console.error('Error updating order status:', error);
-    throw error instanceof Error ? error : new Error('Unknown error updating order status');
+    throw error instanceof Error ? error : new Error('Failed to update order status');
   }
 };
 
@@ -766,36 +722,29 @@ export const updatePaymentStatus = async (
   orderId: string,
   paymentStatus: PaymentStatus
 ): Promise<UpdatePaymentStatusResponse['data']> => {
-  console.log(`Updating payment status for ${orderId} to ${paymentStatus}`);
-  
   try {
-    // Simulate a successful payment for demo purposes
-    // This prevents the backend ObjectId casting error with device IDs
-    // In a real production system, we would use Stripe or another payment processor
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/payment`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ paymentStatus }),
+      credentials: 'include'
+    });
     
-    // Return a mock success response
-    console.log('Simulating successful payment update');
-    
-    // We can still try the API call for non-device IDs
-    if (!orderId.startsWith('device_')) {
-      try {
-        const response = await apiClient.put(`/api/orders/${orderId}/payment`, { paymentStatus });
-        if (response.data.success) {
-          return response.data.data;
-        }
-      } catch (apiError) {
-        console.warn('API payment update failed, using simulated response', apiError);
-      }
+    if (!response.ok) {
+      throw new Error(`Failed to update payment status: ${response.status}`);
     }
     
-    // Use simulated response if API call failed or wasn't attempted
-    return {
-      _id: orderId,
-      paymentStatus: paymentStatus,
-      updatedAt: new Date().toISOString()
-    };
+    const data = await response.json();
+    return data.data;
+    
   } catch (error) {
     console.error('Error updating payment status:', error);
-    throw new Error(error instanceof Error ? error.message : 'Unknown error updating payment status');
+    throw error instanceof Error ? error : new Error('Failed to update payment status');
   }
 };
+
+// Export additional test helpers after all functions are defined
+if (process.env.NODE_ENV === 'development') {
+  (window as any).createOrder = createOrder;
+  console.log('Additional test helper functions (createOrder) initialized in development mode');
+}

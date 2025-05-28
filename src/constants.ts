@@ -1,5 +1,10 @@
 // API Configuration
-export const API_BASE_URL = 'http://localhost:3001/api';
+// Get API URL from environment variables with fallback to production URL
+const envApiUrl = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE_URL = envApiUrl || 'https://api.inseat.achievengine.com';
+
+// Log the API URL being used for debugging
+console.log('Using API base URL from main constants:', API_BASE_URL);
 
 // Other application constants
 export const APP_NAME = 'InSeat Menu';

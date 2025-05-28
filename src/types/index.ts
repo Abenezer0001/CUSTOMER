@@ -68,6 +68,7 @@ export interface CartItemModifier {
 
 export interface Order {
   id: string;
+  _id?: string; // MongoDB ObjectId format for backend compatibility
   orderNumber: string;
   items: CartItem[];
   subtotal: number;

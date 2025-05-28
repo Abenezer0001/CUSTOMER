@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useOrders } from '@/context/OrdersContext';
 import { Button } from '@/components/ui/button';
@@ -21,14 +21,23 @@ const Account: React.FC = () => {
   const navigate = useNavigate();
   const { tableId } = useTableInfo();
   
+  const { pathname } = window.location;
+  
+  // Handle navigation in useEffect to avoid side effects during render
+  useEffect(() => {
+    if (!user) {
+      // Store the current path to redirect back after login
+      if (pathname !== '/login') {
+        navigate('/login', { state: { from: pathname }, replace: true });
+      } else {
+        navigate('/login', { replace: true });
+      }
+    }
+  }, [user, pathname, navigate]);
+  
+  // If no user, don't render anything (will be redirected by the effect)
   if (!user) {
-    return (
-      <div className="container mx-auto px-4 py-8 mt-16 text-center">
-        <h2 className="text-xl font-medium mb-4">User not found</h2>
-        <p className="text-muted-foreground mb-6">Please log in to view your account</p>
-        <Button onClick={() => navigate('/login')}>Go to Login</Button>
-      </div>
-    );
+    return null;
   }
   
   // Get initials for avatar fallback
@@ -42,9 +51,24 @@ const Account: React.FC = () => {
     return (firstInitial + lastInitial).toUpperCase();
   };
   
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      // Call the logout function from auth context
+      await logout();
+      
+      // Clear any table-related data from localStorage
+      localStorage.removeItem('tableInfo');
+      
+      // Redirect to home page
+      toast.success('Logged out successfully');
+      navigate('/', { replace: true });
+    } catch (error) {
+      console.error('Error during logout:', error);
+      toast.error('There was an issue logging out');
+      
+      // Still redirect to home even on error
+      navigate('/', { replace: true });
+    }
   };
   
   // Mock function to redeem points (in a real app, this would call an API)
@@ -317,7 +341,7 @@ const Account: React.FC = () => {
                             <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 flex justify-between items-center">
                               <div>
                                 <span className="text-sm font-medium">
-                                  Order #{order.id.substring(0, 8)}
+                                  Order #{order.id ? order.id.substring(0, 8) : 'Unknown'}
                                 </span>
                                 <span className="text-xs text-muted-foreground block">
                                   {order.timestamp ? format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a') : 'N/A'}
@@ -328,7 +352,7 @@ const Account: React.FC = () => {
                                 order.status === 'delivered' ? 'secondary' :
                                 order.status === 'ready' ? 'outline' : 'secondary'
                               }>
-                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                {order.status ? `${order.status.charAt(0).toUpperCase()}${order.status.slice(1)}` : 'Pending'}
                               </Badge>
                             </div>
                             <CardContent className="p-4">
@@ -350,7 +374,7 @@ const Account: React.FC = () => {
                               <Separator className="my-3" />
                               <div className="flex justify-between font-medium">
                                 <span>Total</span>
-                                <span>${order.total.toFixed(2)}</span>
+                                <span>${(order.total || 0).toFixed(2)}</span>
                               </div>
                             </CardContent>
                           </Card>

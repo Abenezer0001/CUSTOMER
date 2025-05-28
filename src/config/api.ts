@@ -25,12 +25,20 @@ if (missingEnvVars.length > 0) {
   );
 }
 
+// Import the base URL from the main constants file
+import { API_BASE_URL as ConstantsBaseUrl } from '@/constants';
+
+// Extract domain without /api if present
+const baseDomain = typeof ConstantsBaseUrl === 'string' && ConstantsBaseUrl.includes('/api') 
+  ? ConstantsBaseUrl.split('/api')[0] 
+  : ConstantsBaseUrl;
+
 // API configuration
 export const apiConfig: ApiConfig = {
-  baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api',
-  authUrl: import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth',
-  socketUrl: import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001',
-  customerUrl: import.meta.env.VITE_CUSTOMER_URL || 'http://localhost:8080',
+  baseUrl: import.meta.env.VITE_API_BASE_URL || `${baseDomain}/api`,
+  authUrl: import.meta.env.VITE_AUTH_API_URL || `${baseDomain}/api/auth`,
+  socketUrl: import.meta.env.VITE_SOCKET_URL || baseDomain,
+  customerUrl: import.meta.env.VITE_CUSTOMER_URL || 'https://menu.inseat.achievengine.com',
 };
 
 // Export individual URLs for convenience

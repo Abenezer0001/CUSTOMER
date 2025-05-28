@@ -48,6 +48,31 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [navigate]);
   
+  // Helper function to ensure values are strings
+  const ensureString = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return value.toString();
+    // If it's an object, return a meaningful string instead of [object Object]
+    if (typeof value === 'object') {
+      try {
+        // If it has an id property, use that
+        if (value.id) return value.id;
+        // If it has a _id property (MongoDB style), use that
+        if (value._id) return value._id;
+        // Try to stringify it, but catch any circular references
+        const stringified = JSON.stringify(value);
+        if (stringified === '{}') return '';
+        if (stringified.length < 30) return stringified;
+        return '';
+      } catch (e) {
+        console.error('Error stringifying object:', e);
+        return '';
+      }
+    }
+    return String(value);
+  };
+
   // Initialize with saved data or defaults
   const [tableInfo, setTableInfo] = useState<TableInfo>(() => {
     // Try to get table ID from URL search params first
@@ -57,30 +82,56 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // If found in URL, use it and store it
     if (urlTableId) {
       const newTableInfo = { 
-        tableNumber: urlTableId, 
+        tableNumber: ensureString(urlTableId), 
         restaurantName: 'InSeat', 
-        tableId: urlTableId 
+        tableId: ensureString(urlTableId) 
       };
       localStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
+      sessionStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
       return newTableInfo;
     }
     
-    // Otherwise check localStorage
+    // Otherwise check localStorage and sessionStorage
+    const sessionTableInfo = sessionStorage.getItem('tableInfo');
     const savedTableInfo = localStorage.getItem('tableInfo');
+    
+    // Try sessionStorage first (more recent)
+    if (sessionTableInfo) {
+      try {
+        const parsed = JSON.parse(sessionTableInfo);
+        // Ensure all values are strings
+        return {
+          tableNumber: ensureString(parsed.tableNumber),
+          restaurantName: parsed.restaurantName || 'InSeat',
+          tableId: ensureString(parsed.tableId)
+        };
+      } catch (e) {
+        console.error('Error parsing session stored table info:', e);
+        sessionStorage.removeItem('tableInfo');
+      }
+    }
+    
+    // Then try localStorage
     if (savedTableInfo) {
       try {
-        return JSON.parse(savedTableInfo);
+        const parsed = JSON.parse(savedTableInfo);
+        // Ensure all values are strings
+        return {
+          tableNumber: ensureString(parsed.tableNumber),
+          restaurantName: parsed.restaurantName || 'InSeat',
+          tableId: ensureString(parsed.tableId)
+        };
       } catch (e) {
-        console.error('Error parsing stored table info:', e);
+        console.error('Error parsing local stored table info:', e);
         localStorage.removeItem('tableInfo');
       }
     }
     
     // Last resort: use from URL params or defaults
     return { 
-      tableNumber: tableId || '', 
+      tableNumber: ensureString(tableId) || '', 
       restaurantName: 'InSeat', 
-      tableId: tableId || '' 
+      tableId: ensureString(tableId) || '' 
     };
   });
 
@@ -122,42 +173,78 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Only handle URL parameter during initial mount and explicit URL changes
+  // Enhanced URL parameter handling for better persistence across redirects
   useEffect(() => {
     if (!inRouterContext) return;
     
+    // Check URL parameters first (highest priority)
     const urlParams = new URLSearchParams(window.location.search);
     const urlTableId = urlParams.get('table');
     
-    // Only update if:
-    // 1. There's a table ID in the URL
-    // 2. It's different from what we have already
-    // 3. We're not already loading a table
-    if (urlTableId && urlTableId !== tableInfo.tableId && !isLoadingTable) {
-      console.log('URL table ID changed, updating context');
+    // Check localStorage for saved table information
+    const savedTableInfo = localStorage.getItem('tableInfo');
+    const parsedSavedInfo = savedTableInfo ? JSON.parse(savedTableInfo) : null;
+    
+    // Check sessionStorage for even more persistence
+    const sessionTableInfo = sessionStorage.getItem('tableInfo');
+    const parsedSessionInfo = sessionTableInfo ? JSON.parse(sessionTableInfo) : null;
+    
+    // Decision logic for which table ID to use
+    let effectiveTableId = urlTableId;
+    
+    // If no table ID in URL but we have one in storage, use that
+    if (!effectiveTableId) {
+      // First try session storage for most recent value
+      if (parsedSessionInfo && parsedSessionInfo.tableId) {
+        effectiveTableId = parsedSessionInfo.tableId;
+        console.log(`Restoring table ID from sessionStorage: ${effectiveTableId}`);
+      }
+      // Then try localStorage as fallback
+      else if (parsedSavedInfo && parsedSavedInfo.tableId) {
+        effectiveTableId = parsedSavedInfo.tableId;
+        console.log(`Restoring table ID from localStorage: ${effectiveTableId}`);
+      }
+    }
+    
+    // Only update if we have a table ID and it's different from what we have
+    if (effectiveTableId && effectiveTableId !== tableInfo.tableId && !isLoadingTable) {
+      console.log(`Setting table info from effective source: ${effectiveTableId}`);
       
       const updatedInfo = {
         ...tableInfo,
-        tableId: urlTableId,
-        tableNumber: urlTableId
+        tableId: effectiveTableId,
+        tableNumber: effectiveTableId
       };
       
+      // Set in context
       setTableInfo(updatedInfo);
-      debouncedLocalStorageUpdate(updatedInfo);
+      
+      // Store in both localStorage and sessionStorage for maximum persistence
+      localStorage.setItem('tableInfo', JSON.stringify(updatedInfo));
+      sessionStorage.setItem('tableInfo', JSON.stringify(updatedInfo));
       
       // Verify the table
-      verifyTable(urlTableId);
+      verifyTable(effectiveTableId);
+      
+      // If we're on a payment success page, redirect back to table page
+      if (window.location.pathname.includes('/payment/success') || 
+          window.location.pathname.includes('/payment/cancel')) {
+        setTimeout(() => {
+          safeNavigate(`/table/${effectiveTableId}`);
+        }, 1000);
+      }
     }
     
     // Mark initial load as complete
     initialLoadComplete.current = true;
     
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inRouterContext, window.location.search]);
+  }, [inRouterContext, window.location.search, window.location.pathname]);
 
   // Clear table info - used when scanning new QR code
   const clearTableInfo = useCallback(() => {
     localStorage.removeItem('tableInfo');
+    sessionStorage.removeItem('tableInfo');
     setTableInfo(defaultTableInfo);
     setTableVerified(false);
   }, []);
@@ -168,7 +255,15 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     
     if (typeof tableInfoOrFunction === 'function') {
       setTableInfo(prev => {
-        newTableInfo = tableInfoOrFunction(prev);
+        // Get the new table info by calling the function
+        const rawNewTableInfo = tableInfoOrFunction(prev);
+        
+        // Sanitize the values to prevent [object Object]
+        newTableInfo = {
+          tableNumber: ensureString(rawNewTableInfo.tableNumber),
+          restaurantName: rawNewTableInfo.restaurantName || 'InSeat',
+          tableId: ensureString(rawNewTableInfo.tableId)
+        };
         
         // Only update if something changed
         if (JSON.stringify(newTableInfo) !== JSON.stringify(prev)) {
@@ -177,16 +272,31 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             verifyTable(newTableInfo.tableId);
           }
           
+          // Store in both localStorage and sessionStorage
+          localStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
+          sessionStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
+          
           return newTableInfo;
         }
         
         return prev;
       });
     } else {
+      // Sanitize the direct object values
+      const sanitizedTableInfo = {
+        tableNumber: ensureString(tableInfoOrFunction.tableNumber),
+        restaurantName: tableInfoOrFunction.restaurantName || 'InSeat',
+        tableId: ensureString(tableInfoOrFunction.tableId)
+      };
+      
       // Only update if something changed
-      if (JSON.stringify(tableInfoOrFunction) !== JSON.stringify(tableInfo)) {
-        newTableInfo = tableInfoOrFunction;
+      if (JSON.stringify(sanitizedTableInfo) !== JSON.stringify(tableInfo)) {
+        newTableInfo = sanitizedTableInfo;
         setTableInfo(newTableInfo);
+        
+        // Store in both localStorage and sessionStorage
+        localStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
+        sessionStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
         
         // Trigger table verification if table ID changed
         if (newTableInfo.tableId !== tableInfo.tableId) {

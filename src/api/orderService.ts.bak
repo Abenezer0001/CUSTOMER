@@ -1,0 +1,799 @@
+import { API_BASE_URL } from '@/config/constants';
+import { CartItem, Order, OrderStatus, PaymentStatus, CartItemModifier } from '@/types';
+import apiClient from './apiClient';
+import authService, { getEffectiveToken } from '@/api/authService';
+
+// Order type enum to match API
+export enum OrderType {
+  DINE_IN = 'DINE_IN',
+  TAKEOUT = 'TAKEOUT',
+  DELIVERY = 'DELIVERY'
+}
+
+// Order item interface for API
+export interface OrderItem {
+  menuItem: string;
+  name: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
+  specialInstructions?: string;
+  modifiers?: Array<{
+    name: string;
+    price: number;
+  }>;
+}
+
+// Order data interface for API
+export interface OrderData {
+  restaurantId: string;
+  tableId: string;
+  items: OrderItem[];
+  subtotal: number;
+  tax: number;
+  serviceFee: number;
+  tip: number;
+  total: number;
+  orderType: OrderType;
+  specialInstructions?: string;
+}
+
+/**
+ * Response interface for fetching multiple orders
+ */
+interface OrdersResponse {
+  success: boolean;
+  data: {
+    orders: OrderResponseData[];
+    pagination: {
+      total: number;
+      limit: number;
+      page: number;
+      pages: number;
+    };
+  };
+  error?: {
+    message: string;
+    code: string;
+  };
+}
+
+/**
+ * Order data returned from API
+ */
+export interface OrderResponseData {
+  _id: string;
+  orderNumber: string;
+  restaurantId: string;
+  tableId: string;
+  items: OrderItem[];
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  subtotal: number;
+  tax: number;
+  serviceFee: number;
+  tip: number;
+  total: number;
+  orderType: OrderType;
+  specialInstructions?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Response interface for single order operations
+ */
+interface OrderResponse {
+  success: boolean;
+  data: OrderResponseData;
+  error?: {
+    message: string;
+    code: string;
+  };
+}
+
+/**
+ * Response interface for cancelling an order
+ */
+interface CancelOrderResponse {
+  success: boolean;
+  data: {
+    _id: string;
+    status: OrderStatus;
+    updatedAt: string;
+  };
+  error?: {
+    message: string;
+    code: string;
+  };
+}
+
+/**
+ * Response interface for updating order status
+ */
+interface UpdateOrderStatusResponse {
+  success: boolean;
+  data: {
+    _id: string;
+    status: OrderStatus;
+    updatedAt: string;
+  };
+  error?: {
+    message: string;
+    code: string;
+  };
+}
+
+/**
+ * Response interface for updating payment status
+ */
+interface UpdatePaymentStatusResponse {
+  success: boolean;
+  data: {
+    _id: string;
+    paymentStatus: PaymentStatus;
+    updatedAt: string;
+  };
+  error?: {
+    message: string;
+    code: string;
+  };
+}
+
+/**
+ * Extract restaurant ID safely from table ID or use default
+ * Note: This is a fallback function in case restaurantId isn't provided directly
+ */
+const extractRestaurantIdFromTableId = (tableId: string): string => {
+  const [restaurantId] = tableId.split('-');
+  return restaurantId || tableId;
+};
+
+/**
+ * Helper function to generate a stable ID from modifier name
+ */
+const generateModifierId = (name: string): string => {
+  return `mod-${name.toLowerCase().replace(/\s+/g, '-')}`;
+};
+
+/**
+ * Converts API order response to frontend Order type
+ */
+const convertApiOrderToFrontend = (apiOrder: OrderResponseData): Order => ({
+  id: apiOrder._id,
+  orderNumber: apiOrder.orderNumber,
+  items: apiOrder.items.map(item => ({
+    id: item.menuItem,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    specialInstructions: item.specialInstructions,
+    modifiers: item.modifiers?.map(mod => ({
+      id: generateModifierId(mod.name),  // Generate a stable ID from the name
+      name: mod.name,
+      price: mod.price
+    }))
+  })),
+  subtotal: apiOrder.subtotal,
+  tax: apiOrder.tax,
+  serviceFee: apiOrder.serviceFee,
+  tip: apiOrder.tip,
+  total: apiOrder.total,
+  status: apiOrder.status,
+  paymentStatus: apiOrder.paymentStatus,
+  timestamp: new Date(apiOrder.createdAt),
+  tableId: apiOrder.tableId,
+  specialInstructions: apiOrder.specialInstructions
+});
+
+/**
+ * Creates a new order in the system
+ * 
+ * @param cartItems - Array of cart items to be included in the order
+ * @param tableId - ID of the table where the order is placed
+ * @param restaurantId - ID of the restaurant
+ * @param orderData - Optional custom order data
+ * @param navigate - Optional navigation function for redirecting if auth fails
+ * @returns Promise resolving to the created order data or null if authentication fails
+ * @throws Error if API request fails
+ */
+export const createOrder = async (
+  cartItems: CartItem[], 
+  tableId: string, 
+  restaurantId: string,
+  orderData?: OrderData,
+  navigate?: (path: string, options?: any) => void
+): Promise<OrderResponse['data'] | null> => {
+  try {
+    console.log('createOrder called with HttpOnly cookie authentication');
+    console.log('tableId:', tableId);
+    console.log('restaurantId:', restaurantId);
+    
+    // For HttpOnly cookies, we can't check them directly
+    // Instead, we'll make a test request to see if we're authenticated
+    const isAuthenticated = await checkAuthenticationStatus();
+    
+    if (!isAuthenticated) {
+      console.log('User is not authenticated');
+      
+      // Save cart state before redirecting
+      if (cartItems.length > 0) {
+        localStorage.setItem('pendingCart', JSON.stringify({
+          items: cartItems,
+          tableId,
+          restaurantId,
+          specialInstructions: orderData?.specialInstructions || ''
+        }));
+        console.log('Saved cart state to localStorage before redirecting to login');
+      }
+      
+      // Store table ID for later use
+      if (tableId) {
+        localStorage.setItem('currentTableId', tableId);
+        localStorage.setItem('tableInfo', JSON.stringify({ id: tableId }));
+      }
+      
+      // Redirect to login
+      if (navigate) {
+        const returnUrl = tableId ? `/?table=${tableId}` : '/cart';
+        navigate('/login', { state: { returnUrl, tableId } });
+        return null;
+      } else {
+        throw new Error('Authentication required. Please log in to place an order.');
+      }
+    }
+
+    // If we reach here, user is authenticated via HttpOnly cookies
+    // Prepare order data
+    let formattedOrderData = orderData;
+
+    if (!formattedOrderData) {
+      const subtotal = cartItems.reduce((total, item) => {
+        if (item.getItemTotal) {
+          return total + item.getItemTotal();
+        }
+        
+        const modifierPrice = item.modifiers ? 
+          item.modifiers.reduce((sum, mod) => sum + mod.price, 0) : 0;
+        return total + ((item.price + modifierPrice) * item.quantity);
+      }, 0);
+      
+      const taxRate = 0.08;
+      const serviceFeeRate = 0.05;
+      const tax = subtotal * taxRate;
+      const serviceFee = subtotal * serviceFeeRate;
+      const tipAmount = 0;
+      const total = subtotal + tax + serviceFee + tipAmount;
+
+      const formattedItems = cartItems.map(item => {
+        const itemTotal = item.getItemTotal 
+          ? item.getItemTotal() 
+          : (item.price * item.quantity) + (item.modifiers?.reduce((sum, mod) => sum + mod.price, 0) || 0);
+
+        return {
+          menuItem: item.menuItemId || item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: itemTotal,
+          specialInstructions: item.specialInstructions || '',
+          modifiers: item.modifiers?.map(mod => ({
+            name: mod.name,
+            price: mod.price
+          })) || []
+        };
+      });
+
+      const safeRestaurantId = restaurantId === 'InSeat' 
+        ? '65f456b06c9dfd001b6b1234' 
+        : restaurantId || extractRestaurantIdFromTableId(tableId);
+      
+      formattedOrderData = {
+        restaurantId: safeRestaurantId,
+        tableId,
+        items: formattedItems,
+        subtotal,
+        tax,
+        serviceFee,
+        tip: tipAmount,
+        total,
+        orderType: OrderType.DINE_IN,
+        specialInstructions: ''
+      };
+    }
+
+    const completeOrderData = {
+      ...formattedOrderData,
+      status: OrderStatus.PENDING,
+      paymentStatus: PaymentStatus.PENDING,
+      orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    };
+
+    console.log('Sending order request with HttpOnly cookies');
+    
+    // Make the request - cookies will be sent automatically
+    const response = await fetch(`${API_BASE_URL}/api/orders`, {
+            console.log('Saved direct auth token to localStorage');
+            return authData.token;
+          }
+        }
+        
+        // Fallback to creating a guest account if direct auth fails
+        console.log('Direct auth failed or no token returned, attempting guest registration...');
+        
+        // Create a guest account with the table ID
+        const guestData = {
+          email: `guest_${Date.now()}@inseat.com`,
+          password: `guest${Math.random().toString(36).substring(2, 10)}`,
+          firstName: 'Guest',
+          lastName: 'User',
+          tableId: tableId || ''
+        };
+        
+        // Store device ID for future requests
+        if (!localStorage.getItem('device_id')) {
+          const deviceId = `device_${Date.now()}`;
+          localStorage.setItem('device_id', deviceId);
+        }
+        
+        console.log('Attempting to register as guest user:', guestData.email);
+        
+        // Try to register as a guest
+        const registerResponse = await fetch(`${API_BASE_URL}/api/auth/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(guestData),
+          credentials: 'include'
+        });
+        
+        if (registerResponse.ok) {
+          const registerData = await registerResponse.json();
+          console.log('Guest registration successful:', registerData);
+          
+          if (registerData.token) {
+            localStorage.setItem('auth_token', registerData.token);
+            console.log('Saved guest token to localStorage');
+            return registerData.token;
+          }
+        }
+        
+        return null;
+      } catch (error) {
+        console.error('Error during authentication for order placement:', error);
+        return null;
+      }
+    };
+    
+    // Get a token for order placement
+    let token = await getOrderAuthToken();
+    
+    // If we didn't get a token from the auth process, try one more time from storage
+    if (!token) {
+      token = getEffectiveToken();
+    }
+    
+    if (!token) {
+      console.error('Failed to obtain authentication token after multiple attempts');
+      throw new Error('Authentication required. Please log in to place an order.');
+    }
+    
+    console.log('Using authentication token for order creation');
+    
+    // Prepare headers with Authorization token
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+    
+    console.log('Added Authorization header with token:', headers['Authorization'].substring(0, 15) + '...');
+    
+    const fetchResponse = await fetch(`${API_BASE_URL}/api/orders`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(completeOrderData),
+      credentials: 'include' // Essential for sending cookies
+    });
+    
+    if (!fetchResponse.ok) {
+      let errorMessage = `Order creation failed with status: ${fetchResponse.status}`;
+      try {
+        const errorData = await fetchResponse.json();
+        errorMessage = errorData.message || errorMessage;
+      } catch (e) {
+        // If we can't parse the error as JSON, just use the status code
+        console.error('Could not parse error response:', e);
+      }
+      console.error('Fetch API error:', errorMessage);
+      throw new Error(errorMessage);
+    }
+    
+    const data = await fetchResponse.json();
+    console.log('Order created successfully:', data.data);
+    return data.data;
+
+  } catch (error) {
+    console.error('Error in createOrder:', error);
+    if (error instanceof Error) {
+      throw error; 
+    }
+    throw new Error('An unexpected error occurred during order creation.');
+  }
+};
+
+/**
+ * Fetches all orders for the currently authenticated user
+ * 
+ * @returns Promise resolving to orders data with pagination
+ * @throws Error if API request fails
+ */
+export const fetchUserOrders = async (): Promise<OrdersResponse['data']> => {
+  console.log('Fetching user orders...');
+  
+  try {
+    // Get a valid token with automatic refresh if needed
+    const token = await authService.getValidToken();
+    console.log('Token available for orders fetch:', !!token);
+    
+    if (!token) {
+      console.log('No valid token available, user might need to log in');
+      throw new Error('Authentication required');
+    }
+    
+    try {
+      // Try to get user info first with explicit headers
+      console.log('Attempting to fetch user from auth/me endpoint');
+      const userResponse = await apiClient.get('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Extract user data from response
+      const userData = userResponse.data?.user || userResponse.data;
+      
+      if (!userData?.id && !userData?._id) {
+        console.log('Invalid user data received from auth endpoint');
+        throw new Error('Invalid user data received');
+      }
+      
+      // Get user ID from response
+      const userId = userData.id || userData._id;
+      console.log('Fetching orders for user ID:', userId);
+      
+      // Fetch orders for the user with explicit headers
+      const ordersResponse = await apiClient.get(`/api/orders/user/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Handle both response formats: direct array or nested object
+      if (Array.isArray(ordersResponse.data)) {
+        // Direct array response
+        console.log(`Found ${ordersResponse.data.length} orders`); 
+        return {
+          orders: ordersResponse.data,
+          pagination: {
+            total: ordersResponse.data.length,
+            limit: ordersResponse.data.length,
+            page: 1,
+            pages: 1
+          }
+        };
+      } else if (ordersResponse.data?.success) {
+        // Object with success property and nested data
+        return ordersResponse.data.data;
+      } else if (ordersResponse.data && !ordersResponse.data.error) {
+        // Direct object response
+        return {
+          orders: [ordersResponse.data],
+          pagination: {
+            total: 1,
+            limit: 1,
+            page: 1,
+            pages: 1
+          }
+        };
+      }
+      
+      throw new Error(ordersResponse.data?.error?.message || 'Failed to fetch orders');
+    } catch (userError: any) {
+      // If we get here, the /api/auth/me endpoint failed
+      console.error('Failed to get user info from auth endpoint:', userError);
+      
+      // Try to refresh token and retry once
+      if (userError.response?.status === 401) {
+        console.log('Unauthorized error, attempting to refresh token...');
+        const refreshed = await authService.refreshToken();
+        if (refreshed) {
+          const newToken = authService.getToken();
+          if (newToken) {
+            try {
+              console.log('Retrying with new token...');
+              const retryResponse = await apiClient.get('/api/auth/me', {
+                headers: {
+                  'Authorization': `Bearer ${newToken}`
+                }
+              });
+              
+              const retryUserData = retryResponse.data?.user || retryResponse.data;
+              if (retryUserData?.id || retryUserData?._id) {
+                const userId = retryUserData.id || retryUserData._id;
+                console.log('Retry successful, fetching orders with new token...');
+                
+                const ordersResponse = await apiClient.get(`/api/orders/user/${userId}`, {
+                  headers: {
+                    'Authorization': `Bearer ${newToken}`
+                  }
+                });
+                
+                if (ordersResponse.data?.success) {
+                  return ordersResponse.data.data;
+                }
+              }
+            } catch (retryError) {
+              console.error('Retry after token refresh failed:', retryError);
+            }
+          }
+        }
+      }
+      
+      // Try to get user ID from local storage as fallback
+      const localUser = localStorage.getItem('user');
+      if (localUser) {
+        try {
+          const userData = JSON.parse(localUser);
+          if (userData?.id) {
+            console.log('Using user ID from localStorage:', userData.id);
+            const ordersResponse = await apiClient.get(`/api/orders/user/${userData.id}`);
+            
+            if (ordersResponse.data?.success) {
+              return ordersResponse.data.data;
+            }
+          }
+        } catch (parseError) {
+          console.error('Error parsing user data from localStorage:', parseError);
+        }
+      }
+    }
+    
+    // If we have a table ID, try to fetch orders for the table instead
+    const tableId = localStorage.getItem('table_id');
+    if (tableId) {
+      console.log('Fetching orders for table ID:', tableId);
+      
+      try {
+        console.log('Attempting to fetch from /api/orders/table/:tableId endpoint');
+        const tableOrdersResponse = await apiClient.get(`/api/orders/table/${tableId}`);
+        
+        // Handle both response formats: direct array or nested object
+        if (Array.isArray(tableOrdersResponse.data)) {
+          // Direct array response
+          console.log(`Found ${tableOrdersResponse.data.length} orders for table`);
+          return {
+            orders: tableOrdersResponse.data,
+            pagination: {
+              total: tableOrdersResponse.data.length,
+              limit: tableOrdersResponse.data.length,
+              page: 1,
+              pages: 1
+            }
+          };
+        } else if (tableOrdersResponse.data?.success) {
+          // Object with success property
+          return tableOrdersResponse.data.data;
+        } else if (tableOrdersResponse.data && !tableOrdersResponse.data.error) {
+          // Direct object response
+          return {
+            orders: [tableOrdersResponse.data],
+            pagination: {
+              total: 1,
+              limit: 1,
+              page: 1,
+              pages: 1
+            }
+          };
+        }
+      } catch (tableError) {
+        console.error('Error fetching orders for table:', tableError);
+        
+        // Try alternative format
+        console.log('First table endpoint failed, trying alternative format');
+        
+        try {
+          // Try restaurant-based endpoint
+          const restaurantId = localStorage.getItem('restaurant_id') || tableId;
+          console.log(`Trying restaurant-based endpoint with restaurantId ${restaurantId} and tableId ${tableId}`);
+          
+          const altResponse = await apiClient.get(
+            `/api/orders/restaurant/${restaurantId}/table/${tableId}`
+          );
+          
+          // Handle both response formats: direct array or nested object
+          if (Array.isArray(altResponse.data)) {
+            // Direct array response
+            console.log(`Found ${altResponse.data.length} orders for restaurant/table`);
+            return {
+              orders: altResponse.data,
+              pagination: {
+                total: altResponse.data.length,
+                limit: altResponse.data.length,
+                page: 1,
+                pages: 1
+              }
+            };
+          } else if (altResponse.data?.success) {
+            // Object with success property
+            return altResponse.data.data;
+          } else if (altResponse.data && !altResponse.data.error) {
+            // Direct object response
+            return {
+              orders: [altResponse.data],
+              pagination: {
+                total: 1,
+                limit: 1,
+                page: 1,
+                pages: 1
+              }
+            };
+          }
+        } catch (altError) {
+          console.error('Error fetching orders from alternative table endpoint:', altError);
+        }
+      }
+    }
+    
+    // If we get here, we couldn't get orders from any source
+    console.log('No orders found from any source');
+    return {
+      orders: [],
+      pagination: {
+        total: 0,
+        limit: 10,
+        page: 1,
+        pages: 0
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching user orders:', error);
+    // Return empty orders instead of throwing to prevent UI errors
+    return {
+      orders: [],
+      pagination: {
+        total: 0,
+        limit: 10,
+        page: 1,
+        pages: 0
+      }
+    };
+  }
+};
+
+/**
+ * Cancels an existing order
+ * 
+ * @param orderId - ID of the order to cancel
+ * @returns Promise that resolves when the order is cancelled
+ * @throws Error if API request fails
+ */
+export const cancelOrder = async (orderId: string): Promise<void> => {
+  console.log(`Cancelling order ${orderId} (relying on HttpOnly cookies)`);
+  
+  try {
+    // Using apiClient instead of fetch
+    const response = await apiClient.put(`/api/orders/${orderId}/cancel`, {
+      status: OrderStatus.CANCELLED,
+      cancellationReason: 'Customer cancelled order'
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error?.message || 'Failed to cancel order');
+    }
+  } catch (error) {
+    console.error('Error cancelling order:', error);
+    throw error instanceof Error ? error : new Error('Unknown error cancelling order');
+  }
+};
+
+/**
+ * Retrieves an order by its ID
+ * 
+ * @param orderId - ID of the order to retrieve
+ * @returns Promise resolving to the order data
+ * @throws Error if API request fails
+ */
+export const getOrderById = async (orderId: string): Promise<Order> => {
+  console.log(`Fetching order by ID ${orderId} (relying on HttpOnly cookies)`);
+  
+  try {
+    // Using apiClient instead of fetch
+    const response = await apiClient.get(`/api/orders/${orderId}`);
+
+    if (!response.data.success) {
+      throw new Error(response.data.error?.message || 'Failed to fetch order');
+    }
+
+    // Convert API response to frontend Order type
+    return convertApiOrderToFrontend(response.data.data);
+  } catch (error) {
+    console.error('Error fetching order details:', error);
+    throw error instanceof Error ? error : new Error('Unknown error fetching order details');
+  }
+};
+
+/**
+ * Updates the status of an existing order
+ * 
+ * @param orderId - ID of the order to update
+ * @param status - New status to set
+ * @returns Promise resolving to the updated order status data
+ * @throws Error if API request fails
+ */
+export const updateOrderStatus = async (
+  orderId: string,
+  status: OrderStatus
+): Promise<UpdateOrderStatusResponse['data']> => {
+  console.log(`Updating order status for ${orderId} to ${status} (relying on HttpOnly cookies)`);
+  
+  try {
+    // Using apiClient instead of fetch
+    const response = await apiClient.put(`/api/orders/${orderId}/status`, { status });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error?.message || 'Failed to update order status');
+    }
+
+    return response.data.data;
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    throw error instanceof Error ? error : new Error('Unknown error updating order status');
+  }
+};
+
+/**
+ * Updates the payment status of an existing order
+ * 
+ * @param orderId - ID of the order to update
+ * @param paymentStatus - New payment status to set
+ * @returns Promise resolving to the updated payment status data
+ * @throws Error if API request fails
+ */
+export const updatePaymentStatus = async (
+  orderId: string,
+  paymentStatus: PaymentStatus
+): Promise<UpdatePaymentStatusResponse['data']> => {
+  console.log(`Updating payment status for ${orderId} to ${paymentStatus}`);
+  
+  try {
+    // Simulate a successful payment for demo purposes
+    // This prevents the backend ObjectId casting error with device IDs
+    // In a real production system, we would use Stripe or another payment processor
+    
+    // Return a mock success response
+    console.log('Simulating successful payment update');
+    
+    // We can still try the API call for non-device IDs
+    if (!orderId.startsWith('device_')) {
+      try {
+        const response = await apiClient.put(`/api/orders/${orderId}/payment`, { paymentStatus });
+        if (response.data.success) {
+          return response.data.data;
+        }
+      } catch (apiError) {
+        console.warn('API payment update failed, using simulated response', apiError);
+      }
+    }
+    
+    // Use simulated response if API call failed or wasn't attempted
+    return {
+      _id: orderId,
+      paymentStatus: paymentStatus,
+      updatedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error updating payment status:', error);
+    throw new Error(error instanceof Error ? error.message : 'Unknown error updating payment status');
+  }
+};

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { ClipboardList, Clock, ChevronRight, CheckCircle2, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { getEffectiveToken } from '@/api/authService';
+import apiClient from '@/api/apiClient';
 import { Badge } from '@/components/ui/badge';
 import { Link, useNavigate } from 'react-router-dom';
 import TableHeader from '@/components/TableHeader';
@@ -11,6 +13,7 @@ import { PaymentStatus } from '@/types/Order';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { useOrders } from '@/context/OrdersContext';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Format date to relative time
 const formatRelativeTime = (dateString: string) => {
@@ -23,12 +26,12 @@ const formatRelativeTime = (dateString: string) => {
 
 // Status badge component
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-  switch (status.toLowerCase()) {
+  switch (status?.toLowerCase()) {
     case 'pending':
       return <Badge className="bg-amber-500 hover:bg-amber-600">Pending</Badge>;
     case 'processing':
     case 'preparing':
-      return <Badge className="bg-delft-blue hover:bg-delft-blue/90">Preparing</Badge>;
+      return <Badge className="bg-purple-600 hover:bg-purple-700">Preparing</Badge>;
     case 'ready':
       return <Badge className="bg-blue-600 hover:bg-blue-700">Ready</Badge>;
     case 'delivered':
@@ -39,6 +42,21 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
       return <Badge className="bg-destructive hover:bg-destructive/90">Cancelled</Badge>;
     default:
       return <Badge className="bg-gray-600 hover:bg-gray-700">{status}</Badge>;
+  }
+};
+
+const PaymentStatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  switch (status?.toLowerCase()) {
+    case 'paid':
+      return <Badge className="bg-green-600 hover:bg-green-700">Paid</Badge>;
+    case 'pending':
+      return <Badge className="bg-amber-500 hover:bg-amber-600">Payment Pending</Badge>;
+    case 'failed':
+      return <Badge className="bg-destructive hover:bg-destructive/90">Payment Failed</Badge>;
+    case 'refunded':
+      return <Badge className="bg-blue-600 hover:bg-blue-700">Refunded</Badge>;
+    default:
+      return null;
   }
 };
 
@@ -54,20 +72,54 @@ const MyOrders: React.FC = () => {
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [processingPaymentOrderId, setProcessingPaymentOrderId] = useState<string | null>(null);
   
-  // Directly use orders from context when available
+  // Order card skeleton component
+  const OrderCardSkeleton = () => (
+    <div className="p-4 rounded-xl bg-[#1F1D2B]/70 border border-purple-500/10 backdrop-blur-sm mb-4">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-6 w-20" />
+          </div>
+          <div className="flex items-center mt-1">
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+        <Skeleton className="h-6 w-16" />
+      </div>
+      
+      <div className="space-y-2.5 mb-4 border-t border-purple-500/10 pt-3">
+        <div className="flex justify-between text-sm">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <div className="flex justify-between text-sm">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <div className="flex justify-between text-sm">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+      </div>
+      
+      <div className="flex gap-2 mt-3 pt-3 border-t border-purple-500/10">
+        <Skeleton className="h-9 w-full" />
+      </div>
+    </div>
+  );
+
+  // Fetch orders on component mount
   useEffect(() => {
-    if (contextOrders && contextOrders.length > 0) {
-      console.log(`Using ${contextOrders.length} orders from context`);
-      setOrders(contextOrders);
-      setLoading(false);
-      return;
-    }
-    
-    // Fetch orders on component mount if not available in context
     const loadOrders = async () => {
       try {
-        // Check if we have a token, even for guest users
-        const token = localStorage.getItem('auth_token');
+        // Always set loading to true first and clear previous orders
+        setLoading(true);
+        setOrders([]);
+        setError(null);
+        
+        // Check authentication using getEffectiveToken
+        const token = getEffectiveToken();
         if (!token) {
           console.log('No token found, redirecting to login');
           navigate('/login', { state: { returnUrl: '/my-orders' } });
@@ -75,99 +127,220 @@ const MyOrders: React.FC = () => {
           return;
         }
         
-        setLoading(true);
-        setError(null);
+        // Use apiClient instead of direct fetch
+        const response = await apiClient.get('/api/orders/my-orders');
         
-        // Get tableId from URL query params if available
-        const params = new URLSearchParams(location.search);
-        const tableIdFromUrl = params.get('table');
-        // No need to set table ID here as it's handled by the TableContext
+        // Response will already be JSON parsed by axios
+        const responseData = response.data;
         
-        // Fetch orders using the token (works for both registered and guest users)
-        const response = await fetchUserOrders();
+        // Handle different response formats
+        let ordersData = [];
+        if (Array.isArray(responseData)) {
+          ordersData = responseData;
+        } else if (responseData.orders && Array.isArray(responseData.orders)) {
+          ordersData = responseData.orders;
+        } else if (responseData.data && responseData.data.orders && Array.isArray(responseData.data.orders)) {
+          ordersData = responseData.data.orders;
+        }
         
-        if (response) {
-          // Check if response is an array (direct API response) or has an orders property
-          const ordersData = Array.isArray(response) ? response : (response.orders || []);
-          console.log(`Processing ${ordersData.length} orders from API response`);
-          
-          const formattedOrders = ordersData.map((order: any) => ({
-            ...order,
-            totalAmount: order.total || 0,
-            items: order.items || [],
-            status: order.status || 'PENDING',
-            createdAt: new Date(order.createdAt || Date.now()).toLocaleString()
-          }));
-          
-          setOrders(formattedOrders);
-          setLoading(false);
-        } else {
-          console.error('Invalid response format:', response);
-          setError(new Error('Failed to fetch orders'));
+        console.log(`Fetched ${ordersData.length} orders from API`);
+        
+        // Format orders with proper types and defaults
+        const formattedOrders = ordersData.map((order: any) => ({
+          ...order,
+          _id: order._id || order.id || `order-${Math.random().toString(36).substr(2, 9)}`,
+          orderNumber: order.orderNumber || `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          totalAmount: order.total || order.totalAmount || 0,
+          items: order.items || [],
+          status: order.status || 'PENDING',
+          paymentStatus: order.paymentStatus || 'PENDING',
+          createdAt: order.createdAt || new Date().toISOString(),
+          updatedAt: order.updatedAt || new Date().toISOString()
+        }));
+        
+        // Update state with the fetched orders
+        setOrders(formattedOrders);
+        
+        // If no orders found, show a message
+        if (formattedOrders.length === 0) {
+          console.log('No orders found for this user');
         }
       } catch (err) {
         console.error('Error loading orders:', err);
-        setError(err instanceof Error ? err : new Error('Failed to load orders'));
+        
+        // Handle authentication errors
+        if (err.response?.status === 401) {
+          console.log('Authentication failed, redirecting to login');
+          navigate('/login', { state: { returnUrl: '/my-orders' } });
+          return;
+        }
+        
+        setError(err instanceof Error ? err.message : 'Failed to load orders');
       } finally {
         setLoading(false);
       }
     };
 
     loadOrders();
-  }, [navigate, location.search]);
+  }, [navigate]);
   
-  // Use orders from context if available
+  // Handle post-login payment processing
   useEffect(() => {
-    if (contextOrders && contextOrders.length > 0) {
-      console.log(`Using ${contextOrders.length} orders from context`);
-      setOrders(contextOrders);
-      setLoading(false);
-    }
-  }, [contextOrders]);
+    const processPendingPayment = async () => {
+      const pendingOrderId = localStorage.getItem('pendingPaymentOrderId');
+      if (pendingOrderId && token) {
+        localStorage.removeItem('pendingPaymentOrderId');
+        handlePayOrder(pendingOrderId);
+      }
+    };
+
+    processPendingPayment();
+  }, [token]); // Run when token changes
+  
+  // We're now always fetching from API, so we don't need to use context orders
+  // Remove this effect to prevent showing stale data during loading
   
   // Handle order payment using Stripe Checkout
   const handlePayOrder = async (orderId: string) => {
     try {
+      // Get token using authService's getEffectiveToken
+      const token = getEffectiveToken();
       if (!token) {
-        toast.error('Authentication required to pay for order');
+        // Save order ID for after login
+        localStorage.setItem('pendingPaymentOrderId', orderId);
+        
+        // Redirect to login
+        navigate('/login', { 
+          state: { 
+            from: '/my-orders',
+            orderId 
+          } 
+        });
         return;
       }
       
       setProcessingPaymentOrderId(orderId);
+      console.log('Payment requested for order ID:', orderId);
       
-      // Find the order to pay for
-      const orderToPay = orders.find(order => order._id === orderId);
+      // Find the order to pay
+      const orderToPay = orders.find(order => order.id === orderId || order._id === orderId);
       if (!orderToPay) {
         toast.error('Order not found');
         return;
       }
+      
+      // Use the _id field if it exists (MongoDB ObjectId) or fall back to id
+      const effectiveOrderId = orderToPay._id || orderToPay.id || orderId;
+      console.log('Using effective order ID for payment:', effectiveOrderId);
 
       try {
-        // Try to create a Stripe checkout session
-        // Using dynamic import to avoid dependency issues if Stripe service is not available
-        const { createStripeCheckout } = await import('@/api/stripeService');
-        const checkoutUrl = await createStripeCheckout(orderId, orderToPay);
+        // Extract required data from the order for the checkout session
+        const cartItems = orderToPay.items || [];
+        const tableId = orderToPay.tableId || '';
+        const restaurantId = orderToPay.restaurantId || '';
         
-        // Redirect to Stripe checkout
-        window.location.href = checkoutUrl;
-      } catch (stripeError) {
-        console.warn('Stripe checkout failed, falling back to direct payment:', stripeError);
+        // Format line items for Stripe - this is the expected format for the backend
+        const lineItems = cartItems.map(item => {
+          // Calculate the total price including modifiers
+          const modifierPrice = item.modifiers 
+            ? item.modifiers.reduce((sum, mod) => sum + mod.price, 0) 
+            : 0;
+          
+          const totalItemPrice = (item.price + modifierPrice) * 100; // Convert to cents for Stripe
+          
+          // Format description including modifiers
+          let description = item.name;
+          if (item.modifiers && item.modifiers.length > 0) {
+            const modifierNames = item.modifiers.map(mod => mod.name).join(', ');
+            description += ` with ${modifierNames}`;
+          }
+          if (item.specialInstructions) {
+            description += `. Note: ${item.specialInstructions}`;
+          }
+          
+          return {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: item.name,
+                description: description,
+                images: item.image ? [item.image] : undefined
+              },
+              unit_amount: totalItemPrice // Amount in cents
+            },
+            quantity: item.quantity
+          };
+        });
         
-        // Fallback: Update payment status directly
-        const { updateOrderPaymentStatus } = await import('@/api/stripeService');
-        await updateOrderPaymentStatus(orderId, PaymentStatus.PAID);
+        console.log('Creating checkout session with:', {
+          lineItems: lineItems.length,
+          tableId,
+          restaurantId,
+          orderId: effectiveOrderId
+        });
         
-        // Refresh orders after payment
-        const response = await fetchUserOrders();
-        if (response) {
-          // Check if response is an array (direct API response) or has an orders property
-          const ordersData = Array.isArray(response) ? response : (response.orders || []);
-          setOrders(ordersData);
-          toast.success('Payment successful!');
+        // Create Stripe checkout session using apiClient
+        const response = await apiClient.post('/api/payments/create-checkout-session', {
+          lineItems,
+          tableId,
+          restaurantId,
+          orderId: effectiveOrderId, // Pass this for reference
+          successUrl: `${window.location.origin}/payment/success?order_id=${effectiveOrderId}`,
+          cancelUrl: `${window.location.origin}/payment/cancel?order_id=${effectiveOrderId}`
+        });
+
+        if (!response.data.success) {
+          throw new Error(response.data.error?.message || 'Failed to create payment session');
         }
+
+        // Store the session information
+        if (response.data.sessionId) {
+          localStorage.setItem('stripeSessionId', response.data.sessionId);
+          localStorage.setItem('currentPaymentOrderId', effectiveOrderId);
+        }
+
+        // Redirect to Stripe checkout
+        if (response.data.url) {
+          window.location.href = response.data.url;
+        } else {
+          throw new Error('No checkout URL received');
+        }
+      } catch (error) {
+        console.error('Payment session creation failed:', error);
+        
+        if (error.response?.status === 401) {
+          toast.error('Please log in again to complete payment');
+          navigate('/login', { 
+            state: { 
+              from: '/my-orders',
+              orderId 
+            } 
+          });
+          return;
+        }
+
+        // If Stripe is not available, try direct payment update
+        // Don't update payment status here - webhook will handle this
+        toast.error('Payment service is currently unavailable. Please try again later.');
+        // Log for debugging purposes
+        console.log('Falling back to manual payment flow is disabled - payment should be processed by Stripe');
+
       }
     } catch (err) {
       console.error('Error processing payment:', err);
+      
+      // Check if error is due to authentication
+      if (err.response?.status === 401) {
+        toast.error('Please log in again to complete payment');
+        navigate('/login', { 
+          state: { 
+            from: '/my-orders',
+            orderId 
+          } 
+        });
+        return;
+      }
+      
       toast.error('Failed to process payment. Please try again.');
     } finally {
       setProcessingPaymentOrderId(null);
@@ -177,24 +350,54 @@ const MyOrders: React.FC = () => {
   // Handle order cancellation
   const handleCancelOrder = async (orderId: string) => {
     try {
+      // Check authentication using getEffectiveToken
+      const token = getEffectiveToken();
       if (!token) {
-        toast.error('Authentication required to cancel order');
+        console.log('No token found, redirecting to login');
+        navigate('/login', { 
+          state: { 
+            returnUrl: '/my-orders',
+            orderId 
+          } 
+        });
         return;
       }
       
       setCancellingOrderId(orderId);
-      await cancelOrder(orderId);
       
-      // Refresh orders after cancellation
-      const response = await fetchUserOrders();
-      if (response) {
-        // Check if response is an array (direct API response) or has an orders property
-        const ordersData = Array.isArray(response) ? response : (response.orders || []);
-        setOrders(ordersData);
-        toast.success('Order cancelled successfully');
+      // Use apiClient for cancellation
+      await apiClient.post(`/api/orders/${orderId}/cancel`);
+      
+      // Refresh orders after cancellation using apiClient
+      const response = await apiClient.get('/api/orders/my-orders');
+      
+      // Handle different response formats
+      let ordersData = [];
+      if (Array.isArray(response.data)) {
+        ordersData = response.data;
+      } else if (response.data.orders) {
+        ordersData = response.data.orders;
+      } else if (response.data.data?.orders) {
+        ordersData = response.data.data.orders;
       }
+      
+      setOrders(ordersData);
+      toast.success('Order cancelled successfully');
     } catch (err) {
       console.error('Error cancelling order:', err);
+      
+      // Handle authentication errors
+      if (err.response?.status === 401) {
+        toast.error('Please log in again to cancel the order');
+        navigate('/login', { 
+          state: { 
+            returnUrl: '/my-orders',
+            orderId 
+          } 
+        });
+        return;
+      }
+      
       setError('Failed to cancel order. Please try again.');
       toast.error('Failed to cancel order');
     } finally {
@@ -204,31 +407,53 @@ const MyOrders: React.FC = () => {
 
   // Refresh orders
   const refreshOrders = async () => {
-    if (!token) return;
-    
     try {
-      setLoading(true);
-      const response = await fetchUserOrders();
-      if (response) {
-        // Check if response is an array (direct API response) or has an orders property
-        const ordersData = Array.isArray(response) ? response : (response.orders || []);
-        setOrders(ordersData);
-        setError(null);
+      // Check authentication using getEffectiveToken
+      const token = getEffectiveToken();
+      if (!token) {
+        console.log('No token found, redirecting to login');
+        navigate('/login', { state: { returnUrl: '/my-orders' } });
+        return;
       }
+
+      setLoading(true);
+      const response = await apiClient.get('/api/orders/my-orders');
+      
+      // Handle different response formats
+      let ordersData = [];
+      if (Array.isArray(response.data)) {
+        ordersData = response.data;
+      } else if (response.data.orders) {
+        ordersData = response.data.orders;
+      } else if (response.data.data?.orders) {
+        ordersData = response.data.data.orders;
+      }
+      
+      setOrders(ordersData);
+      setError(null);
     } catch (err) {
       console.error('Error refreshing orders:', err);
+      
+      // Handle authentication errors
+      if (err.response?.status === 401) {
+        console.log('Authentication failed, redirecting to login');
+        navigate('/login', { state: { returnUrl: '/my-orders' } });
+        return;
+      }
+      
       setError('Failed to refresh orders. Please try again.');
+      toast.error('Failed to refresh orders');
     } finally {
       setLoading(false);
     }
   };
   
   return (
-    <div className="min-h-screen bg-raisin-black text-white animate-fade-in pb-20">
+    <div className="min-h-screen bg-[#16141F] text-white animate-fade-in pb-20">
       {/* Use the same TableHeader as the menu page */}
       <TableHeader 
         venueName={restaurantName || 'Restaurant'}
-        className="bg-raisin-black text-white"
+        className="bg-[#16141F] text-white"
       />
       
       <div className="container px-4 py-8 mt-16 animate-fade-in">
@@ -236,26 +461,27 @@ const MyOrders: React.FC = () => {
           <h1 className="text-2xl font-bold">My Orders</h1>
           <Button 
             variant="outline" 
-            className="border-delft-blue text-delft-blue hover:bg-delft-blue/10"
+            className="border-purple-600 text-purple-400 hover:bg-purple-600/10 hover:text-purple-300 transition-colors"
             onClick={refreshOrders}
             disabled={loading}
           >
             <RefreshCw size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <span>Refresh</span>
           </Button>
         </div>
-
-
         
         {loading ? (
-          <div className="flex justify-center items-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-delft-blue" />
+          // Show skeleton loaders while loading
+          <div className="space-y-4">
+            {[...Array(3)].map((_, index) => (
+              <OrderCardSkeleton key={`skeleton-${index}`} />
+            ))}
           </div>
         ) : error ? (
           <div className="bg-destructive/20 border border-destructive text-destructive p-4 rounded-xl mb-6">
             <div className="flex items-center">
               <AlertTriangle className="h-5 w-5 mr-2" />
-              <p>{error?.message || error}</p>
+              <p>{typeof error === 'string' ? error : 'Failed to load orders'}</p>
             </div>
           </div>
         ) : orders.length === 0 ? (
@@ -273,26 +499,33 @@ const MyOrders: React.FC = () => {
             {orders.map(order => (
               <div 
                 key={order._id} 
-                className="bg-night border border-delft-blue rounded-lg p-4 animate-slide-up"
+                className="bg-[#1F1D2B] border border-purple-500/20 rounded-xl p-5 animate-slide-up shadow-lg hover:shadow-purple-500/10 transition-all duration-300"
               >
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium">Order #{order._id ? order._id.slice(-6) : order.orderNumber || "Unknown"}</h3>
+                      <h3 className="font-medium text-purple-100">Order #{order._id ? order._id.slice(-6) : order.orderNumber || "Unknown"}</h3>
                       <StatusBadge status={order.status} />
                     </div>
-                    <p className="text-sm text-gray-400">
+                    <p className="text-sm text-purple-300/80 flex items-center mt-1">
+                      <Clock className="h-3.5 w-3.5 mr-1.5 text-purple-400/70" />
                       {formatRelativeTime(order.createdAt)}
                     </p>
                   </div>
-                  <span className="font-bold">${(order.totalAmount || 0).toFixed(2)}</span>
+                  <span className="font-bold text-lg bg-gradient-to-r from-purple-500 to-purple-600 bg-clip-text text-transparent">
+                    ${(order.totalAmount || order.total || 0).toFixed(2)}
+                  </span>
                 </div>
                 
-                <div className="space-y-2 mb-3">
+                <div className="space-y-2.5 mb-4 border-t border-purple-500/10 pt-3">
                   {order.items && order.items.slice(0, 3).map((item: any, idx: number) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span>{item.quantity}× {item.name}</span>
-                      <span>${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
+                    <div key={idx} className="flex justify-between text-sm group">
+                      <span className="text-purple-100 group-hover:text-white transition-colors">
+                        {item.quantity}× {item.name}
+                      </span>
+                      <span className="text-purple-300 font-medium">
+                        ${((item.price || 0) * (item.quantity || 1)).toFixed(2)}
+                      </span>
                     </div>
                   ))}
                   
@@ -301,12 +534,24 @@ const MyOrders: React.FC = () => {
                       +{order.items.length - 3} more items
                     </p>
                   )}
+                  
+                  {/* Payment status as text */}
+                  {order.paymentStatus && (
+                    <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t border-purple-500/10">
+                      <span className="text-gray-400">Payment Status</span>
+                      <span className={`font-medium ${order.paymentStatus.toLowerCase() === 'paid' ? 'text-purple-400' : 
+                        order.paymentStatus.toLowerCase() === 'failed' ? 'text-red-400' : 
+                        order.paymentStatus.toLowerCase() === 'refunded' ? 'text-blue-400' : 'text-amber-400'}`}>
+                        {order.paymentStatus}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 
-                <div className="flex items-center justify-between border-t border-delft-blue pt-3">
+                <div className="flex items-center justify-between border-t border-purple-500/10 pt-3">
                   <Button 
                     variant="link" 
-                    className="p-0 h-auto text-delft-blue"
+                    className="p-0 h-auto text-purple-400 hover:text-purple-300 transition-colors"
                     onClick={() => navigate('/order-confirmation', { state: { orderId: order._id } })}
                   >
                     <span className="flex items-center">
@@ -317,7 +562,7 @@ const MyOrders: React.FC = () => {
                   
                   <div className="flex gap-2">
                     {/* Add Pay Now button for orders with pending payment */}
-                    {(order.paymentStatus?.toLowerCase() === 'pending' || !order.paymentStatus) && (
+                    {((order.paymentStatus || '').toLowerCase() === 'pending' || !order.paymentStatus) && (
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -331,7 +576,7 @@ const MyOrders: React.FC = () => {
                       </Button>
                     )}
                     
-                    {order.status.toLowerCase() === 'pending' && (
+                    {(order.status || '').toLowerCase() === 'pending' && (
                       <Button 
                         variant="outline" 
                         size="sm"

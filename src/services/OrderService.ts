@@ -1,6 +1,16 @@
 import { Order, CartItem, OrderStatus, PaymentStatus } from '@/types';
 import { toast } from 'sonner';
 import { AuthService } from './AuthService';
+import apiClient from '@/api/apiClient';
+
+// Extract base URL without any trailing /api to prevent double prefixes
+let API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// Remove any trailing /api if present to avoid double prefix
+if (API_BASE.endsWith('/api')) {
+  API_BASE = API_BASE.slice(0, -4);
+}
+const API_URL = `${API_BASE}/api`;
+console.log('Order Service API URL:', API_URL);
 
 // Simulate API delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
