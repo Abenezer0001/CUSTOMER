@@ -384,38 +384,11 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
           xhr.send(JSON.stringify(constructedOrderData));
         });
         
-        console.log('Order placed successfully:', result);
-        toast.success('Order placed successfully!');
-      
-      // Check authentication status before attempting to create order
-      if (!isAuthenticated) {
-        // Store cart state for retrieval after login
-        localStorage.setItem('pendingCart', JSON.stringify({
-          items: cartItems,
-          tableId,
-          restaurantId: localRestaurantId
-        }));
-        
-        // Redirect to login with return URL
-        toast.error('Please log in to place an order');
-        onClose(); // Close the cart drawer
-        navigate(`/login?returnTo=/table/${tableId}`);
-        return null;
-      }
-      
-      // Use the enhanced createOrder function from orderService
-      const result = await createOrder(cartItems, tableId, localRestaurantId, constructedOrderData, navigate);
-      
-      if (!result) {
-        console.log('Order creation returned null - authentication failed and user redirected');
-        return null;
-      }
-      
-      console.log('Order placed successfully:', result);
-      toast.success('Order placed successfully!');
-    
-      // Transform OrderResponseData to Order type for the context
-      const orderForContext: Order = {
+  console.log('Order placed successfully:', result);
+  toast.success('Order placed successfully!');
+  
+  // Transform OrderResponseData to Order type for the context
+  const orderForContext: Order = {
         id: result._id, // Map _id to id
         orderNumber: result.orderNumber,
         // Ensure items are compatible with CartItem[]

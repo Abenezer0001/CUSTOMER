@@ -1,0 +1,131 @@
+const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
+  const { cartItems, removeFromCart: removeItem, updateQuantity, clearCart, cartTotal: subtotal } = useCart();
+  const { tableId, restaurantName } = useTableInfo();
+  const { isAuthenticated, token } = useAuth();
+  const { addOrder } = useOrders();
+  const navigate = useNavigate();
+  
+  const handleGuestLogin = React.useCallback(async (tableId: string) => {
+    try {
+      console.log('Attempting guest login with tableId:', tableId);
+      
+      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || '/api/auth';
+      
+      const response = await fetch(, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tableId: tableId || '',
+          deviceId: localStorage.getItem('device_id') || 
+        }),
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.token) {
+          console.log('Guest token received:', data.token.substring(0, 10) + '...');
+          
+          localStorage.setItem('auth_token', data.token);
+          document.cookie = ;
+          document.cookie = ;
+          
+          return true;
+        }
+      }
+      
+      console.error('Guest login failed: No token in response');
+      return false;
+    } catch (error) {
+      console.error('Guest login error:', error);
+      return false;
+    }
+  }, []);
+
+  const [stage, setStage] = useState<'cart' | 'checkout'>('cart');
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState('');
+  const [orderType, setOrderType] = useState<OrderType>(OrderType.DINE_IN);
+  
+  const processOrder = async () => {
+    try {
+      console.log('Using XMLHttpRequest for order creation...');
+      
+      const result = await new Promise<OrderResponseData>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || 'https://api.inseat.achievengine.com/api/orders';
+        xhr.open('POST', orderApiUrl, true);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        
+        if (token) {
+          xhr.setRequestHeader('Authorization', );
+          console.log('Added Authorization header with token');
+        }
+        
+        xhr.onload = function() {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const parsedResponse = JSON.parse(xhr.responseText);
+            if (parsedResponse._id) {
+              resolve(parsedResponse);
+            } else if (parsedResponse.success) {
+              resolve(parsedResponse.data);
+            } else {
+              reject(new Error(parsedResponse.error?.message || 'Order creation failed'));
+            }
+          } else {
+            reject(new Error());
+          }
+        };
+        
+        xhr.onerror = () => reject(new Error('Network error occurred'));
+        xhr.send(JSON.stringify(constructedOrderData));
+      });
+      
+      console.log('Order created successfully:', result);
+      
+      const orderForContext: Order = {
+        id: result._id,
+        orderNumber: result.orderNumber,
+        items: result.items.map(apiItem => ({
+          id: apiItem.menuItem,
+          menuItemId: apiItem.menuItem,
+          name: apiItem.name,
+          price: apiItem.price,
+          quantity: apiItem.quantity,
+          specialInstructions: apiItem.specialInstructions,
+          modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || []
+        })),
+        subtotal: result.subtotal,
+        tax: result.tax,
+        serviceFee: result.serviceFee,
+        tip: result.tip,
+        total: result.total,
+        status: result.status,
+        paymentStatus: result.paymentStatus,
+        timestamp: new Date(result.createdAt),
+        tableId: result.tableId,
+        specialInstructions: result.specialInstructions
+      };
+      
+      addOrder(orderForContext);
+      localStorage.setItem('pending_order_id', result._id);
+      clearCart();
+      onClose();
+      
+      toast.success('Order placed successfully!');
+      
+      setTimeout(() => {
+        navigate();
+      }, 1000);
+    } catch (error) {
+      console.error('Error in order creation process:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create your order');
+      setIsProcessing(false);
+      setError(error instanceof Error ? error.message : 'Failed to create your order');
+      throw error;
+    }
+  };
