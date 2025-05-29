@@ -2,10 +2,12 @@ import axios, { AxiosError, AxiosResponse } from 'axios';
 import { getEffectiveToken } from './authService';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = 'https://api.inseat.achievengine.com/api/auth';
+const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL;
 
 // Extract the base URL without the auth path
-const BASE_URL = API_BASE_URL.split('/api/auth')[0] || 'https://api.inseat.achievengine.com';
+const BASE_URL = API_BASE_URL.includes('/api/auth') 
+  ? API_BASE_URL.split('/api/auth')[0] 
+  : API_BASE_URL;
 
 // Customer API endpoint is at /api/customer
 const CUSTOMER_API_ENDPOINT = `${BASE_URL}/api/customer`;
@@ -205,43 +207,53 @@ const customerAuthService = {
   // Get current customer profile
   async getCurrentUser(): Promise<AuthResponse> {
     try {
-      // Check for tokens in both cookies and localStorage
+      console.log('Checking authentication status...');
+      console.log('Document cookies:', document.cookie);
+      
+      // Log all cookies for debugging
       const cookies = document.cookie.split(';').map(c => c.trim());
+      console.log('Parsed cookies:', cookies);
+      
+      // Check for tokens in both cookies and localStorage
       const accessTokenCookie = cookies.find(c => c.startsWith('access_token='));
+      const refreshTokenCookie = cookies.find(c => c.startsWith('refresh_token='));
       const authTokenCookie = cookies.find(c => c.startsWith('auth_token='));
+      const localToken = localStorage.getItem('auth_token');
       
-      // Determine which token to use
-      let token = null;
-      let tokenSource = '';
+      console.log('access_token cookie exists:', !!accessTokenCookie);
+      console.log('refresh_token cookie exists:', !!refreshTokenCookie);
+      console.log('auth_token cookie exists:', !!authTokenCookie);
+      console.log('localStorage token exists:', !!localToken);
       
+      // If there's no token in localStorage but we have cookie tokens, we'll still try the request
+      // The cookies will be sent automatically due to withCredentials: true
+      
+      // For debugging, we'll include any token we have in the Authorization header
+      // Though with httpOnly cookies, the browser will automatically include them
+      let explicitToken = null;
       if (accessTokenCookie) {
-        token = accessTokenCookie.split('=')[1];
-        tokenSource = 'access_token cookie';
+        explicitToken = accessTokenCookie.split('=')[1];
+        console.log('Using access_token cookie for explicit Authorization header');
       } else if (authTokenCookie) {
-        token = authTokenCookie.split('=')[1];
-        tokenSource = 'auth_token cookie';
-      } else {
-        token = localStorage.getItem('auth_token');
-        tokenSource = 'localStorage';
+        explicitToken = authTokenCookie.split('=')[1];
+        console.log('Using auth_token cookie for explicit Authorization header');
+      } else if (localToken) {
+        explicitToken = localToken;
+        console.log('Using localStorage token for explicit Authorization header');
       }
       
-      if (!token) {
-        console.log('No token available, user is not authenticated');
-        return {
-          success: false,
-          message: 'Not authenticated'
+      // Make the request, letting cookies be sent automatically
+      // Only add explicit Authorization header if we have a token to use
+      const requestConfig: any = { withCredentials: true };
+      
+      if (explicitToken) {
+        requestConfig.headers = {
+          Authorization: `Bearer ${explicitToken}`
         };
       }
       
-      console.log(`Using token from ${tokenSource} for authentication`);
-      
-      // Make the request with explicit Authorization header and credentials
-      const response = await api.get('/me', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        withCredentials: true // Ensure cookies are sent
-      });
+      console.log('Making /me request with config:', requestConfig);
+      const response = await api.get('/me', requestConfig);
       
       console.log('Current user retrieved successfully:', response.data);
       

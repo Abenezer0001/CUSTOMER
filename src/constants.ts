@@ -1,7 +1,7 @@
 // API Configuration
 // Get API URL from environment variables with fallback to production URL
 const envApiUrl = import.meta.env.VITE_API_BASE_URL;
-export const API_BASE_URL = envApiUrl || 'https://api.inseat.achievengine.com';
+export const API_BASE_URL = envApiUrl;
 
 // Log the API URL being used for debugging
 console.log('Using API base URL from main constants:', API_BASE_URL);

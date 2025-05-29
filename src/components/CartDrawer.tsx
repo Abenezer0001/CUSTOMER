@@ -296,97 +296,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         console.log('Saved token to localStorage');
       }
       
-      try {
-        // Use XMLHttpRequest which might handle CORS differently than fetch
-        console.log('Using XMLHttpRequest for order creation...');
-        
-        // Create a promise wrapper around XMLHttpRequest with proper typing
-        const result = await new Promise<OrderResponseData>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || 'https://api.inseat.achievengine.com/api/orders';
-          xhr.open('POST', orderApiUrl, true);
-          xhr.withCredentials = true; // Essential for sending cookies
-          xhr.setRequestHeader('Content-Type', 'application/json');
-          
-          // Add Authorization header if token is available
-          if (token) {
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-            console.log('Added Authorization header with token');
-          } else {
-            console.warn('No token available for Authorization header');
-            
-            // Last attempt to get token from cookies directly
-            const cookieToken = document.cookie
-              .split(';')
-              .find(cookie => cookie.trim().startsWith('auth_token='))
-              ?.split('=')[1];
-              
-            if (cookieToken) {
-              xhr.setRequestHeader('Authorization', `Bearer ${cookieToken}`);
-              console.log('Added Authorization header with cookie token');
-            } else {
-              console.warn('No authentication token available. Order creation may fail.');
-            }
-          }
-          
-          xhr.onload = function() {
-            console.log('XHR response received:', {
-              status: xhr.status,
-              responseText: xhr.responseText
-            });
-            
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                // The response could be in different formats depending on the API
-                const parsedResponse = JSON.parse(xhr.responseText);
-                console.log('Parsed response:', parsedResponse);
-                
-                // Check if response has success property (API v1 format)
-                if (parsedResponse.success !== undefined) {
-                  if (parsedResponse.success) {
-                    resolve(parsedResponse.data);
-                  } else {
-                    console.error('Order creation failed despite 200 status:', parsedResponse.error);
-                    reject(new Error(parsedResponse.error?.message || 'Order creation failed'));
-                  }
-                } 
-                // If no success property but has _id, it's a direct order object (API v2 format)
-                else if (parsedResponse._id) {
-                  console.log('Direct order object returned:', parsedResponse);
-                  // Use the order object directly
-                  resolve(parsedResponse);
-                } 
-                // Unknown response format
-                else {
-                  console.error('Unknown response format:', parsedResponse);
-                  reject(new Error('Unknown response format'));
-                }
-              } catch (e) {
-                console.error('Failed to parse response:', e);
-                reject(new Error('Failed to parse response'));
-              }
-            } else {
-              console.error(`Order creation failed with status: ${xhr.status}`, xhr.responseText);
-              try {
-                const errorData = JSON.parse(xhr.responseText);
-                reject(new Error(errorData.error || `Order creation failed with status: ${xhr.status}`));
-              } catch (e) {
-                reject(new Error(`Order creation failed with status: ${xhr.status}`));
-              }
-            }
-          };
-          
-          xhr.onerror = function() {
-            console.error('XHR error:', xhr);
-            reject(new Error('Network error occurred'));
-          };
-          
-          xhr.send(JSON.stringify(constructedOrderData));
-        });
-        
-        console.log('Order placed successfully:', result);
-        toast.success('Order placed successfully!');
-      
       // Check authentication status before attempting to create order
       if (!isAuthenticated) {
         // Store cart state for retrieval after login
@@ -474,49 +383,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       throw orderError; // Re-throw to be caught by the caller
     }
   };
-
-  // Handle guest login
-  const handleGuestLogin = React.useCallback(async (tableId: string) => {
-    try {
-      console.log('Attempting guest login with tableId:', tableId);
-      
-      // Get API base URL from environment variables
-      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || `${API_BASE_URL}/api/auth`;
-      
-      // Request a guest token directly from the server endpoint
-      const response = await fetch(`${apiBaseUrl}/guest-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          tableId: tableId || '',
-          deviceId: localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`
-        }),
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.token) {
-          console.log('Guest token received:', data.token.substring(0, 10) + '...');
-          
-          // Store token in both localStorage and cookies for redundancy
-          localStorage.setItem('auth_token', data.token);
-          document.cookie = `auth_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-          document.cookie = `access_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-          
-          return true;
-        }
-      }
-      
-      console.error('Guest login failed: No token in response');
-      return false;
-    } catch (error) {
-      console.error('Guest login error:', error);
-      return false;
-    }
-  }, []);
   
   const handleCheckout = () => {
     if (cartItems.length === 0) {
@@ -538,13 +404,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       }
       
       // Validate table ID is present
-      if (!tableId) {
-        toast.error("Table information is missing. Please scan a table QR code first.");
-        onClose();
-        navigate('/scan');
-        return;
-      }
-      
       if (!tableId) {
         toast.error("Table information is missing. Please scan a table QR code first.");
         onClose();

@@ -47,19 +47,18 @@ export interface AuthResponse {
 // Helper function to get token from localStorage
 export const getEffectiveToken = (): string | null => {
   try {
-    // Check localStorage first as cookies might be HttpOnly
+    // Check localStorage first
     const localToken = localStorage.getItem('auth_token');
-    if (localToken && localToken.length > 10) { // Basic validation that it's a real token
-      console.log('Found auth_token in localStorage');
+    
+    if (localToken) {
+      console.log('Found token in localStorage');
       return localToken;
     }
     
-    // With HttpOnly cookies, we can't directly access them with JS
-    // But we can make a test request to see if we're authenticated
-    console.log('No token found in localStorage, cookies might be HttpOnly');
-    
-    // Note: For HttpOnly cookies, we won't be able to get the token value,
-    // but we can still indicate that authentication might be available
+    // If using JWT cookies (access_token), we don't extract it here
+    // because withCredentials will send it automatically
+    // But we log this for debugging
+    console.log('No token in localStorage, will rely on cookies if available');
     // The actual token will be sent automatically with fetch/axios requests
     // if credentials: 'include' is set
     
@@ -83,7 +82,7 @@ export const getEffectiveToken = (): string | null => {
 // Axios instance with credentials (for cookies)
 const api = axios.create({
   baseURL: AUTH_API_URL,
-  withCredentials: true, // We're not using cookies anymore
+  withCredentials: true, // This is required for cookies to be sent with requests
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest'
@@ -93,12 +92,26 @@ const api = axios.create({
 // Set up request interceptor to add auth token to all requests
 api.interceptors.request.use(
   (config) => {
+    // Check cookies for debugging
+    const cookies = document.cookie.split(';').map(c => c.trim());
+    const hasAccessToken = cookies.some(c => c.startsWith('access_token='));
+    const hasRefreshToken = cookies.some(c => c.startsWith('refresh_token='));
+    
+    console.log('Request interceptor - Cookies status:');
+    console.log('- Has access_token cookie:', hasAccessToken);
+    console.log('- Has refresh_token cookie:', hasRefreshToken);
+    
+    // Get token from localStorage if available
     const token = getEffectiveToken();
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
-      console.log('✅ Added token to request headers');
+      console.log('✅ Added token from localStorage to request headers');
+    } else if (hasAccessToken) {
+      console.log('✅ No localStorage token, but access_token cookie exists');
+      // No need to extract the cookie value, it will be sent automatically
+      // due to withCredentials: true
     } else {
-      console.log('No token available for request');
+      console.log('⚠️ No authentication token available');
     }
     return config;
   },
@@ -247,6 +260,10 @@ const authService = {
       
       // Use only the /me endpoint with the correct base URL
       console.log('Attempting to fetch user from /me endpoint');
+      // Log all cookies for debugging
+      console.log('Document cookies:', document.cookie);
+      
+      // Make the request
       const response = await api.get('/me');
       
       console.log('User data response from /me:', response.data);
