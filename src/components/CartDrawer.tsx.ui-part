@@ -1,0 +1,276 @@
+// Inside the CartDrawer component, replace "// Rest of your component JSX..." with:
+
+let content;
+if (stage === 'checkout') {
+  content = (
+    <div className="flex flex-col h-full">
+      <SheetHeader className="p-4 border-b border-[#2D303E]">
+        <div className="flex items-center justify-between">
+          <SheetTitle className="text-xl font-semibold">Checkout</SheetTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleClose}
+            disabled={isProcessing}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+      </SheetHeader>
+      
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-6">
+          <div className="space-y-2">
+            <h3 className="font-medium">Order Type</h3>
+            <div className="flex gap-2">
+              <Button
+                variant={orderType === OrderType.DINE_IN ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  orderType === OrderType.DINE_IN 
+                    ? "bg-delft-blue hover:bg-delft-blue/90" 
+                    : ""
+                )}
+                onClick={() => setOrderType(OrderType.DINE_IN)}
+                disabled={isProcessing}
+              >
+                Dine In
+              </Button>
+              <Button
+                variant={orderType === OrderType.TAKEOUT ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  orderType === OrderType.TAKEOUT 
+                    ? "bg-delft-blue hover:bg-delft-blue/90" 
+                    : ""
+                )}
+                onClick={() => setOrderType(OrderType.TAKEOUT)}
+                disabled={isProcessing}
+              >
+                Takeout
+              </Button>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <h3 className="font-medium">Order Items</h3>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-delft-blue"
+                onClick={() => setStage('cart')}
+                disabled={isProcessing}
+              >
+                Edit
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {cartItems.map((item) => (
+                <div key={item.id} className="flex justify-between text-sm">
+                  <div className="flex">
+                    <span className="font-medium">{item.quantity}x</span>
+                    <span className="ml-2">{item.name}</span>
+                  </div>
+                  <span>${(item.price * item.quantity).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <h3 className="font-medium">Special Instructions</h3>
+            <Textarea 
+              placeholder="Add any special instructions for your order..."
+              value={specialInstructions}
+              onChange={(e) => setSpecialInstructions(e.target.value)}
+              className="resize-none"
+            />
+          </div>
+        </div>
+      </ScrollArea>
+      
+      <div className="border-t border-[#2D303E] p-4 space-y-4">
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span>${subtotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Tax ({(taxRate * 100).toFixed(0)}%)</span>
+            <span>${tax.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Service Fee ({(serviceFeeRate * 100).toFixed(0)}%)</span>
+            <span>${serviceFee.toFixed(2)}</span>
+          </div>
+          {tipAmount > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tip</span>
+              <span>${tipAmount.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-medium text-lg pt-2 border-t border-[#2D303E]">
+            <span>Total</span>
+            <span>${total.toFixed(2)}</span>
+          </div>
+        </div>
+        
+        <Button 
+          onClick={handlePlaceOrder}
+          className="w-full bg-delft-blue hover:bg-delft-blue/90 text-white"
+          disabled={isProcessing}
+        >
+          {isProcessing ? (
+            <div className="flex items-center">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...
+            </div>
+          ) : (
+            <>
+              Place Order
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+} else {
+  content = (
+    <div className="flex flex-col h-full">
+      <SheetHeader className="p-4 border-b border-[#2D303E]">
+        <div className="flex items-center justify-between">
+          <SheetTitle className="text-xl font-semibold">Your Cart</SheetTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleClose}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+      </SheetHeader>
+      
+      <ScrollArea className="flex-1 p-4">
+        {cartItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <p className="text-muted-foreground mb-4">Your cart is empty</p>
+            <Button onClick={handleClose} variant="outline">
+              Continue Shopping
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {cartItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex gap-3 p-3 rounded-lg bg-[#1F1D2B] border border-[#2D303E]"
+              >
+                {item.image && (
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className="w-20 h-20 object-cover rounded-md"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = 'https://source.unsplash.com/featured/?food'\;
+                    }}
+                  />
+                )}
+                
+                <div className="flex-1">
+                  <div className="flex justify-between">
+                    <h3 className="font-medium">{item.name}</h3>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 -mr-1 -mt-1 text-muted-foreground"
+                      onClick={() => removeItem(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  <p className="text-sm text-delft-blue mt-1">${item.price.toFixed(2)}</p>
+                  
+                  {item.modifiers && item.modifiers.length > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {item.modifiers.map((mod, index) => (
+                        <div key={index} className="flex justify-between">
+                          <span>{mod.name}</span>
+                          {mod.price > 0 && (
+                            <span>+${mod.price.toFixed(2)}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {item.specialInstructions && (
+                    <div className="mt-1 text-xs italic text-muted-foreground">
+                      {item.specialInstructions}
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        disabled={item.quantity <= 1}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-5 text-center text-sm">{item.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    
+                    <span className="font-medium">
+                      ${(item.price * item.quantity).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </ScrollArea>
+      
+      {cartItems.length > 0 && (
+        <div className="border-t border-[#2D303E] p-4 space-y-3">
+          <div className="flex justify-between font-medium">
+            <span>Subtotal</span>
+            <span>${subtotal.toFixed(2)}</span>
+          </div>
+          <Button
+            className="w-full bg-delft-blue hover:bg-delft-blue/90 text-white"
+            onClick={handleCheckout}
+          >
+            Continue to Checkout
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+return (
+  <Sheet open={isOpen} onOpenChange={handleClose}>
+    <SheetContent 
+      side="right" 
+      className="w-full sm:max-w-md border-l border-[#2D303E] bg-[#16141F] p-0 max-h-screen"
+    >
+      {content}
+    </SheetContent>
+  </Sheet>
+);

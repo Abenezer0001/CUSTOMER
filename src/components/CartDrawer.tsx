@@ -1,26 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '@/constants';
-import { useCart } from '@/context/CartContext';
+import { useCart, CartItem } from '@/context/CartContext';
 import { useOrders } from '@/context/OrdersContext';
 import { useAuth } from '@/hooks/useAuth';
-import authService from '@/api/authService';
-import apiClient from '@/api/apiClient';
 import { useTableInfo } from '@/context/TableContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  Trash2, Plus, Minus, X, ArrowRight, 
-  Loader2, CreditCard, AlertCircle, Info 
-} from 'lucide-react';
+import { Trash2, Plus, Minus, X, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { createOrder, OrderResponseData } from '@/api/orderService'; 
-import { createStripeCheckoutSession } from '@/api/paymentService';
+import { createOrder, OrderResponseData } from '@/api/orderService';
 import { useNavigate } from 'react-router-dom';
-import type { Order } from '@/types'; 
+import type { Order } from '@/types';
 
 // Order type enum to match API
 enum OrderType {
@@ -47,17 +40,6 @@ enum PaymentStatus {
   REFUNDED = 'REFUNDED'
 }
 
-interface CartItem {
-  id: string;
-  menuItemId?: string; // Make it optional since it might not always be present
-  name: string;
-  price: number;
-  quantity: number;
-  specialInstructions?: string;
-  modifiers?: Array<{ id: string, name: string, price: number }>;
-  image?: string;
-}
-
 interface OrderData {
   restaurantId: string;
   tableId: string;
@@ -68,7 +50,7 @@ interface OrderData {
     price: number;
     subtotal: number;
     specialInstructions: string;
-    modifiers?: Array<{ name: string, price: number }>; 
+    modifiers?: Array<{ name: string, price: number }>;
   }>;
   subtotal: number;
   tax: number;
@@ -90,109 +72,64 @@ interface CartDrawerProps {
 const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
   const { cartItems, removeFromCart: removeItem, updateQuantity, clearCart, cartTotal: subtotal } = useCart();
   const { tableId, restaurantName } = useTableInfo();
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated, token, user, refreshToken } = useAuth();
   const { addOrder } = useOrders();
   const navigate = useNavigate();
-  
-  // Handle guest login
-  const handleGuestLogin = React.useCallback(async (tableId: string) => {
-    try {
-      console.log('Attempting guest login with tableId:', tableId);
-      
-      // Get API base URL from environment variables
-      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
-      
-      // Request a guest token directly from the server endpoint
-      const response = await fetch(`${apiBaseUrl}/guest-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          tableId: tableId || '',
-          deviceId: localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`
-        }),
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.token) {
-          console.log('Guest token received:', data.token.substring(0, 10) + '...');
-          
-          // Store token in both localStorage and cookies for redundancy
-          localStorage.setItem('auth_token', data.token);
-          document.cookie = `auth_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-          document.cookie = `access_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
-          
-          return true;
-        }
-      }
-      
-      console.error('Guest login failed: No token in response');
-      return false;
-    } catch (error) {
-      console.error('Guest login error:', error);
-      return false;
-    }
-  }, []);
+
   const [stage, setStage] = useState<'cart' | 'checkout'>('cart');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [orderType, setOrderType] = useState<OrderType>(OrderType.DINE_IN);
-  
-  // Tax and fees calculations (as per API specifications)
-  const taxRate = 0.08; // 8% tax
-  const serviceFeeRate = 0.05; // 5% service fee
+
+  // Add refs for preventing duplicate submissions
+  const isSubmittingRef = useRef(false);
+  const currentRequestIdRef = useRef<string | null>(null);
+
+  // Tax and fees calculations
+  const taxRate = 0.08;
+  const serviceFeeRate = 0.05;
   const tax = subtotal * taxRate;
   const serviceFee = subtotal * serviceFeeRate;
-  const tipAmount = 0; // Default tip amount (can be updated)
+  const tipAmount = 0;
   const total = subtotal + tax + serviceFee + tipAmount;
-  
-  // Reset stage when drawer closes
+
   useEffect(() => {
     if (!isOpen) {
-      // Small delay to prevent visual glitches during closing animation
       setTimeout(() => {
         setStage('cart');
         setIsProcessing(false);
+        // Reset submission state when drawer closes
+        isSubmittingRef.current = false;
+        currentRequestIdRef.current = null;
       }, 300);
     }
   }, [isOpen]);
-  
-  // Helper function to process the order
-  const processOrder = async () => {
+
+  const processOrder = async (requestId: string) => {
+    // Double-check that this request should still proceed
+    if (currentRequestIdRef.current !== requestId) {
+      console.log('Request cancelled - newer request in progress');
+      return null;
+    }
+
     try {
-      console.log('Processing order with orderService...');
-      
-      // Determine restaurant ID (either from context or extract from tableId)
-      const localRestaurantId = restaurantName === 'InSeat' 
-        ? '65f456b06c9dfd001b6b1234' 
-        : tableId.split('-')[0]; // Ensure tableId is available here or passed appropriately
-      
-      // Format items according to API schema
-      const formattedItems = cartItems.map(item => {
-        // Ensure we have a valid string for menuItem
-        const menuItemId = ('menuItemId' in item && item.menuItemId) || item.id;
-        
-        // Ensure menuItem is always a string
-        const menuItem = String(menuItemId || '');
-        
-        return {
-          menuItem,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          subtotal: item.price * item.quantity,
-          specialInstructions: item.specialInstructions || specialInstructions || '',
-          modifiers: item.modifiers
-        };
-      });
-      
-      // Format order data according to API schema
+      const localRestaurantId = restaurantName === 'InSeat'
+        ? '65f456b06c9dfd001b6b1234'
+        : tableId.split('-')[0];
+
+      const formattedItems = cartItems.map(item => ({
+        menuItem: String(item.id),
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: item.price * item.quantity,
+        specialInstructions: item.specialInstructions || specialInstructions || '',
+        modifiers: item.modifiers
+      }));
+
       const constructedOrderData: OrderData = {
-        restaurantId: localRestaurantId, // Use locally determined restaurantId
+        restaurantId: localRestaurantId,
         tableId,
         items: formattedItems,
         subtotal,
@@ -201,100 +138,11 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         total,
         orderType,
         specialInstructions: specialInstructions || '',
-        serviceFee, // Include the service fee in the order data
-        status: OrderStatus.PENDING, // Required field - using enum value
-        paymentStatus: PaymentStatus.PENDING, // Required field - using enum value
-        orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}` // Required field
+        serviceFee,
+        status: OrderStatus.PENDING,
+        paymentStatus: PaymentStatus.PENDING,
+        orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
       };
-      
-      console.log('Order data prepared:', JSON.stringify(constructedOrderData));
-      
-      // Try to get a token from all possible sources
-      let token = localStorage.getItem('auth_token');
-      
-      // If no token found yet, try to extract from cookies
-      if (!token) {
-        const cookies = document.cookie.split(';');
-        const tokenCookie = cookies.find(cookie => 
-          cookie.trim().startsWith('auth_token=') || 
-          cookie.trim().startsWith('access_token=')
-        );
-        
-        if (tokenCookie) {
-          token = tokenCookie.split('=')[1].trim();
-        }
-      }
-      
-      // If still no token, try to get one from the guest token endpoint
-      if (!token) {
-        console.log('No token found, attempting to get a guest token...');
-        
-        try {
-          // Create a device ID if not already stored
-          const deviceId = localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-          if (!localStorage.getItem('device_id')) {
-            localStorage.setItem('device_id', deviceId);
-          }
-          
-          // Request a guest token from the server - use the correct endpoint
-          const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
-          const guestTokenResponse = await fetch(`${apiBaseUrl}/guest-token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              tableId: tableId || '',
-              deviceId
-            }),
-            credentials: 'include'
-          });
-          
-          if (guestTokenResponse.ok) {
-            const guestData = await guestTokenResponse.json();
-            
-            if (guestData.success && guestData.token) {
-              console.log('Guest token obtained successfully');
-              token = guestData.token;
-              localStorage.setItem('auth_token', guestData.token);
-              document.cookie = `auth_token=${guestData.token}; path=/; max-age=86400; SameSite=Lax`;
-            }
-          }
-        } catch (error) {
-          console.error('Error getting guest token:', error);
-        }
-      }
-      
-      // If we still don't have a token, make a regular auth check
-      if (!token) {
-        console.log('Attempting regular auth check as fallback...');
-        const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
-        const authResponse = await fetch(`${apiBaseUrl}/me`, {
-          method: 'GET',
-          credentials: 'include'
-        });
-        
-        if (authResponse.ok) {
-          const authData = await authResponse.json();
-          console.log('Auth check successful:', authData);
-          
-          if (authData.token) {
-            token = authData.token;
-            localStorage.setItem('auth_token', authData.token);
-          }
-        } else {
-          console.error('Authentication check failed:', await authResponse.text());
-          // Don't throw here, we'll try to continue with the order anyway
-        }
-      }
-      
-      console.log('Using token for order placement:', token ? 'Token available' : 'No token available');
-      
-      // If we have a token, make sure it's saved to localStorage for future requests
-      if (token && !localStorage.getItem('auth_token')) {
-        localStorage.setItem('auth_token', token);
-        console.log('Saved token to localStorage');
-      }
       
       // Check authentication status before attempting to create order
       if (!isAuthenticated) {
@@ -312,120 +160,134 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         return null;
       }
       
-      // Use the enhanced createOrder function from orderService
-      const result = await createOrder(cartItems, tableId, localRestaurantId, constructedOrderData, navigate);
+      console.log(`Creating order using orderService (Request ID: ${requestId})...`);
       
-      if (!result) {
+      // Final check before API call
+      if (currentRequestIdRef.current !== requestId) {
+        console.log('Request cancelled before API call - newer request in progress');
+        return null;
+      }
+      
+      // Use ONLY the createOrder function from orderService - this prevents duplicate orders
+      const orderResult = await createOrder(cartItems, tableId, localRestaurantId, constructedOrderData, navigate);
+      
+      // Check if request is still valid after API call
+      if (currentRequestIdRef.current !== requestId) {
+        console.log('Request completed but cancelled due to newer request');
+        return null;
+      }
+      
+      if (!orderResult) {
         console.log('Order creation returned null - authentication failed and user redirected');
         return null;
       }
       
-      console.log('Order placed successfully:', result);
+      console.log(`Order placed successfully (Request ID: ${requestId}):`, orderResult);
       toast.success('Order placed successfully!');
     
       // Transform OrderResponseData to Order type for the context
       const orderForContext: Order = {
-        id: result._id, // Map _id to id
-        orderNumber: result.orderNumber,
-        // Ensure items are compatible with CartItem[]
-        // This might need a more detailed mapping if OrderItem and CartItem are very different
-        // For now, assuming they are structurally similar enough or that CartItem is flexible
-        items: result.items.map(apiItem => ({
-          id: apiItem.menuItem, // Assuming menuItem from API maps to id in CartItem
+        id: orderResult._id,
+        orderNumber: orderResult.orderNumber,
+        items: orderResult.items.map(apiItem => ({
+          id: apiItem.menuItem,
           menuItemId: apiItem.menuItem,
           name: apiItem.name,
           price: apiItem.price,
           quantity: apiItem.quantity,
-          // image: apiItem.image, // If CartItem expects an image and apiItem has it
           specialInstructions: apiItem.specialInstructions,
-          modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || [] // Example mapping for modifiers
+          modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || []
         })),
-        subtotal: result.subtotal,
-        tax: result.tax,
-        serviceFee: result.serviceFee,
-        tip: result.tip,
-        total: result.total,
-        status: result.status, // Assuming OrderStatus enum values align
-        paymentStatus: result.paymentStatus, // Assuming PaymentStatus enum values align
-        timestamp: new Date(result.createdAt), // Convert createdAt string to Date
-        tableId: result.tableId,
-        specialInstructions: result.specialInstructions
+        subtotal: orderResult.subtotal,
+        tax: orderResult.tax,
+        serviceFee: orderResult.serviceFee,
+        tip: orderResult.tip,
+        total: orderResult.total,
+        status: orderResult.status,
+        paymentStatus: orderResult.paymentStatus,
+        timestamp: new Date(orderResult.createdAt),
+        tableId: orderResult.tableId,
+        specialInstructions: orderResult.specialInstructions
       };
 
       addOrder(orderForContext);
-
-      console.log('Order created successfully:', result);
-      
-      // Store order ID in localStorage for retrieval after payment
-      localStorage.setItem('pending_order_id', result._id);
-      
-      // Clear the cart and close the drawer
+      localStorage.setItem('pending_order_id', orderResult._id);
       clearCart();
       onClose();
+
+      // Force refresh authentication state to ensure we have the latest user data
+      try {
+        await refreshToken();
+        console.log('Auth refreshed after order placement');
+      } catch (refreshError) {
+        console.error('Failed to refresh auth after order placement:', refreshError);
+      }
+
+      // Ensure we're redirecting to the my-orders page with the table ID
+      console.log(`Redirecting to my-orders page with table=${tableId}`);
       
-      // Show success message
-      toast.success('Order placed successfully!');
-      
-      // The payment status should remain PENDING by default when an order is created
-      // It will be updated to PAID by Stripe webhook when payment is completed
-      console.log('Order created with PENDING payment status - will be updated when payment is processed');
-      
-      // Add a small delay before redirecting to ensure the toast is shown
-      setTimeout(() => {
-        console.log('Redirecting to my-orders page with table ID:', tableId);
-        navigate(`/my-orders?table=${tableId}`);
-      }, 1000);
-    } catch (orderError) {
-      console.error('Error in order creation process:', orderError);
-      toast.error(orderError instanceof Error ? orderError.message : 'Failed to create your order');
-      setIsProcessing(false);
-      setError(orderError instanceof Error ? orderError.message : 'Failed to create your order');
-      throw orderError; // Re-throw to be caught by the caller
+      // Use a more direct approach to navigation instead of setTimeout
+      navigate(`/my-orders?table=${tableId}`);
+      return orderResult;
+    } catch (error) {
+      console.error(`Error in order creation process (Request ID: ${requestId}):`, error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create your order');
+      throw error;
     }
   };
-  
-  const handleCheckout = () => {
-    if (cartItems.length === 0) {
-      toast.error("Your cart is empty");
+
+  const handlePlaceOrder = async (): Promise<void> => {
+    // Immediate check to prevent double submission
+    if (isSubmittingRef.current) {
+      console.log('Order submission already in progress - ignoring duplicate click');
       return;
     }
-    
-    // Move to checkout stage
-    setStage('checkout');
-  };
-  
-  const handlePlaceOrder = async (): Promise<void> => {
-    console.log('handlePlaceOrder function entered - CartDrawer.tsx');
+
+    // Generate unique request ID
+    const requestId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    console.log(`Starting order placement (Request ID: ${requestId})`);
+
     try {
-      // Validate cart is not empty
       if (cartItems.length === 0) {
         toast.error('Your cart is empty. Please add items to place an order.');
         return;
       }
-      
-      // Validate table ID is present
+
       if (!tableId) {
         toast.error("Table information is missing. Please scan a table QR code first.");
         onClose();
         navigate('/scan');
         return;
       }
-      
+
+      // Set submission locks immediately
+      isSubmittingRef.current = true;
+      currentRequestIdRef.current = requestId;
       setIsProcessing(true);
-      
-      // Process the order (this will create the order in the backend and get the order ID)
-      await processOrder();
+
+      await processOrder(requestId);
     } catch (error) {
-      console.error('Error placing order:', error);
-      setIsProcessing(false);
+      console.error(`Error placing order (Request ID: ${requestId}):`, error);
       toast.error(error instanceof Error ? error.message : 'Failed to place order');
       setError(error instanceof Error ? error.message : 'Failed to place order');
+    } finally {
+      // Always reset submission state
+      isSubmittingRef.current = false;
+      currentRequestIdRef.current = null;
+      setIsProcessing(false);
     }
   };
-  
+
+  const handleCheckout = () => {
+    if (cartItems.length === 0) {
+      toast.error("Your cart is empty");
+      return;
+    }
+    setStage('checkout');
+  };
+
   const handleClose = () => {
     if (isProcessing) {
-      // If processing is in progress, show a confirmation dialog
       if (window.confirm("Your order is still being processed. Are you sure you want to close?")) {
         onClose();
       }
@@ -433,11 +295,9 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       onClose();
     }
   };
-  
+
   let content;
-  
   if (stage === 'checkout') {
-    // Checkout stage UI
     content = (
       <div className="flex flex-col h-full">
         <SheetHeader className="p-4 border-b border-[#2D303E]">
@@ -456,7 +316,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-6">
-            {/* Order type selection */}
             <div className="space-y-2">
               <h3 className="font-medium">Order Type</h3>
               <div className="flex gap-2">
@@ -489,7 +348,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
               </div>
             </div>
             
-            {/* Cart items summary */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <h3 className="font-medium">Order Items</h3>
@@ -516,7 +374,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
               </div>
             </div>
             
-            {/* Order notes */}
             <div className="space-y-2">
               <h3 className="font-medium">Special Instructions</h3>
               <Textarea 
@@ -556,10 +413,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
           </div>
           
           <Button 
-            onClick={() => { 
-              console.log('Place Order button clicked - inline in CartDrawer.tsx'); 
-              handlePlaceOrder(); 
-            }}
+            onClick={handlePlaceOrder}
             className="w-full bg-delft-blue hover:bg-delft-blue/90 text-white"
             disabled={isProcessing}
           >
@@ -578,7 +432,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       </div>
     );
   } else {
-    // Cart stage UI
     content = (
       <div className="flex flex-col h-full">
         <SheetHeader className="p-4 border-b border-[#2D303E]">

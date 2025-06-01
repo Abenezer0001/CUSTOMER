@@ -3,9 +3,11 @@ import { useTableInfo } from '@/context/TableContext';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { User, ScanLine, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
+import { cn } from '@/lib/utils';
 import debounce from 'lodash/debounce';
+import { AuthService } from '@/services/AuthService';
+import customerAuthService from '@/api/customerAuthService';
 import { useCart } from '@/context/CartContext';
 
 interface TableHeaderProps {
@@ -22,7 +24,9 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
   const { restaurantName, tableNumber, tableId, setTableInfo, clearTableInfo } = useTableInfo();
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  // Use all relevant auth context properties and methods
+  const { isAuthenticated, refreshToken } = useAuth();
+
   const { clearCart } = useCart();
   const [isLoading, setIsLoading] = useState(false);
   
@@ -156,13 +160,24 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
           </Button>
           
           {/* Account button */}
-          <Link 
-            to={isAuthenticated ? '/account' : '/login'} 
-            className="flex items-center text-white"
-            aria-label={isAuthenticated ? "Account" : "Login"}
+          <Button
+            variant="ghost"
+            className="flex items-center text-white h-8 w-8 rounded-md hover:bg-[#3a3e52] flex items-center justify-center p-0"
+            aria-label="Account"
+            onClick={() => {
+              console.log('User clicked account icon, authenticated:', isAuthenticated);
+              
+              // Simple direct check - if authenticated, go to account; otherwise go to login
+              if (isAuthenticated) {
+                navigate('/account');
+              } else {
+                    console.log('Not authenticated, redirecting to login');
+                    navigate('/login', { state: { from: '/account' } });
+              }
+            }}
           >
             <User className="h-5 w-5" />
-          </Link>
+          </Button>
         </div>
       </div>
     </header>

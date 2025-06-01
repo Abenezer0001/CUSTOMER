@@ -2,7 +2,10 @@ import axios, { AxiosError, AxiosResponse } from 'axios';
 import { getEffectiveToken } from './authService';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL;
+const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
+
+console.log('Environment VITE_AUTH_API_URL:', import.meta.env.VITE_AUTH_API_URL);
+console.log('Using API_BASE_URL:', API_BASE_URL);
 
 // Extract the base URL without the auth path
 const BASE_URL = API_BASE_URL.includes('/api/auth') 
@@ -11,8 +14,11 @@ const BASE_URL = API_BASE_URL.includes('/api/auth')
 
 // Customer API endpoint is at /api/customer
 const CUSTOMER_API_ENDPOINT = `${BASE_URL}/api/customer`;
+// Auth API endpoint for /me requests
+const AUTH_API_ENDPOINT = `${BASE_URL}/api/auth`;
 
 console.log('Customer API endpoint:', CUSTOMER_API_ENDPOINT);
+console.log('Auth API endpoint:', AUTH_API_ENDPOINT);
 
 // Helper function to handle API errors
 const handleApiError = (error: unknown): AuthResponse => {
@@ -74,13 +80,24 @@ export interface AuthResponse {
   message?: string;
 }
 
-// Axios instance with credentials (for cookies)
+// Create axios instance for customer API  
 const api = axios.create({
   baseURL: CUSTOMER_API_ENDPOINT,
-  withCredentials: true, // This allows cookies to be sent and received
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
-  },
+    'Accept': 'application/json'
+  }
+});
+
+// Create axios instance for auth API (for /me endpoint)
+const authApi = axios.create({
+  baseURL: AUTH_API_ENDPOINT,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
 });
 
 // Set up request interceptor to add auth token to all requests
@@ -102,7 +119,7 @@ api.interceptors.request.use(
 
 const customerAuthService = {
   // Register a new customer
-  async register(userData: RegisterData): Promise<AuthResponse> {
+  register: async (userData: RegisterData): Promise<AuthResponse> => {
     try {
       console.log('Registering customer with data:', {
         ...userData,
@@ -138,7 +155,7 @@ const customerAuthService = {
   },
   
   // Login with email and password
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     try {
       console.log('Logging in customer with email:', credentials.email);
       
@@ -179,7 +196,7 @@ const customerAuthService = {
   },
   
   // Logout customer (clear cookies on server)
-  async logout(): Promise<void> {
+  logout: async (): Promise<void> => {
     try {
       console.log('Logging out customer user');
       // Use the customer-specific logout endpoint that doesn't require authentication
@@ -205,7 +222,7 @@ const customerAuthService = {
   },
   
   // Get current customer profile
-  async getCurrentUser(): Promise<AuthResponse> {
+  getCurrentUser: async (): Promise<AuthResponse> => {
     try {
       console.log('Checking authentication status...');
       console.log('Document cookies:', document.cookie);
@@ -242,8 +259,12 @@ const customerAuthService = {
         console.log('Using localStorage token for explicit Authorization header');
       }
       
-      // Make the request, letting cookies be sent automatically
-      // Only add explicit Authorization header if we have a token to use
+      // Set auth state to true if we have any token
+      if (explicitToken) {
+        window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { isAuthenticated: true } }));
+      }
+      
+      // Make the request config once
       const requestConfig: any = { withCredentials: true };
       
       if (explicitToken) {
@@ -252,21 +273,40 @@ const customerAuthService = {
         };
       }
       
-      console.log('Making /me request with config:', requestConfig);
+      // Try customer endpoint first
+      try {
+        console.log('Making customer /me request with config:', requestConfig);
       const response = await api.get('/me', requestConfig);
-      
-      console.log('Current user retrieved successfully:', response.data);
+        console.log('Current customer retrieved successfully from customer endpoint:', response.data);
+        
+        return {
+          success: true,
+          user: response.data.user
+        };
+      } catch (customerError) {
+        console.log('Customer endpoint failed, trying auth endpoint:', customerError);
+        
+        // Fallback to auth endpoint if customer endpoint fails
+        try {
+          console.log('Making auth /me request with config:', requestConfig);
+          const response = await authApi.get('/me', requestConfig);
+          console.log('Current user retrieved successfully from auth endpoint:', response.data);
       
       return {
         success: true,
         user: response.data.user
       };
+        } catch (authError) {
+          console.error('Both customer and auth endpoints failed:', authError);
+          throw authError; // Throw the auth error to be handled below
+        }
+      }
     } catch (error) {
       console.error('Get current customer error:', error);
       
       if (axios.isAxiosError(error) && error.response) {
         if (error.response.status === 401) {
-          console.log('Authentication failed (401), clearing tokens');
+          console.log('Customer authentication failed (401), clearing tokens');
           localStorage.removeItem('auth_token');
           document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
           document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
@@ -276,13 +316,13 @@ const customerAuthService = {
       
       return {
         success: false,
-        message: 'Failed to retrieve user profile'
+        message: 'Failed to retrieve customer profile'
       };
     }
   },
   
   // Refresh the authentication token
-  async refreshToken(): Promise<boolean> {
+  refreshToken: async (): Promise<boolean> => {
     try {
       const refreshToken = localStorage.getItem('refresh_token');
       if (!refreshToken) {
@@ -332,7 +372,7 @@ const customerAuthService = {
   },
   
   // Check authentication status
-  async checkAuthStatus(): Promise<boolean> {
+  checkAuthStatus: async (): Promise<boolean> => {
     try {
       const token = getEffectiveToken();
       
@@ -341,7 +381,7 @@ const customerAuthService = {
         return false;
       }
       
-      const response = await api.get('/me');
+      const response = await authApi.get('/me');
       
       return response.data.success === true;
     } catch (error) {
@@ -358,7 +398,7 @@ const customerAuthService = {
   },
   
   // Get Google OAuth URL for redirect
-  getGoogleAuthUrl(): string {
+  getGoogleAuthUrl: (): string => {
     // Store current table ID before redirecting
     const tableId = localStorage.getItem('currentTableId') || 
                    localStorage.getItem('tableId') || 

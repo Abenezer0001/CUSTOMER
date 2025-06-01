@@ -41,7 +41,7 @@ export interface RegisterCredentials {
 // Configure axios to include credentials
 axios.defaults.withCredentials = true;
 
-// Function to get the auth token from cookies or localStorage
+// Function to get the auth token from cookies ONLY
 const getEffectiveToken = (): string | null => {
   // First check cookies for access_token (set by backend after Google auth)
   const cookies = document.cookie.split(';').map(c => c.trim());
@@ -50,8 +50,6 @@ const getEffectiveToken = (): string | null => {
   if (accessTokenCookie) {
     const token = accessTokenCookie.split('=')[1];
     console.log('Found access_token in cookies');
-    // Also save to localStorage as a backup
-    localStorage.setItem('auth_token', token);
     return token;
   }
   
@@ -63,14 +61,14 @@ const getEffectiveToken = (): string | null => {
     return token;
   }
   
-  // Fallback to localStorage
+  // Check localStorage as fallback (for non-Google logins)
   const localToken = localStorage.getItem('auth_token');
   if (localToken) {
     console.log('Found auth_token in localStorage');
     return localToken;
   }
   
-  console.log('No authentication token found');
+  console.log('No authentication token found in cookies or localStorage');
   return null;
 };
 
@@ -159,14 +157,21 @@ export const AuthService = {
   // Get current user
   getCurrentUser: async (): Promise<User | null> => {
     try {
+      console.log('Attempting to get current user with auth headers');
+      // Log cookies for debugging
+      console.log('Cookies for /auth/me request:', document.cookie);
+      
       const response = await axios.get(`${API_URL}/auth/me`, {
-        headers: { ...getAuthHeader() }
+        headers: { ...getAuthHeader() },
+        withCredentials: true // Ensure cookies are sent with request
       });
       
       if (response.data.success) {
+        console.log('Successfully retrieved user from /auth/me');
         return response.data.user;
       }
       
+      console.log('Get current user unsuccessful:', response.data);
       return null;
     } catch (error) {
       console.error('Error getting current user:', error);
@@ -177,8 +182,22 @@ export const AuthService = {
   // Refresh token
   refreshToken: async (): Promise<boolean> => {
     try {
-      const response = await axios.post(`${API_URL}/auth/refresh-token`);
-      return response.data.success;
+      console.log('Attempting to refresh token...');
+      // When using HttpOnly cookies, we need to ensure cookies are sent
+      const response = await axios.post(`${API_URL}/auth/refresh-token`, {}, {
+        withCredentials: true // Critical for sending refresh token cookie
+      });
+      
+      console.log('Refresh token response:', response.data);
+      if (response.data.success) {
+        // No need to manually set cookies for HttpOnly cookies
+        // Backend will have set new cookies in response
+        console.log('Token refresh successful');
+        return true;
+      }
+      
+      console.log('Token refresh failed:', response.data);
+      return false;
     } catch (error) {
       console.error('Token refresh error:', error);
       return false;
@@ -202,7 +221,7 @@ export const AuthService = {
       
       if (response.data.success && response.data.token) {
         // Store the token in localStorage as a fallback
-        localStorage.setItem('auth_token', response.data.token);
+        // Only using cookies for token storage, not localStorage
         
         // Set token in cookie for cross-page consistency
         document.cookie = `auth_token=${response.data.token}; path=/; max-age=86400; SameSite=Lax`;

@@ -28,12 +28,10 @@ const ToolbarWrapper = import.meta.env.DEV ? () => (
 ) : () => null;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <QueryClientProvider client={queryClient}>
         <App />
         <ToolbarWrapper />
       </QueryClientProvider>
-    </ThemeProvider>
-  </React.StrictMode>,
+  </ThemeProvider>,
 );

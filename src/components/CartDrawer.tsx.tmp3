@@ -1,0 +1,264 @@
+import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '@/constants';
+import { useCart } from '@/context/CartContext';
+import { useOrders } from '@/context/OrdersContext';
+import { useAuth } from '@/hooks/useAuth';
+import { useTableInfo } from '@/context/TableContext';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Trash2, Plus, Minus, X, ArrowRight, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { createOrder, OrderResponseData } from '@/api/orderService';
+import { useNavigate } from 'react-router-dom';
+import type { Order } from '@/types';
+
+// Order type enum to match API
+enum OrderType {
+  DINE_IN = 'DINE_IN',
+  TAKEOUT = 'TAKEOUT'
+}
+
+// Order status enum to match API
+enum OrderStatus {
+  PENDING = 'PENDING',
+  PREPARING = 'PREPARING',
+  READY = 'READY',
+  DELIVERED = 'DELIVERED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
+}
+
+// Payment status enum to match API
+enum PaymentStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  PAID = 'PAID',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED'
+}
+
+interface CartItem {
+  id: string;
+  menuItemId?: string;
+  name: string;
+  price: number;
+  quantity: number;
+  specialInstructions?: string;
+  modifiers?: Array<{ id: string, name: string, price: number }>;
+  image?: string;
+}
+
+interface OrderData {
+  restaurantId: string;
+  tableId: string;
+  items: Array<{
+    menuItem: string;
+    name: string;
+    quantity: number;
+    price: number;
+    subtotal: number;
+    specialInstructions: string;
+    modifiers?: Array<{ name: string, price: number }>;
+  }>;
+  subtotal: number;
+  tax: number;
+  tip: number;
+  total: number;
+  orderType: OrderType;
+  specialInstructions: string;
+  serviceFee: number;
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  orderNumber: string;
+}
+
+interface CartDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
+  const { cartItems, removeFromCart: removeItem, updateQuantity, clearCart, cartTotal: subtotal } = useCart();
+  const { tableId, restaurantName } = useTableInfo();
+  const { isAuthenticated, token } = useAuth();
+  const { addOrder } = useOrders();
+  const navigate = useNavigate();
+
+  const [stage, setStage] = useState<'cart' | 'checkout'>('cart');
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState('');
+  const [orderType, setOrderType] = useState<OrderType>(OrderType.DINE_IN);
+
+  // Tax and fees calculations
+  const taxRate = 0.08;
+  const serviceFeeRate = 0.05;
+  const tax = subtotal * taxRate;
+  const serviceFee = subtotal * serviceFeeRate;
+  const tipAmount = 0;
+  const total = subtotal + tax + serviceFee + tipAmount;
+
+  const processOrder = async () => {
+    try {
+      const localRestaurantId = restaurantName === 'InSeat'
+        ? '65f456b06c9dfd001b6b1234'
+        : tableId.split('-')[0];
+
+      const formattedItems = cartItems.map(item => ({
+        menuItem: String(item.menuItemId || item.id),
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: item.price * item.quantity,
+        specialInstructions: item.specialInstructions || specialInstructions || '',
+        modifiers: item.modifiers
+      }));
+
+      const constructedOrderData: OrderData = {
+        restaurantId: localRestaurantId,
+        tableId,
+        items: formattedItems,
+        subtotal,
+        tax,
+        tip: tipAmount,
+        total,
+        orderType,
+        specialInstructions: specialInstructions || '',
+        serviceFee,
+        status: OrderStatus.PENDING,
+        paymentStatus: PaymentStatus.PENDING,
+        orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      };
+
+      const result = await new Promise<OrderResponseData>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || 'https://api.inseat.achievengine.com/api/orders';
+        xhr.open('POST', orderApiUrl, true);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader('Content-Type', 'application/json');
+
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+
+        xhr.onload = function() {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const parsedResponse = JSON.parse(xhr.responseText);
+            if (parsedResponse._id) {
+              resolve(parsedResponse);
+            } else if (parsedResponse.success) {
+              resolve(parsedResponse.data);
+            } else {
+              reject(new Error(parsedResponse.error?.message || 'Order creation failed'));
+            }
+          } else {
+            reject(new Error(`Order creation failed with status: ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error occurred'));
+        xhr.send(JSON.stringify(constructedOrderData));
+      });
+
+      const orderForContext: Order = {
+        id: result._id,
+        orderNumber: result.orderNumber,
+        items: result.items.map(apiItem => ({
+          id: apiItem.menuItem,
+          menuItemId: apiItem.menuItem,
+          name: apiItem.name,
+          price: apiItem.price,
+          quantity: apiItem.quantity,
+          specialInstructions: apiItem.specialInstructions,
+          modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || []
+        })),
+        subtotal: result.subtotal,
+        tax: result.tax,
+        serviceFee: result.serviceFee,
+        tip: result.tip,
+        total: result.total,
+        status: result.status,
+        paymentStatus: result.paymentStatus,
+        timestamp: new Date(result.createdAt),
+        tableId: result.tableId,
+        specialInstructions: result.specialInstructions
+      };
+
+      addOrder(orderForContext);
+      localStorage.setItem('pending_order_id', result._id);
+      clearCart();
+      onClose();
+
+      toast.success('Order placed successfully!');
+
+      setTimeout(() => {
+        navigate(`/my-orders?table=${tableId}`);
+      }, 1000);
+    } catch (error) {
+      console.error('Error in order creation process:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create your order');
+      setIsProcessing(false);
+      setError(error instanceof Error ? error.message : 'Failed to create your order');
+      throw error;
+    }
+  };
+
+  const handlePlaceOrder = async (): Promise<void> => {
+    try {
+      if (cartItems.length === 0) {
+        toast.error('Your cart is empty. Please add items to place an order.');
+        return;
+      }
+
+      if (!tableId) {
+        toast.error("Table information is missing. Please scan a table QR code first.");
+        onClose();
+        navigate('/scan');
+        return;
+      }
+
+      setIsProcessing(true);
+      await processOrder();
+    } catch (error) {
+      console.error('Error placing order:', error);
+      setIsProcessing(false);
+      toast.error(error instanceof Error ? error.message : 'Failed to place order');
+      setError(error instanceof Error ? error.message : 'Failed to place order');
+    }
+  };
+
+  const handleCheckout = () => {
+    if (cartItems.length === 0) {
+      toast.error("Your cart is empty");
+      return;
+    }
+    setStage('checkout');
+  };
+
+  const handleClose = () => {
+    if (isProcessing) {
+      if (window.confirm("Your order is still being processed. Are you sure you want to close?")) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setTimeout(() => {
+        setStage('cart');
+        setIsProcessing(false);
+      }, 300);
+    }
+  }, [isOpen]);
+
+  // Rest of your component JSX...
+
+};
+
+export default CartDrawer;

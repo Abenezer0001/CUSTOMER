@@ -44,32 +44,45 @@ export interface AuthResponse {
   message?: string; // Add message property for error responses
 }
 
-// Helper function to get token from localStorage
+// Helper function to get token from localStorage and cookies
 export const getEffectiveToken = (): string | null => {
   try {
-    // Check localStorage first
-    const localToken = localStorage.getItem('auth_token');
+    // Check for all possible cookie names used in the system
+    const cookies = document.cookie.split(';');
+    const possibleCookieNames = ['auth_token=', 'access_token=', 'token=', 'jwt='];
     
+    // First check for HTTP-only cookie (we can't read it directly)
+    const hasAuthCookie = cookies.some(cookie => {
+      const trimmedCookie = cookie.trim();
+      return possibleCookieNames.some(name => trimmedCookie.startsWith(name));
+    });
+    
+    if (hasAuthCookie) {
+      // We can't read HTTP-only cookie content, but we can indicate it exists
+      console.log('HTTP-only auth cookie detected');
+      return 'http-only-cookie-present';
+    }
+    
+    // Then check for regular cookies
+    for (const cookieName of possibleCookieNames) {
+      const cookieValue = cookies.find(cookie => cookie.trim().startsWith(cookieName));
+      if (cookieValue) {
+        const token = cookieValue.split('=')[1];
+        console.log(`Found ${cookieName.replace('=', '')} in cookies`);
+        // Store in localStorage for consistency
+        localStorage.setItem('auth_token', token);
+        return token;
+      }
+    }
+    
+    // Finally check localStorage as fallback
+    const localToken = localStorage.getItem('auth_token');
     if (localToken) {
       console.log('Found token in localStorage');
       return localToken;
     }
     
-    // If using JWT cookies (access_token), we don't extract it here
-    // because withCredentials will send it automatically
-    // But we log this for debugging
-    console.log('No token in localStorage, will rely on cookies if available');
-    // The actual token will be sent automatically with fetch/axios requests
-    // if credentials: 'include' is set
-    
-    // Return an indicator that tokens might be in HttpOnly cookies
-    // We'll need to rely on the API calls with credentials: 'include'
-    if (document.cookie.includes('auth_token') || document.cookie.includes('access_token')) {
-      console.log('Found auth_token or access_token in cookie string (might be HttpOnly)');
-      return 'http-only-cookie-present';
-    }
-    
-    console.log('No token indicators found in cookies or localStorage');
+    console.log('No token found in cookies or localStorage');
     return null;
   } catch (error) {
     console.error('Error in getEffectiveToken:', error);
@@ -159,9 +172,13 @@ const authService = {
         if (token) {
           console.log('Token found in login response, length:', token.length);
           
-          // Store token in localStorage only
+          // Store token in both localStorage and cookie for maximum compatibility
           localStorage.setItem('auth_token', token);
-          console.log('Token stored in localStorage');
+          
+          // Set token in cookie for server-side requests
+          document.cookie = `auth_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+          
+          console.log('Token stored in both localStorage and cookie');
           
           // Also store user data in localStorage
           localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -185,9 +202,10 @@ const authService = {
               const newToken = tokenResponse.data.token;
               console.log('Retrieved fresh token from /token');
               
-              // Store the new token in localStorage only
+              // Store the new token in both localStorage and cookie
               localStorage.setItem('auth_token', newToken);
-              console.log('Updated token in localStorage');
+              document.cookie = `auth_token=${newToken}; path=/; max-age=86400; SameSite=Lax`;
+              console.log('Updated token in localStorage and cookie');
               
               // Update the response with the new token
               response.data.token = newToken;
@@ -341,11 +359,13 @@ const authService = {
       
       if (response.data.token) {
         localStorage.setItem('auth_token', response.data.token);
-        console.log('Token refreshed and updated');
+        document.cookie = `auth_token=${response.data.token}; path=/; max-age=86400; SameSite=Lax`;
+        console.log('Token refreshed and updated in localStorage and cookie');
         return true;
       } else if (response.data.accessToken) {
         localStorage.setItem('auth_token', response.data.accessToken);
-        console.log('Token refreshed and updated (accessToken)');
+        document.cookie = `auth_token=${response.data.accessToken}; path=/; max-age=86400; SameSite=Lax`;
+        console.log('Token refreshed and updated (accessToken) in localStorage and cookie');
         return true;
       }
       

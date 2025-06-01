@@ -376,29 +376,70 @@ export const createOrder = async (
     
     // Check authentication status first
     const token = getEffectiveToken();
+    
+    // If we have an HTTP-only cookie or no token, try to get a valid token
     if (!token || token === 'http-only-cookie-present') {
-      console.log('No valid token found, attempting to refresh...');
+      console.log('No explicit token found, attempting to refresh or check auth status...');
+      
+      // First try to refresh the token
       const refreshSuccess = await authService.refreshToken();
+      
+      // If refresh fails, try to check auth status directly with the API
       if (!refreshSuccess) {
-        console.log('Token refresh failed, redirecting to login');
-        if (cartItems.length > 0) {
-          localStorage.setItem('pendingCart', JSON.stringify({
-            items: cartItems,
-            tableId
-          }));
+        try {
+          // Try to get user data from /auth/me endpoint
+          const authResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (authResponse.ok) {
+            const userData = await authResponse.json();
+            console.log('Auth check successful:', userData);
+            
+            // If we got user data, we're authenticated despite not having a token
+            if (userData.success && userData.user) {
+              console.log('User is authenticated via cookies, proceeding with order');
+              // Continue with order creation
+            } else {
+              throw new Error('Authentication check failed');
+            }
+          } else {
+            throw new Error('Authentication check failed');
+          }
+        } catch (authError) {
+          console.log('Auth check failed, redirecting to login');
+          if (cartItems.length > 0) {
+            localStorage.setItem('pendingCart', JSON.stringify({
+              items: cartItems,
+              tableId
+            }));
+          }
+          
+          if (navigate) {
+            navigate('/login', { state: { from: '/cart', tableId } });
+          } else {
+            window.location.href = `/login?redirect=${encodeURIComponent('/cart')}&tableId=${tableId}`;
+          }
+          throw new Error('Authentication required. Please log in to place an order.');
         }
-        
-        if (navigate) {
-          navigate('/login', { state: { from: '/cart', tableId } });
-        } else {
-          window.location.href = `/login?redirect=${encodeURIComponent('/cart')}&tableId=${tableId}`;
-        }
-        throw new Error('Authentication required. Please log in to place an order.');
       }
     }
     
-    // Get or generate a device ID for guest users
-    const getDeviceId = (): string => {
+    // Get or generate a device ID - but only for guest users
+    const getDeviceId = (): string | null => {
+      // Only return device ID for guest users - first check if we have an auth token
+      const authToken = getEffectiveToken();
+      
+      // If we have a valid token, we're authenticated and don't need device ID
+      if (authToken && authToken !== 'http-only-cookie-present') {
+        console.log('User is authenticated with token, skipping device ID');
+        return null;
+      }
+      
       // Check localStorage for existing device ID
       let deviceId = localStorage.getItem('device_id');
       
@@ -412,7 +453,7 @@ export const createOrder = async (
     };
     
     const deviceId = getDeviceId();
-    console.log('Device ID for order:', deviceId);
+    console.log('Device ID for order:', deviceId ? 'Generated for guest user' : 'Skipped for authenticated user');
     
     // Prepare order data
     let formattedOrderData: OrderData;
@@ -472,19 +513,27 @@ export const createOrder = async (
       };
     }
 
-    // Prepare complete order data with device ID
-    const completeOrderData = {
+    // Prepare complete order data with device ID only for guest users
+    const completeOrderData: any = {
       ...formattedOrderData,
       status: OrderStatus.PENDING,
       paymentStatus: PaymentStatus.PENDING,
-      orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      deviceId // Include device ID for tracking
+      orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     };
+    
+    // Only include device ID for guest users
+    if (deviceId) {
+      completeOrderData.deviceId = deviceId;
+      console.log('Including deviceId for guest user:', deviceId);
+    } else {
+      console.log('Authenticated user - not including deviceId');
+    }
     
     // Log data preparation
     console.log('Prepared order data:', {
       orderNumber: completeOrderData.orderNumber,
-      hasDeviceId: Boolean(deviceId)
+      hasDeviceId: Boolean(completeOrderData.deviceId),
+      isGuestUser: Boolean(deviceId)
     });
 
     // Get fresh headers after potential token refresh
@@ -492,7 +541,7 @@ export const createOrder = async (
     
     console.log('Sending order request with credentials included');
     console.log('Request headers prepared:', {
-      hasAuthorization: !!headers.Authorization,
+      hasAuthorization: !!(headers as any).Authorization,
       contentType: headers['Content-Type']
     });
     

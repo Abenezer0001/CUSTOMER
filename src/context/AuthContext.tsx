@@ -66,11 +66,12 @@ type AuthContextType = {
   updateUser: (userData: Partial<AuthUser>) => void;
   addLoyaltyPoints: (points: number) => void;
   refreshToken: () => Promise<boolean>;
+  setIsAuthenticated: (value: boolean) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -79,33 +80,77 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
   // Helper function to get token from all possible sources
   function getTokenFromAllSources(): string | null {
-    // First try to use the AuthService's function
     try {
-      // First check cookies
       const cookies = document.cookie.split(';');
-      const tokenCookie = cookies.find(cookie => 
-        cookie.trim().startsWith('auth_token=') || 
-        cookie.trim().startsWith('access_token=')
-      );
       
-      if (tokenCookie) {
-        const token = tokenCookie.split('=')[1].trim();
-        console.log('Found token in cookies:', token);
+      // First check for access_token (from Google OAuth)
+      const accessTokenCookie = cookies.find(cookie => cookie.trim().startsWith('access_token='));
+      if (accessTokenCookie) {
+        const token = accessTokenCookie.split('=')[1].trim();
+        console.log('Found access_token in cookies:', token.substring(0, 20) + '...');
+        // Store in localStorage for consistency
+        localStorage.setItem('auth_token', token);
         return token;
       }
       
-      // Then check localStorage
+      // Then check for auth_token
+      const authTokenCookie = cookies.find(cookie => cookie.trim().startsWith('auth_token='));
+      if (authTokenCookie) {
+        const token = authTokenCookie.split('=')[1].trim();
+        console.log('Found auth_token in cookies:', token.substring(0, 20) + '...');
+        // Store in localStorage for consistency
+        localStorage.setItem('auth_token', token);
+        return token;
+      }
+      
+      // Finally check localStorage as fallback
       const localToken = localStorage.getItem('auth_token');
       if (localToken) {
-        console.log('Found token in localStorage');
+        console.log('Found token in localStorage:', localToken.substring(0, 20) + '...');
         return localToken;
       }
     } catch (error) {
-      console.error('Error getting token:', error);
+      console.error('Error getting token from cookies:', error);
     }
     
-    console.log('No token found in any source');
+    console.log('No accessible token found in cookies or localStorage');
     return null;
+  }
+
+  // Helper function to check if we might be authenticated via HTTP-only cookies
+  function hasHttpOnlyAuth(): boolean {
+    try {
+      const cookieString = document.cookie;
+      const cookies = cookieString.split(';');
+      
+      // Check for common auth cookie patterns that might be HTTP-only
+      const hasAuthIndicators = cookies.some(cookie => {
+        const trimmed = cookie.trim();
+        return trimmed.includes('session') || 
+               trimmed.includes('sid') ||
+               trimmed.includes('connect.sid') ||
+               cookieString.length > 100; // Substantial cookie content suggests auth cookies
+      });
+      
+      // Also check if we have a stored user which would indicate previous successful auth
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          const userObj = JSON.parse(storedUser);
+          if (userObj && userObj.id && userObj.email) {
+            console.log('Found valid user data in localStorage, likely authenticated via HTTP-only cookies');
+            return true;
+          }
+        } catch (e) {
+          console.error('Error parsing stored user data:', e);
+        }
+      }
+      
+      return hasAuthIndicators;
+    } catch (error) {
+      console.error('Error checking HTTP-only auth:', error);
+      return false;
+    }
   }
 
   // Check authentication status on mount
@@ -117,103 +162,202 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         // First check if we have a valid token
         const token = getTokenFromAllSources();
         if (token) {
-          console.log('Found token during initialization');
+          console.log('Found accessible token during initialization');
           setToken(token);
-          
-          // Try to verify the token with the server
-          const isValid = await AuthService.isAuthenticated();
-          if (!isValid) {
-            console.log('Token is invalid, clearing auth state');
-            localStorage.removeItem('auth_token');
-            setToken(null);
-            setIsAuthenticated(false);
-            setUser(null);
-            setLoading(false);
-            return;
-          }
         } else {
-          console.log('No token found during initialization');
+          console.log('No accessible token found during initialization');
+          
+          // Check if we might have HTTP-only auth cookies
+          if (hasHttpOnlyAuth()) {
+            console.log('HTTP-only authentication cookies detected, attempting to verify');
+          } else {
+            console.log('No authentication detected');
           setLoading(false);
           return;
         }
+        }
         
-        // Try to get user data from the auth/me endpoint (avoiding double /api/ prefix)
+        // Check if we have Google OAuth cookies - if so, clear any guest data
+        const cookies = document.cookie.split(';');
+        const hasAccessToken = cookies.some(cookie => cookie.trim().startsWith('access_token='));
+        const hasRefreshToken = cookies.some(cookie => cookie.trim().startsWith('refresh_token='));
+        
+        if (hasAccessToken || hasRefreshToken) {
+          console.log('Google OAuth cookies detected, clearing any guest user data');
+          localStorage.removeItem('user'); // Clear any stored guest user data
+          setUser(null); // Clear current user state
+          setIsAuthenticated(false); // Reset auth state
+        }
+        
+        // Try to get user data from AuthService
         try {
-          console.log('Attempting to fetch user profile');
-          // Make sure we're using the correct endpoint without duplicate /api/ prefix
-          const userData = await AuthService.getCurrentUser();
+          console.log('Attempting to fetch user profile from AuthService');
           
-          if (userData) {
-            console.log('Successfully fetched user profile:', userData);
-            
-            // Helper function to safely get date string
-            const getDateString = (date: string | Date | undefined): string => {
-              if (!date) return new Date().toISOString();
-              return typeof date === 'string' ? date : date.toISOString();
-            };
-            
-            // Helper to safely access nested properties
-            const safeGet = (obj: any, path: string, defaultValue: any): any => {
-              return path.split('.').reduce((acc, key) => acc?.[key], obj) ?? defaultValue;
-            };
-            
-            // Get the ID, preferring id over _id
-            const userId = (safeGet(userData, 'id', '') || safeGet(userData, '_id', '')).toString();
-            
+          // Use AuthService which is properly configured with backend URL and credentials
+          const userData = await AuthService.getCurrentUser();
+          console.log('AuthContext: AuthService response:', userData);
+          
+          if (userData && userData.id && userData.email) {
             // Generate a display name from available fields
-            const firstName = safeGet(userData, 'firstName', '');
-            const lastName = safeGet(userData, 'lastName', '');
-            const email = safeGet(userData, 'email', '');
-            const displayName = safeGet(userData, 'name', '') || 
-              (firstName || lastName ? `${firstName} ${lastName}`.trim() : email || 'User');
+            const firstName = userData.firstName || '';
+            const lastName = userData.lastName || '';
+            const email = userData.email || '';
+            const displayName = firstName && lastName 
+              ? `${firstName} ${lastName}`.trim() 
+              : email || 'User';
             
             // Create the normalized user object with all required fields
             const normalizedUser: AuthUser = {
-              id: userId,
+              id: userData.id,
               email: email,
               firstName: firstName,
               lastName: lastName,
-              role: safeGet(userData, 'role', 'customer'),
-              loyaltyPoints: safeGet(userData, 'loyaltyPoints', 0),
+              role: userData.role || 'customer',
+              loyaltyPoints: userData.loyaltyPoints || 0,
               name: displayName,
-              createdAt: getDateString(safeGet(userData, 'createdAt', undefined)),
-              orders: safeGet(userData, 'orders', []),
+              createdAt: userData.createdAt || new Date().toISOString(),
+              orders: userData.orders || [],
             };
             
             setUser(normalizedUser);
             setIsAuthenticated(true);
             localStorage.setItem('user', JSON.stringify(normalizedUser));
             
+            console.log('Authentication successful via AuthService, user set:', normalizedUser.email);
             return; // Exit early on success
           } else {
-            console.warn('Failed to get valid user data');
+            console.warn('No user data returned from AuthService');
+          }
+          
+          // If AuthService fails and we're not dealing with OAuth cookies, 
+          // check if we have stored user data for offline access
+          if (!hasAccessToken && !hasRefreshToken) {
+            const storedUser = localStorage.getItem('user');
+            if (storedUser && hasHttpOnlyAuth()) {
+              try {
+                const userObj = JSON.parse(storedUser);
+                if (userObj && userObj.id && userObj.email) {
+                  console.log('Using stored user data with HTTP-only auth detected');
+                  setUser(userObj);
+                  setIsAuthenticated(true);
+                  return;
+                }
+              } catch (e) {
+                console.error('Error parsing stored user data:', e);
+              }
+            }
+            }
+            
             // Clear invalid auth data
             localStorage.removeItem('auth_token');
             localStorage.removeItem('user');
             setUser(null);
             setIsAuthenticated(false);
-          }
         } catch (error) {
           console.error('Error fetching user profile:', error);
-          setIsAuthenticated(false);
+          
+          // If we have a token but can't reach the server, try to create a minimal user from token
+          if (token && token !== 'http-only-cookie-present' && token !== 'user-data-present') {
+          try {
+            const tokenParts = token.split('.');
+            if (tokenParts.length === 3) {
+              const payload = JSON.parse(atob(tokenParts[1]));
+              console.log('Token payload for offline fallback:', payload);
+              
+              if (payload.id && payload.email) {
+                const fallbackUser: AuthUser = {
+                  id: payload.id,
+                  email: payload.email,
+                  firstName: payload.firstName || 'User',
+                  lastName: payload.lastName || '',
+                  role: payload.role || 'customer',
+                  loyaltyPoints: 0,
+                  name: payload.name || `${payload.firstName || 'User'} ${payload.lastName || ''}`.trim(),
+                    createdAt: (payload as any).createdAt || new Date().toISOString(),
+                    orders: (payload as any).orders || [],
+                };
+                
+                setUser(fallbackUser);
+                setIsAuthenticated(true);
+                localStorage.setItem('user', JSON.stringify(fallbackUser));
+                
+                console.log('Created offline fallback user from token');
+                return;
+              }
+            }
+          } catch (tokenError) {
+            console.error('Error decoding token for offline fallback:', tokenError);
+            }
+          }
+          
+          // Clear any invalid auth data
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user');
           setUser(null);
+          setIsAuthenticated(false);
         }
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+        setUser(null);
+        setIsAuthenticated(false);
       } finally {
         setLoading(false);
       }
     };
 
+    // Listen for authentication state changes from other components
+    const handleAuthStateChange = (event: any) => {
+      const { isAuthenticated: authStatus, user: userData } = event.detail;
+      console.log('Received auth state change event:', { authStatus, userData });
+      
+      if (authStatus && userData) {
+        // Set user data directly from the event
+        const normalizedUser: AuthUser = {
+          id: userData.id || userData._id || '',
+          email: userData.email || '',
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          role: userData.role || 'customer',
+          loyaltyPoints: userData.loyaltyPoints || 0,
+          name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email || 'User',
+          createdAt: userData.createdAt || new Date().toISOString(),
+          orders: userData.orders || [],
+        };
+        
+        setUser(normalizedUser);
+        setIsAuthenticated(true);
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+        console.log('Updated user from auth state change:', normalizedUser.email);
+      } else if (authStatus === false) {
+        setUser(null);
+        setIsAuthenticated(false);
+        localStorage.removeItem('user');
+        console.log('Cleared user due to auth state change');
+      }
+    };
+    
+    window.addEventListener('auth-state-changed', handleAuthStateChange);
+    
+    // Initialize authentication check
     checkAuth();
-  }, []);
+    
+    return () => {
+      window.removeEventListener('auth-state-changed', handleAuthStateChange);
+    };
+  }, []); // Run only once on mount
 
   // Save user data to localStorage whenever it changes
   useEffect(() => {
     if (user) {
       localStorage.setItem('user', JSON.stringify(user));
+      // Ensure isAuthenticated is true whenever we have a user
+      if (!isAuthenticated) {
+        setIsAuthenticated(true);
+      }
     } else {
       localStorage.removeItem('user');
     }
-  }, [user]);
+  }, [user, isAuthenticated]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setLoading(true);
@@ -296,24 +440,20 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         
         // Get token from cookies after signup
         const accessToken = getTokenFromAllSources();
-        console.log('Token after signup:', accessToken);
-        
         if (accessToken) {
-          console.log('Setting token after signup:', accessToken);
           setToken(accessToken);
           setIsAuthenticated(true);
-        } else {
-          console.log('No token found in cookies after signup!');
         }
         
-        toast.success('Account created successfully!');
+        toast.success('Registration successful!');
         return true;
       }
       
+      toast.error('Registration failed. Please try again.');
       return false;
     } catch (error) {
       console.error('Signup error:', error);
-      toast.error(error instanceof Error ? error.message : 'Signup failed. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Registration failed. Please try again.');
       return false;
     } finally {
       setLoading(false);
@@ -321,29 +461,33 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   };
 
   const logout = async (): Promise<void> => {
-    setLoading(true);
     try {
       await AuthService.logout();
+      
+      // Clear auth state
       setUser(null);
       setToken(null);
       setIsAuthenticated(false);
       
-      // Clear the cart when logging out
-      // We need to do this through localStorage directly since we can't use the hook here
-      localStorage.removeItem('cartItems');
-      console.log('Cleared cart items from localStorage on logout');
+      // Clear localStorage
+      localStorage.removeItem('user');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('cart'); // Clear cart on logout
       
-      // Clear all auth-related cookies
-      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-      document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-      document.cookie = 'refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      // Clear cookies by setting expiration to past date
+      document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
       
-      toast.info('You have been logged out');
+      // Notify other components about the authentication state change
+      window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { isAuthenticated: false } }));
+      
+      // Dispatch cart clear event
+      window.dispatchEvent(new CustomEvent('cart-cleared'));
+      
+      toast.success('Logged out successfully');
     } catch (error) {
       console.error('Logout error:', error);
-      toast.error('Error during logout. Please try again.');
-    } finally {
-      setLoading(false);
+      toast.error('Error during logout');
     }
   };
 
@@ -370,46 +514,38 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         localStorage.setItem('device_id', deviceId);
       }
       
-      // Use AuthService for guest login which now correctly handles the guest-token endpoint
+      // Use the correct endpoint: guest-token
       const response = await AuthService.guestLogin(tableId || '');
       
       if (response.success && response.token) {
-        console.log('Guest login successful via AuthService');
-        
-        // Store the token in both localStorage and as a cookie for redundancy
-        setToken(response.token);
-        localStorage.setItem('auth_token', response.token);
-        document.cookie = `access_token=${response.token}; path=/; max-age=86400; SameSite=Lax`;
+        // Set token in cookie for cross-page consistency
         document.cookie = `auth_token=${response.token}; path=/; max-age=86400; SameSite=Lax`;
         
-        // Create a guest user object using data from response when available
-        const guestId = response.user?.id || 'guest-' + deviceId;
+        // Create a minimal user object
         const guestUser: AuthUser = {
-          id: guestId,
-          email: response.user?.email || `${deviceId}@guest.inseat.com`,
-          firstName: response.user?.firstName || 'Guest',
-          lastName: response.user?.lastName || 'User',
+          id: response.user?.id || 'guest',
+          email: response.user?.email || 'guest@example.com',
+          firstName: 'Guest',
+          lastName: 'User',
           role: 'guest',
           loyaltyPoints: 0,
-          name: response.user?.firstName 
-            ? `${response.user.firstName} ${response.user.lastName || 'User'}`
-            : 'Guest User',
+          name: 'Guest User',
           createdAt: new Date().toISOString(),
-          orders: []
+          orders: [],
         };
         
         setUser(guestUser);
+        setToken(response.token);
         setIsAuthenticated(true);
         
-        console.log('Guest user session created successfully', guestUser);
-        toast.success('Continuing as guest');
+        console.log('Guest login successful');
         return true;
       }
       
-      throw new Error('Guest login failed: ' + (response.error || 'Unknown error'));
+      console.error('Guest login failed:', response);
+      return false;
     } catch (error) {
       console.error('Guest login error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create guest session');
       return false;
     } finally {
       setLoading(false);
@@ -447,13 +583,32 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
           console.log('Got user data after refresh:', email);
           setIsAuthenticated(true);
           
+          // Update the user object with the data from /api/auth/me
+          if (userData.user) {
+            // Create a proper user object from the API response
+            const userObj: AuthUser = {
+              id: userData.user.id || userData.user._id || '',
+              email: userData.user.email || '',
+              firstName: userData.user.firstName || '',
+              lastName: userData.user.lastName || '',
+              role: userData.user.role || 'customer',
+              loyaltyPoints: userData.user.loyaltyPoints || 0,
+              name: userData.user.name || `${userData.user.firstName || ''} ${userData.user.lastName || ''}`.trim() || userData.user.email || '',
+              createdAt: userData.user.createdAt?.toString() || new Date().toISOString(),
+              orders: userData.user.orders || []
+            };
+            
+            console.log('Setting user data from /auth/me:', userObj);
+            setUser(userObj);
+          }
+          
           // If we got a token in the response, save it
           if (userData.token) {
             console.log('Got new token from user data after refresh');
             setToken(userData.token);
-            localStorage.setItem('auth_token', userData.token);
+            // Only using cookies for token storage, not localStorage
             
-            // Also set as a cookie for redundancy
+            // Set token in cookie for cross-page consistency
             document.cookie = `auth_token=${userData.token}; path=/; max-age=86400; SameSite=Lax`;
           }
           
@@ -461,6 +616,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         }
       }
       
+      console.log('Token refresh failed');
       return false;
     } catch (error) {
       console.error('Error refreshing token:', error);
@@ -477,154 +633,73 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const updateUser = (userData: Partial<AuthUser>) => {
     if (user) {
       setUser({ ...user, ...userData });
-      toast.success('Profile updated');
-      // In a real implementation, you would also update the user on the server
+    } else {
+      setUser(userData as AuthUser);
     }
+    // Ensure isAuthenticated is set to true when updating user data
+    setIsAuthenticated(true);
   };
 
   const addLoyaltyPoints = (points: number) => {
     if (user) {
-      const updatedUser = { 
-        ...user, 
-        loyaltyPoints: (user.loyaltyPoints || 0) + points 
+      const updatedUser = {
+        ...user,
+        loyaltyPoints: (user.loyaltyPoints || 0) + points
       };
       setUser(updatedUser);
-      toast.success(`${points} loyalty points added!`);
-      // In a real implementation, you would also update the loyalty points on the server
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      toast.success(`Added ${points} loyalty points!`);
     }
   };
 
-  // Customer-specific authentication methods
   const customerLogin = async (email: string, password: string): Promise<boolean> => {
+    setLoading(true);
+    
     try {
-      setLoading(true);
-      
-      // Clear any existing auth state
-      setUser(null);
-      setIsAuthenticated(false);
-      setToken(null);
-      
       const response = await customerAuthService.login({ email, password });
       
       if (response.success && response.user) {
-        const userData = response.user as unknown as ApiUserData;
-        
-        // Format user data
-        const formattedUser: AuthUser = {
-          id: userData.id || userData._id || '',
-          email: userData.email || '',
-          firstName: userData.firstName || '',
-          lastName: userData.lastName || '',
-          role: userData.role || 'customer',
-          loyaltyPoints: userData.loyaltyPoints || 0,
-          name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
-          createdAt: userData.createdAt?.toString() || new Date().toISOString(),
-          orders: userData.orders || []
+        // Transform the user object to match our frontend expectations
+        const userData: AuthUser = {
+          id: response.user.id || (response.user as any)._id || '',
+          email: response.user.email || '',
+          firstName: response.user.firstName || '',
+          lastName: response.user.lastName || '',
+          role: 'customer',
+          loyaltyPoints: response.user.loyaltyPoints || 0,
+          name: `${response.user.firstName || ''} ${response.user.lastName || ''}`.trim() || response.user.email || '',
+          createdAt: (response.user as any).createdAt?.toString() || new Date().toISOString(),
+          orders: (response.user as any).orders || [],
         };
         
-        // Update auth state
-        setUser(formattedUser);
-        setIsAuthenticated(true);
+        setUser(userData);
         
-        // Store token if available
-        const authToken = response.token || response.accessToken || response.jwt;
-        if (authToken) {
-          setToken(authToken);
-          localStorage.setItem('auth_token', authToken);
-          console.log('Auth token stored in localStorage');
+        // Get token from cookies after login
+        const accessToken = getTokenFromAllSources();
+        if (accessToken) {
+          setToken(accessToken);
+          setIsAuthenticated(true);
         }
         
-        // Store refresh token if available
-        if (response.refreshToken) {
-          localStorage.setItem('refresh_token', response.refreshToken);
-          console.log('Refresh token stored in localStorage');
-        }
-        
-        toast.success('Logged in successfully');
-        
-        // Handle redirection
-        handlePostAuthRedirect();
-        
+        toast.success('Login successful!');
         return true;
-      } else {
-        // Clear any partial auth state on failure
-        setUser(null);
-        setIsAuthenticated(false);
-        setToken(null);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        
-        toast.error(response.message || 'Login failed. Please check your credentials and try again.');
-        return false;
       }
+      
+      toast.error('Invalid email or password');
+      return false;
     } catch (error) {
       console.error('Customer login error:', error);
-      
-      // Clear auth state on error
-      setUser(null);
-      setIsAuthenticated(false);
-      setToken(null);
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('refresh_token');
-      
-      toast.error('An error occurred during login. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Login failed. Please try again.');
       return false;
     } finally {
       setLoading(false);
     }
   };
-  
-  // Helper function to handle post-authentication redirect
-  const handlePostAuthRedirect = () => {
-    // First check tableInfo in localStorage (has priority)
-    const tableInfo = localStorage.getItem('tableInfo');
-    console.log('Post-auth table info:', tableInfo);
-    
-    // Also check for currentTableId as a fallback
-    const currentTableId = localStorage.getItem('currentTableId');
-    console.log('Current table ID from localStorage:', currentTableId);
-    
-    // Logic for redirection:
-    // 1. Try to use tableInfo.id if available
-    // 2. Fall back to currentTableId if available
-    // 3. Redirect to /scan if no table information is found
-    
-    if (tableInfo) {
-      try {
-        const parsedTableInfo = JSON.parse(tableInfo);
-        if (parsedTableInfo?.id) {
-          // Store the table ID in currentTableId for consistency
-          localStorage.setItem('currentTableId', parsedTableInfo.id);
-          console.log(`Redirecting to table page with ID: ${parsedTableInfo.id}`);
-          navigate(`/?table=${parsedTableInfo.id}`, { replace: true });
-          return;
-        }
-      } catch (e) {
-        console.error('Error parsing table info:', e);
-      }
-    }
-    
-    // If tableInfo didn't work, try currentTableId
-    if (currentTableId) {
-      console.log(`Using currentTableId for redirection: ${currentTableId}`);
-      navigate(`/?table=${currentTableId}`, { replace: true });
-      return;
-    }
-    
-    // Default redirect if no valid table info
-    console.log('No valid table info, redirecting to scan page');
-    navigate('/scan', { replace: true });
-  };
-  
+
   const customerSignup = async (firstName: string, lastName: string, email: string, password: string): Promise<boolean> => {
+    setLoading(true);
+    
     try {
-      setLoading(true);
-      
-      // Clear any existing auth state
-      setUser(null);
-      setIsAuthenticated(false);
-      setToken(null);
-      
       const response = await customerAuthService.register({
         firstName,
         lastName,
@@ -633,65 +708,36 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       });
       
       if (response.success && response.user) {
-        const userData = response.user as unknown as ApiUserData;
-        
-        // Format user data
-        const formattedUser: AuthUser = {
-          id: userData.id || userData._id || '',
-          email: userData.email || '',
-          firstName: userData.firstName || '',
-          lastName: userData.lastName || '',
-          role: userData.role || 'customer',
-          loyaltyPoints: userData.loyaltyPoints || 0,
-          name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
-          createdAt: userData.createdAt?.toString() || new Date().toISOString(),
-          orders: userData.orders || []
+        // Transform the user object to match our frontend expectations
+        const userData: AuthUser = {
+          id: response.user.id || (response.user as any)._id || '',
+          email: response.user.email || '',
+          firstName: response.user.firstName || '',
+          lastName: response.user.lastName || '',
+          role: 'customer',
+          loyaltyPoints: response.user.loyaltyPoints || 0,
+          name: `${response.user.firstName || ''} ${response.user.lastName || ''}`.trim() || response.user.email || '',
+          createdAt: (response.user as any).createdAt?.toString() || new Date().toISOString(),
+          orders: (response.user as any).orders || [],
         };
         
-        // Update auth state
-        setUser(formattedUser);
-        setIsAuthenticated(true);
+        setUser(userData);
         
-        // Store token if available
-        const authToken = response.token || response.accessToken || response.jwt;
-        if (authToken) {
-          setToken(authToken);
-          localStorage.setItem('auth_token', authToken);
-          console.log('Auth token stored in localStorage');
+        // Get token from cookies after signup
+        const accessToken = getTokenFromAllSources();
+        if (accessToken) {
+          setToken(accessToken);
+          setIsAuthenticated(true);
         }
         
-        // Store refresh token if available
-        if (response.refreshToken) {
-          localStorage.setItem('refresh_token', response.refreshToken);
-          console.log('Refresh token stored in localStorage');
-        }
-        
-        toast.success('Account created successfully');
-        
-        // Handle redirection
-        handlePostAuthRedirect();
-        
+        toast.success('Registration successful!');
         return true;
-      } else {
-        // Clear any partial auth state on failure
-        setUser(null);
-        setIsAuthenticated(false);
-        setToken(null);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        
-        toast.error(response.message || 'Registration failed. Please try again.');
-        return false;
       }
+      
+      toast.error('Registration failed. Please try again.');
+      return false;
     } catch (error) {
       console.error('Customer signup error:', error);
-      
-      // Clear auth state on error
-      setUser(null);
-      setIsAuthenticated(false);
-      setToken(null);
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('refresh_token');
       
       toast.error('An error occurred during registration. Please try again.');
       return false;
@@ -724,7 +770,8 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         customerGoogleLogin,
         updateUser,
         addLoyaltyPoints,
-        refreshToken
+        refreshToken,
+        setIsAuthenticated
       }}
     >
       {children}
@@ -733,7 +780,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 };
 
 // Create a custom hook to use the auth context
-export const useAuth = () => {
+const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
@@ -742,4 +789,4 @@ export const useAuth = () => {
 };
 
 // Export all components and hooks from a single location
-export { AuthContext, AuthProvider };
+export { AuthContext, AuthProvider, useAuth };

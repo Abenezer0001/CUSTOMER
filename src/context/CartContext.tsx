@@ -71,6 +71,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [itemCount, setItemCount] = useState(0);
   const [cartTotal, setCartTotal] = useState(0);
 
+  // Listen for cart clear events from logout
+  useEffect(() => {
+    const handleCartClear = () => {
+      console.log('Cart cleared due to logout');
+      localStorage.removeItem('cart');
+      setCartItems([]);
+    };
+    
+    window.addEventListener('cart-cleared', handleCartClear);
+    
+    return () => {
+      window.removeEventListener('cart-cleared', handleCartClear);
+    };
+  }, []);
+
   // When tableId changes, filter cart items to only show items for this table
   useEffect(() => {
     if (tableId) {
