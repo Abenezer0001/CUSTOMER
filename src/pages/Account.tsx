@@ -234,15 +234,16 @@ const Account: React.FC = () => {
     navigate(`/?table=${effectiveTableId}`);
   }
   return (
-    <div className="container mx-auto px-4 py-6 mt-16 mb-20">
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto px-4 py-8 mt-16 mb-20 max-w-6xl">
+      {/* Top navigation bar with gradient background */}
+      <div className="flex justify-between items-center mb-8 p-4 bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl shadow-md text-white">
         <Button 
           variant="ghost" 
           size="sm"
           onClick={handleGoBack}
-          className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+          className="text-white hover:text-white hover:bg-white/20 transition-all"
         >
-          <ArrowLeft className="mr-2" size={16} />
+          <ArrowLeft className="mr-2" size={18} />
           Back to menu
         </Button>
         
@@ -250,44 +251,47 @@ const Account: React.FC = () => {
           variant="ghost" 
           size="sm"
           onClick={handleLogout}
-          className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+          className="text-white hover:text-white hover:bg-white/20 transition-all"
         >
-          <LogOut className="h-4 w-4 mr-1" />
+          <LogOut className="h-4 w-4 mr-2" />
           Logout
         </Button>
       </div>
       
-      <div className="flex flex-col md:flex-row gap-6">
-        {/* Left column - User info */}
-        <div className="w-full md:w-1/3">
-          <Card className="mb-6">
-            <CardHeader className="pb-2">
-              <div className="flex justify-between">
-                <Avatar className="h-16 w-16 mb-2">
-                  <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-700 dark:text-emerald-100 text-lg">
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Left column - User info with improved styling */}
+        <div className="w-full lg:w-1/3 space-y-8">
+          {/* User profile card with enhanced visuals */}
+          <Card className="overflow-hidden border-0 shadow-lg">
+            <div className="bg-gradient-to-br from-purple-500 to-purple-800 p-6 text-white">
+              <div className="flex items-center gap-4 mb-4">
+                <Avatar className="h-20 w-20 border-4 border-white shadow-md">
+                  <AvatarFallback className="bg-white text-purple-700 text-xl font-bold">
                     {getInitials()}
                   </AvatarFallback>
                 </Avatar>
                 
-                <Badge className={`${userTier.color} mt-1`}>
-                  {userTier.name} Member
-                </Badge>
+                <div className="flex-1">
+                  <h2 className="text-2xl font-bold">{safeUser.name}</h2>
+                  <p className="text-purple-100 text-sm truncate">{safeUser.email}</p>
+                </div>
               </div>
               
-              <CardTitle>{safeUser.name}</CardTitle>
-              <CardDescription>{safeUser.email}</CardDescription>
-            </CardHeader>
+              <Badge className="bg-white/20 hover:bg-white/30 text-white border-0 py-1 px-3">
+                {userTier.name} Member
+              </Badge>
+            </div>
             
-            <CardContent>
-              <div className="mb-4">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">Loyalty Points</span>
-                  <span className="font-medium">{safeUser.loyaltyPoints}</span>
+            <CardContent className="p-6">
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-base font-medium">Loyalty Points</span>
+                  <span className="text-xl font-bold text-purple-600">{safeUser.loyaltyPoints}</span>
                 </div>
                 
-                <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div className="w-full h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 dark:from-emerald-600 dark:to-emerald-400" 
+                    className="h-full bg-gradient-to-r from-purple-500 to-purple-700" 
                     style={{ 
                       width: `${Math.min(100, (safeUser.loyaltyPoints / 10))}%` 
                     }}
@@ -298,82 +302,81 @@ const Account: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-4 w-full text-xs"
+                  className="mt-4 w-full text-xs border-purple-200 text-purple-700 hover:bg-purple-50 hover:text-purple-800"
                   onClick={handleAddTestPoints}
                 >
                   Add Test Points (Development Only)
                 </Button>
               </div>
               
-              <div className="space-y-2">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Member since:</span>
-                  <span className="float-right">
+              <div className="grid grid-cols-2 gap-4">
+                <div key="member-since" className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg text-center">
+                  <span className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Member since</span>
+                  <span className="font-medium">
                     {safeUser.createdAt ? format(new Date(safeUser.createdAt), 'MMM dd, yyyy') : 'N/A'}
                   </span>
                 </div>
                 
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Total orders:</span>
-                  <span className="float-right">{safeUser.orders ? safeUser.orders.length : 0}</span>
+                <div key="total-orders" className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg text-center">
+                  <span className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Total orders</span>
+                  <span className="font-medium">{safeUser.orders ? safeUser.orders.length : 0}</span>
                 </div>
               </div>
             </CardContent>
           </Card>
           
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center">
-                <Award className="h-4 w-4 mr-2 text-emerald-600" />
+          {/* Rewards card with improved visual appeal */}
+          <Card className="border-0 shadow-lg overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-purple-500 to-purple-700 text-white p-5">
+              <CardTitle className="text-lg flex items-center">
+                <Award className="h-5 w-5 mr-2" />
                 Available Rewards
               </CardTitle>
             </CardHeader>
-            
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center">
+            <CardContent className="p-6 space-y-4">
+              <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg flex justify-between items-center">
                 <div>
-                  <h4 className="text-sm font-medium">Free Appetizer</h4>
-                  <p className="text-xs text-muted-foreground">Any appetizer up to $12</p>
+                  <h4 className="text-base font-medium text-purple-800 dark:text-purple-300">Free Drink</h4>
+                  <p className="text-sm text-purple-600 dark:text-purple-400">Any drink on the menu</p>
                 </div>
-                <Button
+                <Button 
                   size="sm" 
-                  variant="outline" 
-                  onClick={() => handleRedeemPoints(200, 'Free Appetizer')}
+                  variant="outline"
+                  onClick={() => handleRedeemPoints(200, 'Free Drink')}
                   disabled={safeUser.loyaltyPoints < 200}
+                  className="bg-white border-purple-200 text-purple-700 hover:bg-purple-50 hover:text-purple-800 disabled:opacity-50"
                 >
                   200 pts
                 </Button>
               </div>
               
-              <Separator />
-              
-              <div className="flex justify-between items-center">
+              <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg flex justify-between items-center">
                 <div>
-                  <h4 className="text-sm font-medium">10% Off Your Order</h4>
-                  <p className="text-xs text-muted-foreground">Valid for one order</p>
+                  <h4 className="text-base font-medium text-purple-800 dark:text-purple-300">10% Off Your Order</h4>
+                  <p className="text-sm text-purple-600 dark:text-purple-400">Valid for one order</p>
                 </div>
                 <Button 
                   size="sm" 
                   variant="outline"
                   onClick={() => handleRedeemPoints(350, '10% Off Your Order')}
                   disabled={safeUser.loyaltyPoints < 350}
+                  className="bg-white border-amber-200 text-amber-700 hover:bg-amber-100 hover:text-amber-800 disabled:opacity-50"
                 >
                   350 pts
                 </Button>
               </div>
               
-              <Separator />
-              
-              <div className="flex justify-between items-center">
+              <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg flex justify-between items-center">
                 <div>
-                  <h4 className="text-sm font-medium">Free Dessert</h4>
-                  <p className="text-xs text-muted-foreground">Any dessert on the menu</p>
+                  <h4 className="text-base font-medium text-purple-800 dark:text-purple-300">Free Dessert</h4>
+                  <p className="text-sm text-purple-600 dark:text-purple-400">Any dessert on the menu</p>
                 </div>
                 <Button 
                   size="sm" 
                   variant="outline"
                   onClick={() => handleRedeemPoints(450, 'Free Dessert')}
                   disabled={safeUser.loyaltyPoints < 450}
+                  className="bg-white border-amber-200 text-amber-700 hover:bg-amber-100 hover:text-amber-800 disabled:opacity-50"
                 >
                   450 pts
                 </Button>
@@ -382,110 +385,133 @@ const Account: React.FC = () => {
           </Card>
         </div>
         
-        {/* Right column - Tabs for Profile and Orders */}
-        <div className="w-full md:w-2/3">
-          <Card>
-            <CardHeader className="pb-2">
-              <Tabs defaultValue="profile" value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="profile" className="flex items-center justify-center">
-                    <User className="h-4 w-4 mr-2" />
-                    Profile
-                  </TabsTrigger>
-                  <TabsTrigger value="orders" className="flex items-center justify-center">
-                    <History className="h-4 w-4 mr-2" />
-                    Order History
-                  </TabsTrigger>
-                </TabsList>
-                
-                <div>
-                  <TabsContent value="profile" className="m-0">
-                    <CardTitle className="text-xl mb-1">My Profile</CardTitle>
-                    <CardDescription>Manage your account information</CardDescription>
-                  </TabsContent>
-                  
-                  <TabsContent value="orders" className="m-0">
-                    <div className="flex items-center justify-between">
-                      <div>
-                    <CardTitle className="text-xl mb-1">Order History</CardTitle>
-                    <CardDescription>Review your past orders</CardDescription>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRefreshOrders}
-                        disabled={isRefreshing}
-                        className="flex items-center gap-2"
-                      >
-                        <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        {isRefreshing ? 'Refreshing' : 'Refresh'}
-                      </Button>
-                    </div>
-                  </TabsContent>
+        {/* Right column - Tabs for Profile and Orders with enhanced styling */}
+        <div className="w-full lg:w-2/3">
+          <Card className="border-0 shadow-lg overflow-hidden">
+            <CardHeader className="pb-0 pt-0 px-0">
+              <Tabs defaultValue="profile" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <div className="bg-gray-50 dark:bg-gray-800 px-6 pt-6">
+                  <TabsList className="grid w-full grid-cols-2 mb-6 bg-white/80 dark:bg-gray-700/50 p-1 rounded-lg">
+                    <TabsTrigger 
+                      value="profile" 
+                      className="flex items-center justify-center py-3 rounded-md data-[state=active]:bg-purple-600 data-[state=active]:text-white"
+                    >
+                      <User className="h-4 w-4 mr-2" />
+                      Profile
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="orders" 
+                      className="flex items-center justify-center py-3 rounded-md data-[state=active]:bg-purple-600 data-[state=active]:text-white"
+                    >
+                      <History className="h-4 w-4 mr-2" />
+                      Order History
+                    </TabsTrigger>
+                  </TabsList>
                 </div>
-              
-                <CardContent className="pt-6">
-                  <TabsContent value="profile" className="m-0">
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-sm font-medium">Full Name</label>
+                
+                <TabsContent value="profile">
+                  <div className="bg-gray-50 dark:bg-gray-800 px-6 pt-6">
+                    <div className="px-1">
+                      <div className="flex items-center mb-4">
+                        <User className="h-6 w-6 mr-3 text-purple-600" />
+                        <div>
+                          <CardTitle className="text-2xl font-bold">My Profile</CardTitle>
+                          <CardDescription className="text-base">Manage your account information</CardDescription>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <CardContent className="p-6">
+                    <div className="space-y-6">
+                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name</label>
                         <div className="flex items-center justify-between mt-1">
-                          <span>{safeUser.name}</span>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <Edit className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-lg font-medium">{safeUser.name}</span>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
+                            <Edit className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
                       
-                      <Separator />
-                      
-                      <div>
-                        <label className="text-sm font-medium">Email Address</label>
+                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Email Address</label>
                         <div className="flex items-center justify-between mt-1">
-                          <span>{safeUser.email}</span>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <Edit className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-lg font-medium truncate max-w-[80%]">{safeUser.email}</span>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
+                            <Edit className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
                       
-                      <Separator />
-                      
-                      <div>
-                        <label className="text-sm font-medium">Password</label>
+                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Password</label>
                         <div className="flex items-center justify-between mt-1">
-                          <span>••••••••</span>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <Edit className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-lg font-medium">••••••••</span>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
+                            <Edit className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
                       
-                      <Separator />
-                      
-                      <div>
-                        <label className="text-sm font-medium">Communication Preferences</label>
-                        <div className="mt-2 space-y-2">
-                          <div className="flex items-center">
-                            <input type="checkbox" id="emailNotif" className="mr-2" defaultChecked />
-                            <label htmlFor="emailNotif" className="text-sm">Email notifications</label>
+                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 block">Communication Preferences</label>
+                        <div className="space-y-3">
+                          <div className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors">
+                            <input 
+                              type="checkbox" 
+                              id="emailNotif" 
+                              className="mr-3 h-5 w-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" 
+                              defaultChecked 
+                            />
+                            <label htmlFor="emailNotif" className="text-base cursor-pointer flex-1">Email notifications</label>
                           </div>
-                          <div className="flex items-center">
-                            <input type="checkbox" id="smsNotif" className="mr-2" />
-                            <label htmlFor="smsNotif" className="text-sm">SMS notifications</label>
+                          <div className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors">
+                            <input 
+                              type="checkbox" 
+                              id="smsNotif" 
+                              className="mr-3 h-5 w-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" 
+                            />
+                            <label htmlFor="smsNotif" className="text-base cursor-pointer flex-1">SMS notifications</label>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </TabsContent>
+                  </CardContent>
+                </TabsContent>
                   
-                  <TabsContent value="orders" className="m-0">
-                    {/* Debug info for development */}
-                    <div className="mb-4 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs">
-                      <p>Debug: {orders.length} orders found</p>
+                <TabsContent value="orders">
+                  <div className="bg-gray-50 dark:bg-gray-800 px-6 pt-6">
+                    <div className="px-1">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                          <History className="h-6 w-6 mr-3 text-purple-600" />
+                          <div>
+                            <CardTitle className="text-2xl font-bold">Order History</CardTitle>
+                            <CardDescription className="text-base">Review your past orders</CardDescription>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRefreshOrders}
+                          disabled={isRefreshing}
+                          className="flex items-center gap-2 border-purple-200 text-purple-700 hover:bg-purple-50"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                          {isRefreshing ? 'Refreshing' : 'Refresh'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <CardContent className="p-6">
+                    {/* Debug info for development - styled better */}
+                    <div className="mb-6 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800 text-xs">
+                      <p className="text-purple-700 dark:text-purple-300 font-medium">Debug: {orders.length} orders found</p>
                       <button 
                         onClick={handleRefreshOrders}
-                        className="mt-1 px-2 py-1 bg-blue-500 text-white rounded text-xs"
+                        className="mt-2 px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded text-xs font-medium transition-colors"
                         disabled={isRefreshing}
                       >
                         {isRefreshing ? 'Refreshing...' : 'Refresh Orders'}
@@ -493,63 +519,71 @@ const Account: React.FC = () => {
                     </div>
                     
                     {orders.length > 0 ? (
-                      <div className="space-y-4">
+                      <div className="space-y-6">
                         {orders.map((order) => (
-                          <Card key={order.id} className="overflow-hidden">
-                            <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 flex justify-between items-center">
+                          <Card key={order.id} className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow">
+                            <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-5 py-3 flex justify-between items-center text-white">
                               <div>
-                                <span className="text-sm font-medium">
+                                <span className="text-base font-bold">
                                   Order #{order.id ? order.id.substring(0, 8) : 'Unknown'}
                                 </span>
-                                <span className="text-xs text-muted-foreground block">
+                                <span className="text-sm text-purple-100 block">
                                   {order.timestamp ? format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a') : 'N/A'}
                                 </span>
                               </div>
-                              <Badge variant={
-                                String(order.status).toLowerCase() === 'completed' ? 'default' :
-                                String(order.status).toLowerCase() === 'delivered' ? 'secondary' :
-                                String(order.status).toLowerCase() === 'ready' ? 'outline' : 'secondary'
+                              <Badge className={
+                                String(order.status).toLowerCase() === 'completed' ? 'bg-white/20 hover:bg-white/30 text-white border-0' :
+                                String(order.status).toLowerCase() === 'delivered' ? 'bg-purple-200 text-purple-800 border-0' :
+                                String(order.status).toLowerCase() === 'ready' ? 'bg-purple-200 text-purple-800 border-0' : 'bg-white/20 hover:bg-white/30 text-white border-0'
                               }>
                                 {order.status ? `${order.status.charAt(0).toUpperCase()}${order.status.slice(1)}` : 'Pending'}
                               </Badge>
                             </div>
-                            <CardContent className="p-4">
-                              <div className="space-y-2">
+                            <CardContent className="p-5">
+                              <div className="space-y-3">
                                 {order.items && order.items.length > 0 ? order.items.map((item, idx) => (
-                                  <div key={idx} className="flex justify-between text-sm">
-                                    <span>
-                                      {item.quantity}x {item.name}
+                                  <div key={idx} className="flex justify-between items-start text-sm bg-gray-50 dark:bg-gray-800 p-3 rounded-md">
+                                    <div className="flex-1">
+                                      <span className="font-medium">
+                                        {item.quantity}x {item.name}
+                                      </span>
                                       {item.modifiers && item.modifiers.length > 0 && (
-                                        <span className="text-xs text-muted-foreground block pl-4">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 block mt-1 pl-4">
                                           {item.modifiers.map(mod => mod.name).join(', ')}
                                         </span>
                                       )}
-                                    </span>
-                                    <span>${(item.price * item.quantity).toFixed(2)}</span>
+                                    </div>
+                                    <span className="font-bold text-purple-700 dark:text-purple-400">${(item.price * item.quantity).toFixed(2)}</span>
                                   </div>
                                 )) : (
-                                  <div className="text-sm text-muted-foreground">No items found</div>
+                                  <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">No items found</div>
                                 )}
                               </div>
-                              <Separator className="my-3" />
-                              <div className="flex justify-between font-medium">
-                                <span>Total</span>
-                                <span>${(order.total || 0).toFixed(2)}</span>
+                              <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                <span className="text-base font-medium">Total</span>
+                                <span className="text-xl font-bold text-purple-700 dark:text-purple-400">${(order.total || 0).toFixed(2)}</span>
                               </div>
                             </CardContent>
                           </Card>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-8">
-                        <History className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                        <h3 className="text-lg font-medium mb-2">No orders yet</h3>
-                        <p className="text-muted-foreground text-sm mb-4">You haven't placed any orders yet</p>
-                        <Button onClick={() => navigate('/menu')}>Browse Menu</Button>
+                      <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                        <div className="bg-white dark:bg-gray-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
+                          <History className="h-10 w-10 text-purple-500" />
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">No orders yet</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-base mb-6">You haven't placed any orders yet</p>
+                        <Button 
+                          onClick={() => navigate('/menu')} 
+                          className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full font-medium"
+                        >
+                          Browse Menu
+                        </Button>
                       </div>
                     )}
-                  </TabsContent>
-                </CardContent>
+                  </CardContent>
+                </TabsContent>
               </Tabs>
             </CardHeader>
           </Card>
