@@ -291,15 +291,15 @@ const MyOrders: React.FC = () => {
         
         console.log('Loading orders with table ID:', tableId);
         console.log('Restaurant name:', restaurantName);
-        
+              
         // Always try to fetch orders from API first
         console.log('Fetching orders from API...');
         const response = await apiClient.get('/api/orders/my-orders');
         
-        if (response.data) {
-          const fetchedOrders = Array.isArray(response.data) ? response.data : [];
-          console.log('Fetched orders from API:', fetchedOrders.length);
-          setOrders(fetchedOrders);
+          if (response.data) {
+            const fetchedOrders = Array.isArray(response.data) ? response.data : [];
+            console.log('Fetched orders from API:', fetchedOrders.length);
+            setOrders(fetchedOrders);
         } else {
           console.log('No data returned from API, checking context orders');
           // Fall back to context orders if API returns no data
@@ -308,7 +308,7 @@ const MyOrders: React.FC = () => {
             setOrders(contextOrders);
           } else {
             setOrders([]);
-          }
+        }
         }
         
       } catch (error: any) {
@@ -319,8 +319,8 @@ const MyOrders: React.FC = () => {
           console.log('Using context orders due to API error');
           setOrders(contextOrders);
         } else {
-          setError(`Failed to load orders: ${error.message || 'Unknown error'}`);
-          setOrders([]);
+        setError(`Failed to load orders: ${error.message || 'Unknown error'}`);
+        setOrders([]);
         }
       } finally {
         setLoading(false);
@@ -329,7 +329,7 @@ const MyOrders: React.FC = () => {
 
     // Only load if not already loading authentication
     if (!isLoading) {
-      loadOrders();
+    loadOrders();
     }
   }, [tableId, restaurantName, isLoading]); // Removed contextOrders dependency to prevent loops
   
