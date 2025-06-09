@@ -700,12 +700,34 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     
     try {
-      const response = await customerAuthService.register({
+      // Get tableId from localStorage if available
+      const tableId = localStorage.getItem('currentTableId') || 
+                     localStorage.getItem('tableId') || 
+                     sessionStorage.getItem('tableId') || 
+                     undefined;
+      
+      // Also check URL parameters as fallback
+      let finalTableId = tableId;
+      if (!finalTableId) {
+        const urlParams = new URLSearchParams(window.location.search);
+        finalTableId = urlParams.get('table') || undefined;
+      }
+      
+      const registrationData = {
         firstName,
         lastName,
         email,
-        password
+        password,
+        ...(finalTableId && { tableId: finalTableId })
+      };
+      
+      console.log('Customer signup with context:', {
+        ...registrationData,
+        password: '[REDACTED]',
+        tableId: finalTableId || 'Not provided'
       });
+      
+      const response = await customerAuthService.register(registrationData);
       
       if (response.success && response.user) {
         // Transform the user object to match our frontend expectations

@@ -254,17 +254,17 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
           
           {/* Tags and metadata */}
           <div className="flex flex-wrap gap-2 mb-3">
-            {item.preparationTime && (
+            {(item as any).preparationTime && (
               <Badge variant="outline" className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                {item.preparationTime}
+                {typeof (item as any).preparationTime === 'string' ? (item as any).preparationTime : `${(item as any).preparationTime} min`}
               </Badge>
             )}
             
-            {item.rating && (
+            {(item as any).rating && (
               <Badge variant="outline" className="flex items-center gap-1 bg-amber-50 text-amber-700 border-amber-200">
                 <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                {item.rating}
+                {(item as any).rating}
               </Badge>
             )}
             

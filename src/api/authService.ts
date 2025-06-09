@@ -1,18 +1,21 @@
 import axios from 'axios';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'https://api.inseat.achievengine.com/api/auth';
+const envApiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001';
 
-// Extract the base URL without any /api/auth path if present
-const BASE_URL = API_BASE_URL.includes('/api/auth') 
-  ? API_BASE_URL.split('/api/auth')[0] 
-  : API_BASE_URL;
+// Ensure we have the base URL without /api suffix
+let processedApiUrl = envApiUrl;
+if (processedApiUrl.endsWith('/api')) {
+  processedApiUrl = processedApiUrl.slice(0, -4);
+} else if (processedApiUrl.endsWith('/api/')) {
+  processedApiUrl = processedApiUrl.slice(0, -5);
+}
 
 // Define the auth API endpoint
-const AUTH_API_URL = `${BASE_URL}/api/auth`;
+const AUTH_API_URL = `${processedApiUrl}/api/auth`;
 
-console.log('API base URL:', API_BASE_URL);
-console.log('Extracted base URL:', BASE_URL);
+console.log('Environment API URL:', envApiUrl);
+console.log('Processed API URL:', processedApiUrl);
 console.log('Auth API URL:', AUTH_API_URL);
 
 // Types
@@ -47,42 +50,41 @@ export interface AuthResponse {
 // Helper function to get token from localStorage and cookies
 export const getEffectiveToken = (): string | null => {
   try {
-    // Check for all possible cookie names used in the system
-    const cookies = document.cookie.split(';');
-    const possibleCookieNames = ['auth_token=', 'access_token=', 'token=', 'jwt='];
-    
-    // First check for HTTP-only cookie (we can't read it directly)
-    const hasAuthCookie = cookies.some(cookie => {
-      const trimmedCookie = cookie.trim();
-      return possibleCookieNames.some(name => trimmedCookie.startsWith(name));
-    });
-    
-    if (hasAuthCookie) {
-      // We can't read HTTP-only cookie content, but we can indicate it exists
-      console.log('HTTP-only auth cookie detected');
-      return 'http-only-cookie-present';
-    }
-    
-    // Then check for regular cookies
-    for (const cookieName of possibleCookieNames) {
-      const cookieValue = cookies.find(cookie => cookie.trim().startsWith(cookieName));
-      if (cookieValue) {
-        const token = cookieValue.split('=')[1];
-        console.log(`Found ${cookieName.replace('=', '')} in cookies`);
-        // Store in localStorage for consistency
-        localStorage.setItem('auth_token', token);
-        return token;
-      }
-    }
-    
-    // Finally check localStorage as fallback
+    // First check localStorage for direct token access
     const localToken = localStorage.getItem('auth_token');
-    if (localToken) {
-      console.log('Found token in localStorage');
+    if (localToken && localToken !== 'http-only-cookie-present') {
+      console.log('Found valid token in localStorage');
       return localToken;
     }
     
-    console.log('No token found in cookies or localStorage');
+    // Then check for accessible cookies
+    const cookies = document.cookie.split(';');
+    const possibleCookieNames = ['auth_token=', 'access_token=', 'token=', 'jwt='];
+    
+    for (const cookieName of possibleCookieNames) {
+      const cookieValue = cookies.find(cookie => cookie.trim().startsWith(cookieName));
+      if (cookieValue) {
+        const token = cookieValue.split('=')[1]?.trim();
+        if (token && token.length > 10) { // Basic validation
+          console.log(`Found ${cookieName.replace('=', '')} in cookies`);
+          // Store in localStorage for future access
+          localStorage.setItem('auth_token', token);
+          return token;
+        }
+      }
+    }
+    
+    // Check if we have HTTP-only cookies by looking at cookie existence
+    const hasHttpOnlyCookies = document.cookie.length > 50 || 
+                               cookies.some(cookie => cookie.includes('session') || cookie.includes('sid'));
+    
+    if (hasHttpOnlyCookies && !localToken) {
+      console.log('HTTP-only cookies detected, marking token as present');
+      localStorage.setItem('auth_token', 'http-only-cookie-present');
+      return 'http-only-cookie-present';
+    }
+    
+    console.log('No authentication token found');
     return null;
   } catch (error) {
     console.error('Error in getEffectiveToken:', error);

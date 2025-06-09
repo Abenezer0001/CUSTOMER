@@ -10,6 +10,9 @@ import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 import CartDrawer from '@/components/CartDrawer';
 import AIChatDrawer from '@/components/AIChatDrawer';
+import { ItemDetailDrawer } from '@/components/ItemDetailDrawer';
+import { Drawer, DrawerContent } from '@/components/ui/drawer';
+import { MenuItem } from '@/types';
 
 const Layout: React.FC = () => {
   const { tableNumber, setTableInfo } = useTableInfo();
@@ -17,6 +20,8 @@ const Layout: React.FC = () => {
   const { theme, setTheme } = useTheme();
   const { cartItems } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [isItemDetailOpen, setIsItemDetailOpen] = useState(false);
   
   useEffect(() => {
     // Extract table number from URL query parameters
@@ -52,6 +57,12 @@ const Layout: React.FC = () => {
     return result;
   };
   
+  // Handle add to cart from AI Chat - opens ItemDetailDrawer
+  const handleAIAddToCart = (item: MenuItem) => {
+    setSelectedItem(item);
+    setIsItemDetailOpen(true);
+  };
+  
   // Don't show header on scan page
   const isScanPage = location.pathname === '/scan';
   
@@ -81,9 +92,25 @@ const Layout: React.FC = () => {
         </div>
       )}
       
+      {/* Floating AI Chat button */}
+      <div className="fixed bottom-20 left-4 z-50">
+        <AIChatDrawer onAddToCart={handleAIAddToCart} />
+      </div>
+      
       {/* Cart Drawer */}
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
-      <AIChatDrawer />
+      
+      {/* Item Detail Drawer for AI selections */}
+      <Drawer open={isItemDetailOpen} onOpenChange={setIsItemDetailOpen}>
+        <DrawerContent>
+          {selectedItem && (
+            <ItemDetailDrawer 
+              item={selectedItem} 
+              onClose={() => setIsItemDetailOpen(false)} 
+            />
+          )}
+        </DrawerContent>
+      </Drawer>
       
       {/* Set main content background to dark color and ensure proper text color */}
       <main className="flex-grow pb-20" style={{ backgroundColor: '#16141F' }}> 

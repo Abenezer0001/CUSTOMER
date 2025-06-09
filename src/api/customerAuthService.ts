@@ -2,21 +2,25 @@ import axios, { AxiosError, AxiosResponse } from 'axios';
 import { getEffectiveToken } from './authService';
 
 // Define base API URL - should come from environment variables in production
-const API_BASE_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api/auth';
+const envApiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001';
 
+console.log('Environment VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
 console.log('Environment VITE_AUTH_API_URL:', import.meta.env.VITE_AUTH_API_URL);
-console.log('Using API_BASE_URL:', API_BASE_URL);
 
-// Extract the base URL without the auth path
-const BASE_URL = API_BASE_URL.includes('/api/auth') 
-  ? API_BASE_URL.split('/api/auth')[0] 
-  : API_BASE_URL;
+// Ensure we have the base URL without /api suffix
+let processedApiUrl = envApiUrl;
+if (processedApiUrl.endsWith('/api')) {
+  processedApiUrl = processedApiUrl.slice(0, -4);
+} else if (processedApiUrl.endsWith('/api/')) {
+  processedApiUrl = processedApiUrl.slice(0, -5);
+}
 
 // Customer API endpoint is at /api/customer
-const CUSTOMER_API_ENDPOINT = `${BASE_URL}/api/customer`;
+const CUSTOMER_API_ENDPOINT = `${processedApiUrl}/api/customer`;
 // Auth API endpoint for /me requests
-const AUTH_API_ENDPOINT = `${BASE_URL}/api/auth`;
+const AUTH_API_ENDPOINT = `${processedApiUrl}/api/auth`;
 
+console.log('Using processed API URL:', processedApiUrl);
 console.log('Customer API endpoint:', CUSTOMER_API_ENDPOINT);
 console.log('Auth API endpoint:', AUTH_API_ENDPOINT);
 
@@ -61,6 +65,7 @@ export interface RegisterData {
   lastName: string;
   email: string;
   password: string;
+  tableId?: string; // Optional table ID for associating customer with restaurant
 }
 
 export interface AuthResponse {
@@ -121,12 +126,35 @@ const customerAuthService = {
   // Register a new customer
   register: async (userData: RegisterData): Promise<AuthResponse> => {
     try {
-      console.log('Registering customer with data:', {
+      // Get tableId from localStorage if not provided in userData
+      let tableId = userData.tableId;
+      if (!tableId) {
+        // Try to get tableId from various localStorage keys
+        tableId = localStorage.getItem('currentTableId') || 
+                 localStorage.getItem('tableId') || 
+                 sessionStorage.getItem('tableId') || 
+                 undefined;
+        
+        // Also check URL parameters as fallback
+        if (!tableId) {
+          const urlParams = new URLSearchParams(window.location.search);
+          tableId = urlParams.get('table') || undefined;
+        }
+      }
+      
+      // Prepare registration data with tableId if available
+      const registrationData = {
         ...userData,
-        password: '[REDACTED]'
+        ...(tableId && { tableId })
+      };
+      
+      console.log('Registering customer with data:', {
+        ...registrationData,
+        password: '[REDACTED]',
+        tableId: tableId || 'Not provided'
       });
       
-      const response = await api.post<AuthResponse>('/register', userData, {
+      const response = await api.post<AuthResponse>('/register', registrationData, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -410,10 +438,10 @@ const customerAuthService = {
       console.log('Stored table ID in session storage before Google login:', tableId);
       
       // Add table ID to the redirect URL as a query parameter
-      return `${API_BASE_URL}/google?table=${tableId}`;
+      return `${processedApiUrl}/google?table=${tableId}`;
     }
     
-    return `${API_BASE_URL}/google`;
+    return `${processedApiUrl}/google`;
   }
 };
 

@@ -1,17 +1,22 @@
 import axios from 'axios';
-import { API_BASE_URL } from '@/config/constants';
 
-// Extract the base URL without any /api/auth path if present
-const extractedBaseUrl = typeof API_BASE_URL === 'string' && API_BASE_URL.includes('/api/auth') 
-  ? API_BASE_URL.split('/api/auth')[0] 
-  : API_BASE_URL;
+// Get API URL directly from environment variables with fallback
+const envApiUrl = import.meta.env.VITE_API_BASE_URL;
+let processedApiUrl = envApiUrl || 'http://localhost:3001';
+
+// Ensure API_BASE_URL is the true root (e.g., http://localhost:3001)
+if (processedApiUrl.endsWith('/api')) {
+  processedApiUrl = processedApiUrl.slice(0, -4); // Remove last /api
+} else if (processedApiUrl.endsWith('/api/')) { // also handle trailing slash
+  processedApiUrl = processedApiUrl.slice(0, -5); // Remove last /api/
+}
 
 // Define the final BASE_URL used for API requests
-const BASE_URL = extractedBaseUrl || 'https://api.inseat.achievengine.com';
+const BASE_URL = processedApiUrl;
 
 // For debugging
-console.log('API_BASE_URL:', API_BASE_URL);
-console.log('Extracted BASE_URL for API client:', BASE_URL);
+console.log('Environment VITE_API_BASE_URL:', envApiUrl);
+console.log('Processed BASE_URL for API client:', BASE_URL);
 
 // Helper function to get token from various sources
 const getEffectiveToken = (): string | null => {
