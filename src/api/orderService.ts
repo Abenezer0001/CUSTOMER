@@ -173,7 +173,7 @@ export const getRestaurantIdFromTableId = async (tableId: string): Promise<strin
   try {
     console.log('Fetching restaurant ID for table:', tableId);
     
-    const response = await fetch(`${API_BASE_URL}/api/tables/${tableId}`, {
+    const response = await fetch(`${API_BASE_URL}/tables/${tableId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -514,7 +514,7 @@ export const createOrder = async (
       if (!refreshSuccess) {
         try {
           // Try to get user data from /auth/me endpoint
-          const authResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          const authResponse = await fetch(`${API_BASE_URL}/auth/me`, {
             method: 'GET',
             credentials: 'include',
             headers: {
@@ -670,7 +670,7 @@ export const createOrder = async (
     
     // Log the request details for debugging
     console.log('Order request details:', {
-      url: `${API_BASE_URL}/api/orders`,
+      url: `${API_BASE_URL}/orders`,
       method: 'POST',
       headers: headers,
       body: JSON.stringify(completeOrderData).substring(0, 100) + '...',
@@ -678,7 +678,7 @@ export const createOrder = async (
     });
     
     // Send the request with credentials: 'include' to send cookies
-    const response = await fetch(`${API_BASE_URL}/api/orders`, {
+    const response = await fetch(`${API_BASE_URL}/orders`, {
       method: 'POST',
       headers,
       body: JSON.stringify(completeOrderData),
@@ -744,7 +744,7 @@ export const fetchUserOrders = async (): Promise<OrdersResponse['data']> => {
   try {
     console.log('Fetching user orders with credentials included');
     
-    const response = await fetch(`${API_BASE_URL}/api/orders/my-orders`, {
+    const response = await fetch(`${API_BASE_URL}/orders/my-orders`, {
       method: 'GET',
       headers: getAuthHeaders(),
       credentials: 'include' // Send cookies
@@ -796,7 +796,7 @@ export const fetchUserOrders = async (): Promise<OrdersResponse['data']> => {
  */
 export const cancelOrder = async (orderId: string): Promise<void> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/cancel`, {
+    const response = await fetch(`${API_BASE_URL}/orders/${orderId}/cancel`, {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include'
@@ -822,7 +822,7 @@ export const cancelOrder = async (orderId: string): Promise<void> => {
  */
 export const getOrderById = async (orderId: string): Promise<Order> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
+    const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
       method: 'GET',
       headers: getAuthHeaders(),
       credentials: 'include'
@@ -862,7 +862,7 @@ export const updateOrderStatus = async (
   status: OrderStatus
 ): Promise<UpdateOrderStatusResponse['data']> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/status`, {
+    const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
       method: 'PATCH',
       headers: getAuthHeaders(),
       body: JSON.stringify({ status }),
@@ -895,7 +895,7 @@ export const updatePaymentStatus = async (
   paymentStatus: PaymentStatus
 ): Promise<UpdatePaymentStatusResponse['data']> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/payment`, {
+    const response = await fetch(`${API_BASE_URL}/orders/${orderId}/payment`, {
       method: 'PATCH',
       headers: getAuthHeaders(),
       body: JSON.stringify({ paymentStatus }),
