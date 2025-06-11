@@ -13,6 +13,52 @@ export interface MenuItem {
   modifiers?: MenuItemModifierGroup[];
 }
 
+// Table and Venue type definitions for tableService
+export interface Table {
+  _id: string;
+  number: string;
+  capacity: number;
+  status: string;
+  isActive: boolean;
+  restaurantId: string;
+  venueId?: string;
+  qrCode?: string;
+}
+
+export interface TableDetails extends Table {
+  restaurant?: {
+    _id: string;
+    name: string;
+  };
+  venue?: {
+    _id: string;
+    name: string;
+    restaurantId: string;
+  };
+}
+
+export interface Venue {
+  _id: string;
+  name: string;
+  description?: string;
+  address: string;
+  logo?: string;
+  restaurantId: string;
+  isActive: boolean;
+}
+
+export interface VenueDetails extends Venue {
+  openingHours?: Record<string, { open: string; close: string }>;
+  phone?: string;
+  email?: string;
+  website?: string;
+  socialMedia?: {
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+  };
+}
+
 // Represents an option within a modifier group (e.g., "Small", "Medium", "Large" for Size)
 export interface ModifierOption {
   name: string;
@@ -101,15 +147,22 @@ export enum PaymentStatus {
   REFUNDED = 'REFUNDED'
 }
 
-export type CartContextType = {
-  cartItems: CartItem[];  // Renamed from items to cartItems for consistency with API
-  addItem: (item: MenuItem, quantity: number, modifiers?: CartItemModifier[], cookingPreference?: string, specialInstructions?: string) => void;
-  removeFromCart: (id: string) => void;  // Renamed from removeItem for clarity
-  updateQuantity: (id: string, quantity: number) => void;
+export interface CartContextType {
+  cartItems: CartItem[];
+  addToCart: (item: Omit<CartItem, 'quantity' | 'dateAdded'>) => void;
+  addItem: (
+    item: any,
+    quantity: number,
+    modifiers?: CartModifier[],
+    options?: any,
+    specialInstructions?: string
+  ) => void;
+  removeFromCart: (itemId: string) => void;
+  updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
-  itemCount: number;  // Renamed from totalItems for clarity
-  cartTotal: number;  // Renamed from subtotal to cartTotal for clarity
-};
+  itemCount: number;
+  cartTotal: number;
+}
 
 export type FavoritesContextType = {
   favorites: string[];

@@ -10,7 +10,7 @@ import { ArrowLeft, X, MinusCircle, PlusCircle, ShoppingCart, ChevronRight, Load
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { createOrder } from '@/api/orderService';
+import { createOrder, getRestaurantIdFromTableId } from '@/api/orderService';
 import { createStripeCheckoutSession } from '@/api/paymentService';
 import { useOrders } from '@/context/OrdersContext';
 
@@ -51,17 +51,23 @@ const CartPage: React.FC = () => {
     setIsProcessing(true);
     
     try {
-      // Determine restaurant ID (either from context or extract from tableId)
-      const restaurantId = restaurantName === 'InSeat' 
-        ? '65f456b06c9dfd001b6b1234' 
-        : tableId.split('-')[0];
+      // Get restaurant ID from table ID using API call
+      let restaurantId: string;
+      try {
+        restaurantId = await getRestaurantIdFromTableId(tableId);
+        console.log('Fetched restaurant ID from table API:', restaurantId);
+      } catch (error) {
+        console.error('Failed to get restaurant ID from table:', error);
+        throw new Error('Unable to determine restaurant ID from table: ' + tableId);
+      }
       
       // Step 1: Create the order in our system
       const orderResponse = await createOrder(
         cartItems,
         tableId,
         restaurantId,
-        token
+        undefined, // customOrderData
+        navigate
       );
       
       if (!orderResponse || !orderResponse._id) {
@@ -71,13 +77,17 @@ const CartPage: React.FC = () => {
       // Add the order to local context
       addOrder({
         id: orderResponse._id,
+        orderNumber: orderResponse.orderNumber,
         items: cartItems,
         subtotal: cartTotal,
         tax: cartTotal * 0.1,
+        serviceFee: 0,
+        tip: 0,
         total: cartTotal * 1.1,
-        status: 'pending',
+        status: 'PENDING' as any, // Use the enum value
+        paymentStatus: orderResponse.paymentStatus,
         timestamp: new Date(orderResponse.createdAt),
-        tableNumber: tableId
+        tableId: tableId
       });
       
       toast.success('Order created successfully! Redirecting to payment...');

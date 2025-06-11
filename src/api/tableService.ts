@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { Table, TableDetails, Venue, VenueDetails } from '@/types';
-import { API_BASE_URL } from '@/config/api';
+import { API_BASE_URL } from '@/constants';
 
 // Use API_BASE_URL from centralized configuration
 
@@ -196,6 +196,8 @@ export const verifyTableStatus = async (tableId: string): Promise<{
           description: 'Fallback venue data',
           address: '123 Test Street',
           logo: '/placeholder.jpg',
+          restaurantId: `restaurant_${tableId}`,
+          isActive: true,
           openingHours: {
             'Monday': { open: '09:00', close: '22:00' }
           }
@@ -210,4 +212,143 @@ export const verifyTableStatus = async (tableId: string): Promise<{
     };
   }
 };
+
+export interface TableData {
+  _id: string;
+  number: string;
+  capacity: number;
+  status: string;
+  restaurantId: string;
+  venueId?: string;
+  restaurant?: {
+    _id: string;
+    name: string;
+  };
+  venue?: {
+    _id: string;
+    restaurantId: string;
+    restaurant?: {
+      _id: string;
+      name: string;
+    };
+  };
+}
+
+export class TableService {
+  /**
+   * Get table details by table ID
+   */
+  static async getTableById(tableId: string): Promise<TableData> {
+    try {
+      console.log('Fetching table details for tableId:', tableId);
+      
+      // Since API_BASE_URL already includes /api, we should use the correct endpoints
+      const possibleEndpoints = [
+        `${API_BASE_URL}/tables/${tableId}`,
+        `${API_BASE_URL}/restaurant/tables/${tableId}`
+      ];
+
+      let tableData = null;
+      let lastError = null;
+
+      for (const endpoint of possibleEndpoints) {
+        try {
+          console.log('Trying endpoint:', endpoint);
+          
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+
+          if (response.ok) {
+            tableData = await response.json();
+            console.log('Table data received from', endpoint, ':', tableData);
+            break;
+          } else {
+            console.log('Endpoint failed:', endpoint, response.status);
+          }
+        } catch (error) {
+          console.log('Error with endpoint:', endpoint, error);
+          lastError = error;
+        }
+      }
+
+      if (!tableData) {
+        throw new Error(`Failed to fetch table from all endpoints. Last error: ${lastError}`);
+      }
+      
+      return tableData;
+    } catch (error) {
+      console.error('Error fetching table details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract restaurant ID from table data
+   */
+  static getRestaurantIdFromTable(tableData: TableData): string {
+    // Try multiple paths to get restaurant ID
+    if (tableData.restaurantId) {
+      console.log('Found restaurantId directly:', tableData.restaurantId);
+      return tableData.restaurantId;
+    }
+    
+    if (tableData.restaurant?._id) {
+      console.log('Found restaurant._id:', tableData.restaurant._id);
+      return tableData.restaurant._id;
+    }
+    
+    if (tableData.venue?.restaurantId) {
+      console.log('Found venue.restaurantId:', tableData.venue.restaurantId);
+      return tableData.venue.restaurantId;
+    }
+    
+    if (tableData.venue?.restaurant?._id) {
+      console.log('Found venue.restaurant._id:', tableData.venue.restaurant._id);
+      return tableData.venue.restaurant._id;
+    }
+    
+    // Try extracting from table ID pattern (some systems use restaurantId-tableNumber)
+    const idParts = tableData._id.split('-');
+    if (idParts.length > 1) {
+      console.log('Trying to extract restaurant ID from table ID pattern:', idParts[0]);
+      return idParts[0];
+    }
+    
+    console.error('Could not find restaurant ID in table data:', tableData);
+    throw new Error(`Unable to determine restaurant ID from table: ${tableData._id}`);
+  }
+
+  /**
+   * Get restaurant ID from table ID (convenience method)
+   */
+  static async getRestaurantIdFromTableId(tableId: string): Promise<string> {
+    try {
+      console.log('Getting restaurant ID for tableId:', tableId);
+      
+      // First try to extract from table ID pattern (quick method)
+      const idParts = tableId.split('-');
+      if (idParts.length > 1 && idParts[0].length === 24) { // MongoDB ObjectId length
+        console.log('Extracted restaurant ID from table ID pattern:', idParts[0]);
+        return idParts[0];
+      }
+      
+      // If pattern doesn't work, fetch full table data
+      const tableData = await this.getTableById(tableId);
+      const restaurantId = this.getRestaurantIdFromTable(tableData);
+      
+      console.log('Successfully extracted restaurant ID:', restaurantId);
+      return restaurantId;
+    } catch (error) {
+      console.error('Error getting restaurant ID from table ID:', error);
+      throw error;
+    }
+  }
+}
+
+export default TableService;
 

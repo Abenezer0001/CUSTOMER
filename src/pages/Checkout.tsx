@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
@@ -8,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, CreditCard, Loader2, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { createOrder } from '@/api/orderService';
+import { createOrder, getRestaurantIdFromTableId } from '@/api/orderService';
 import { createStripeCheckoutSession } from '@/api/paymentService';
 import { OrderStatus, PaymentStatus } from '@/types';
 
@@ -69,11 +68,16 @@ const Checkout: React.FC = () => {
     setIsProcessing(true);
     
     try {
-      // First create the order in our system
-      const restaurantId = restaurantName === 'InSeat' 
-        ? '65f456b06c9dfd001b6b1234' 
-        : tableId.split('-')[0];
-        
+      // Get restaurant ID from table ID using API call
+      let restaurantId: string;
+      try {
+        restaurantId = await getRestaurantIdFromTableId(tableId);
+        console.log('Fetched restaurant ID from table API:', restaurantId);
+      } catch (error) {
+        console.error('Failed to get restaurant ID from table:', error);
+        throw new Error('Unable to determine restaurant ID from table: ' + tableId);
+      }
+      
       // Create order without passing token (it will be retrieved from storage)
       const orderResponse = await createOrder(
         cartItems,

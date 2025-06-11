@@ -159,9 +159,123 @@ interface UpdatePaymentStatusResponse {
 // Note: This is a fallback function in case restaurantId isn't provided directly
 export const extractRestaurantIdFromTableId = (tableId: string): string => {
   if (!tableId || tableId.indexOf('-') === -1) {
-    return '65f456b06c9dfd001b6b1234'; // Default restaurant ID
+    throw new Error('Invalid table ID format - unable to extract restaurant ID');
   }
   return tableId.split('-')[0];
+};
+
+/**
+ * Fetch restaurant ID from table ID by calling the backend API
+ * @param tableId - The table ID to fetch restaurant information for
+ * @returns Promise resolving to the restaurant ID
+ */
+export const getRestaurantIdFromTableId = async (tableId: string): Promise<string> => {
+  try {
+    console.log('Fetching restaurant ID for table:', tableId);
+    
+    const response = await fetch(`${API_BASE_URL}/api/tables/${tableId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      console.error(`Table API error: ${response.status} ${response.statusText}`);
+      
+      // If table doesn't exist (404), try to get restaurant ID from current URL
+      if (response.status === 404) {
+        console.log('Table not found, attempting to extract restaurant ID from URL context');
+        
+        // Try to get restaurant ID from current URL path
+        const currentPath = window.location.pathname;
+        const restaurantMatch = currentPath.match(/\/restaurant\/([^\/]+)/);
+        
+        if (restaurantMatch && restaurantMatch[1]) {
+          console.log('Found restaurant ID in URL:', restaurantMatch[1]);
+          return restaurantMatch[1];
+        }
+        
+        // Try to get from localStorage if set by previous navigation
+        const storedRestaurantId = localStorage.getItem('currentRestaurantId');
+        if (storedRestaurantId) {
+          console.log('Found restaurant ID in localStorage:', storedRestaurantId);
+          return storedRestaurantId;
+        }
+        
+        // Last resort: check if there's a default restaurant in sessionStorage
+        const tableData = sessionStorage.getItem('tableData');
+        if (tableData) {
+          try {
+            const parsed = JSON.parse(tableData);
+            if (parsed.venue?.restaurant?._id) {
+              console.log('Found restaurant ID in stored table data:', parsed.venue.restaurant._id);
+              return parsed.venue.restaurant._id;
+            }
+          } catch (e) {
+            console.log('Could not parse stored table data');
+          }
+        }
+        
+        // If we still can't find it, show a user-friendly error
+        throw new Error(`Table ${tableId} not found. Please scan a valid QR code or contact staff for assistance.`);
+      }
+      
+      throw new Error(`Failed to fetch table information: ${response.status} ${response.statusText}`);
+    }
+    
+    const tableData = await response.json();
+    console.log('Table data received:', tableData);
+    
+    // Try multiple possible paths for restaurant ID
+    let restaurantId = null;
+    
+    // Direct restaurantId field
+    if (tableData.restaurantId) {
+      restaurantId = typeof tableData.restaurantId === 'string' 
+        ? tableData.restaurantId 
+        : tableData.restaurantId._id || tableData.restaurantId.id;
+    }
+    
+    // Restaurant object with _id
+    if (!restaurantId && tableData.restaurant) {
+      restaurantId = typeof tableData.restaurant === 'string'
+        ? tableData.restaurant
+        : tableData.restaurant._id || tableData.restaurant.id;
+    }
+    
+    // Venue.restaurant path
+    if (!restaurantId && tableData.venue?.restaurant) {
+      restaurantId = typeof tableData.venue.restaurant === 'string'
+        ? tableData.venue.restaurant
+        : tableData.venue.restaurant._id || tableData.venue.restaurant.id;
+    }
+    
+    // Venue.restaurantId path
+    if (!restaurantId && tableData.venue?.restaurantId) {
+      restaurantId = typeof tableData.venue.restaurantId === 'string'
+        ? tableData.venue.restaurantId
+        : tableData.venue.restaurantId._id || tableData.venue.restaurantId.id;
+    }
+    
+    if (!restaurantId) {
+      console.error('Restaurant ID not found in table data. Available fields:', Object.keys(tableData));
+      console.error('Full table data structure:', JSON.stringify(tableData, null, 2));
+      throw new Error(`Unable to determine restaurant ID from table: ${tableId}. Table data structure may be incomplete.`);
+    }
+    
+    // Store the restaurant ID for future use
+    localStorage.setItem('currentRestaurantId', restaurantId);
+    
+    console.log('Successfully extracted restaurant ID:', restaurantId);
+    return restaurantId;
+  } catch (error) {
+    console.error('Error fetching restaurant ID from table:', error);
+    
+    // Instead of falling back to hardcoded ID, throw the error
+    throw new Error(error instanceof Error ? error.message : `Unable to determine restaurant ID from table: ${tableId}`);
+  }
 };
 
 // Helper function to generate a stable ID from modifier name
@@ -374,6 +488,18 @@ export const createOrder = async (
     console.log('tableId:', tableId);
     console.log('restaurantId:', restaurantId);
     
+    // Validate that we have a proper restaurant ID
+    if (!restaurantId || restaurantId === 'InSeat') {
+      // Get restaurant ID from table ID using API call
+      try {
+        restaurantId = await getRestaurantIdFromTableId(tableId);
+        console.log('Fetched restaurant ID from table API:', restaurantId);
+      } catch (error) {
+        console.error('Failed to get restaurant ID from table:', error);
+        throw new Error('Unable to determine restaurant ID from table: ' + tableId);
+      }
+    }
+    
     // Check authentication status first
     const token = getEffectiveToken();
     
@@ -494,13 +620,9 @@ export const createOrder = async (
           })) || []
         };
       });
-
-      const safeRestaurantId = restaurantId === 'InSeat' 
-        ? '65f456b06c9dfd001b6b1234' 
-        : restaurantId || extractRestaurantIdFromTableId(tableId);
       
       formattedOrderData = {
-        restaurantId: safeRestaurantId,
+        restaurantId,
         tableId,
         items: formattedItems,
         subtotal,
@@ -532,6 +654,7 @@ export const createOrder = async (
     // Log data preparation
     console.log('Prepared order data:', {
       orderNumber: completeOrderData.orderNumber,
+      restaurantId: completeOrderData.restaurantId,
       hasDeviceId: Boolean(completeOrderData.deviceId),
       isGuestUser: Boolean(deviceId)
     });

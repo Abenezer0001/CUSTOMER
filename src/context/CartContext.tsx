@@ -36,8 +36,10 @@ interface CartContextType {
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
+  addTip: (amount: number) => void;
   itemCount: number;
   cartTotal: number;
+  tipAmount: number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -70,6 +72,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const [itemCount, setItemCount] = useState(0);
   const [cartTotal, setCartTotal] = useState(0);
+  const [tipAmount, setTipAmount] = useState(0);
 
   // Listen for cart clear events from logout
   useEffect(() => {
@@ -245,6 +248,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const addTip = (amount: number) => {
+    setTipAmount(amount);
+  };
+
   const value = {
     cartItems,
     addToCart,
@@ -252,8 +259,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     removeFromCart,
     updateQuantity,
     clearCart,
+    addTip,
     itemCount,
-    cartTotal
+    cartTotal,
+    tipAmount
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

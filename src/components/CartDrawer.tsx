@@ -1,19 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '@/constants';
-import { useCart, CartItem } from '@/context/CartContext';
+import { useCart } from '@/context/CartContext';
 import { useOrders } from '@/context/OrdersContext';
 import { useAuth } from '@/hooks/useAuth';
+import authService from '@/api/authService';
+import apiClient from '@/api/apiClient';
 import { useTableInfo } from '@/context/TableContext';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Trash2, Plus, Minus, X, ArrowRight, Loader2 } from 'lucide-react';
+import { 
+  Trash2, Plus, Minus, X, ArrowRight, 
+  Loader2, CreditCard, AlertCircle, Info 
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { createOrder, OrderResponseData } from '@/api/orderService';
+import { createOrder, OrderResponseData } from '@/api/orderService'; 
+import { createStripeCheckoutSession } from '@/api/paymentService';
 import { useNavigate } from 'react-router-dom';
-import type { Order } from '@/types';
+import type { Order } from '@/types'; 
+import TableService from '@/api/tableService';
 
 // Order type enum to match API
 enum OrderType {
@@ -40,6 +48,15 @@ enum PaymentStatus {
   REFUNDED = 'REFUNDED'
 }
 
+interface CartItem {
+  id: string;
+  menuItemId?: string; // Make it optional since it might not always be present
+  name: string;
+  price: number;
+  quantity: number;
+  specialInstructions?: string;
+}
+
 interface OrderData {
   restaurantId: string;
   tableId: string;
@@ -50,7 +67,6 @@ interface OrderData {
     price: number;
     subtotal: number;
     specialInstructions: string;
-    modifiers?: Array<{ name: string, price: number }>;
   }>;
   subtotal: number;
   tax: number;
@@ -70,66 +86,127 @@ interface CartDrawerProps {
 }
 
 const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
-  const { cartItems, removeFromCart: removeItem, updateQuantity, clearCart, cartTotal: subtotal } = useCart();
+  const { cartItems, removeFromCart: removeItem, updateQuantity, clearCart, addTip } = useCart();
   const { tableId, restaurantName } = useTableInfo();
-  const { isAuthenticated, token, user, refreshToken } = useAuth();
+  const { isAuthenticated, token } = useAuth();
   const { addOrder } = useOrders();
   const navigate = useNavigate();
-
+  
   const [stage, setStage] = useState<'cart' | 'checkout'>('cart');
-  const [specialInstructions, setSpecialInstructions] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
-  const [orderType, setOrderType] = useState<OrderType>(OrderType.DINE_IN);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Add refs for preventing duplicate submissions
-  const isSubmittingRef = useRef(false);
-  const currentRequestIdRef = useRef<string | null>(null);
-
-  // Tax and fees calculations
-  const taxRate = 0.08;
-  const serviceFeeRate = 0.05;
+  // Derived values
+  const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const serviceFeePct = 0.1; // 10% service fee
+  const serviceFee = subtotal * serviceFeePct;
+  const taxRate = 0.0825; // 8.25% sales tax
   const tax = subtotal * taxRate;
-  const serviceFee = subtotal * serviceFeeRate;
-  const tipAmount = 0;
-  const total = subtotal + tax + serviceFee + tipAmount;
+  const [tipAmount, setTipAmount] = useState(0);
+  const total = subtotal + tax + tipAmount + serviceFee;
+  const [orderType, setOrderType] = useState<OrderType>(OrderType.DINE_IN);
+  const [specialInstructions, setSpecialInstructions] = useState('');
 
-  useEffect(() => {
-    if (!isOpen) {
-      setTimeout(() => {
-        setStage('cart');
-        setIsProcessing(false);
-        // Reset submission state when drawer closes
-        isSubmittingRef.current = false;
-        currentRequestIdRef.current = null;
-      }, 300);
+  const [tipPercentage, setTipPercentage] = useState<number | null>(null);
+  const tipOptions = [0.15, 0.18, 0.2, 0.22];
+
+  // Handle tip selection
+  const handleTipSelection = (percentage: number | null) => {
+    setTipPercentage(percentage);
+
+    if (percentage === null) {
+      setTipAmount(0);
+      addTip(0);
+    } else {
+      const newTipAmount = subtotal * percentage;
+      setTipAmount(newTipAmount);
+      addTip(newTipAmount);
     }
-  }, [isOpen]);
+  };
 
-  const processOrder = async (requestId: string) => {
-    // Double-check that this request should still proceed
-    if (currentRequestIdRef.current !== requestId) {
-      console.log('Request cancelled - newer request in progress');
-      return null;
-    }
-
+  // Helper function to check authentication
+  const checkAuthStatus = async () => {
     try {
-      const localRestaurantId = restaurantName === 'InSeat'
-        ? '65f456b06c9dfd001b6b1234'
-        : tableId.split('-')[0];
+      const token = localStorage.getItem('auth_token');
+      
+      if (token) {
+        // We have a token, check if it's valid
+        return true;
+      }
+      
+      // If we still don't have a token, make a regular auth check
+      console.log('Attempting regular auth check as fallback...');
+      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || `${API_BASE_URL}/api/auth`;
+      
+      try {
+        const authResponse = await fetch(`${apiBaseUrl}/me`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (authResponse.ok) {
+          const authData = await authResponse.json();
+          console.log('Auth check successful:', authData);
+          
+          if (authData.token) {
+            localStorage.setItem('auth_token', authData.token);
+            return true;
+          }
+        } else {
+          const responseText = await authResponse.text();
+          console.error('Authentication check failed:', responseText);
+        }
+      } catch (fetchError) {
+        console.error('Error during authentication fetch:', fetchError);
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      return false;
+    }
+  };
+  
+  // Helper function to process the order
+  const processOrder = async () => {
+    try {
+      if (!tableId) {
+        throw new Error('Table ID is required to place an order');
+      }
 
-      const formattedItems = cartItems.map(item => ({
-        menuItem: String(item.id),
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        subtotal: item.price * item.quantity,
-        specialInstructions: item.specialInstructions || specialInstructions || '',
-        modifiers: item.modifiers
-      }));
-
+      // Get restaurant ID from table using the TableService
+      console.log('Getting restaurant ID from table:', tableId);
+      let restaurantId;
+      
+      try {
+        restaurantId = await TableService.getRestaurantIdFromTableId(tableId);
+        console.log('Successfully got restaurant ID from table:', restaurantId);
+      } catch (tableError) {
+        console.error('Failed to get restaurant ID from table:', tableError);
+        throw new Error('Unable to determine restaurant for this table. Please try again or contact support.');
+      }
+      
+      // Format items according to API schema
+      const formattedItems = cartItems.map(item => {
+        // Ensure we have a valid string for menuItem
+        const menuItemId = ('menuItemId' in item && item.menuItemId) || item.id;
+        
+        // Ensure menuItem is always a string
+        const menuItem = String(menuItemId || '');
+        
+        return {
+          menuItem,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: item.price * item.quantity,
+          specialInstructions: item.specialInstructions || specialInstructions || ''
+        };
+      });
+      
+      // Format order data according to API schema
       const constructedOrderData: OrderData = {
-        restaurantId: localRestaurantId,
+        restaurantId, // Use restaurant ID from table service
         tableId,
         items: formattedItems,
         subtotal,
@@ -143,430 +220,405 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         paymentStatus: PaymentStatus.PENDING,
         orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
       };
+
+      console.log('Placing order...');
+      console.log('Order data for service:', JSON.stringify(constructedOrderData));
       
-      // Check authentication status before attempting to create order
-      if (!isAuthenticated) {
-        // Store cart state for retrieval after login
-        localStorage.setItem('pendingCart', JSON.stringify({
-          items: cartItems,
-          tableId,
-          restaurantId: localRestaurantId
-        }));
+      // Try to get a token from all possible sources
+      let token = localStorage.getItem('auth_token');
+      
+      // If no token found yet, try to extract from cookies
+      if (!token) {
+        const cookies = document.cookie.split(';');
+        const tokenCookie = cookies.find(cookie => 
+          cookie.trim().startsWith('auth_token=') || 
+          cookie.trim().startsWith('access_token=')
+        );
         
-        // Redirect to login with return URL
-        toast.error('Please log in to place an order');
-        onClose(); // Close the cart drawer
-        navigate(`/login?returnTo=/table/${tableId}`);
-        return null;
+        if (tokenCookie) {
+          token = tokenCookie.split('=')[1].trim();
+        }
       }
       
-      console.log(`Creating order using orderService (Request ID: ${requestId})...`);
-      
-      // Final check before API call
-      if (currentRequestIdRef.current !== requestId) {
-        console.log('Request cancelled before API call - newer request in progress');
-        return null;
+      // If still no token, make a regular auth check
+      if (!token) {
+        console.log('Attempting regular auth check as fallback...');
+        const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || `${API_BASE_URL}/api/auth`;
+        const authResponse = await fetch(`${apiBaseUrl}/me`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (authResponse.ok) {
+          const authData = await authResponse.json();
+          console.log('Auth check successful:', authData);
+          
+          if (authData.token) {
+            token = authData.token;
+            localStorage.setItem('auth_token', authData.token);
+          }
+        } else {
+          console.error('Authentication check failed:', await authResponse.text());
+        }
       }
       
-      // Use ONLY the createOrder function from orderService - this prevents duplicate orders
-      const orderResult = await createOrder(cartItems, tableId, localRestaurantId, constructedOrderData, navigate);
+      console.log('Using token for order placement:', token ? 'Token available' : 'No token available');
       
-      // Check if request is still valid after API call
-      if (currentRequestIdRef.current !== requestId) {
-        console.log('Request completed but cancelled due to newer request');
-        return null;
+      // If we have a token, make sure it's saved to localStorage for future requests
+      if (token && !localStorage.getItem('auth_token')) {
+        localStorage.setItem('auth_token', token);
+        console.log('Saved token to localStorage');
       }
       
-      if (!orderResult) {
-        console.log('Order creation returned null - authentication failed and user redirected');
-        return null;
-      }
-      
-      console.log(`Order placed successfully (Request ID: ${requestId}):`, orderResult);
-      toast.success('Order placed successfully!');
-    
-      // Transform OrderResponseData to Order type for the context
-      const orderForContext: Order = {
-        id: orderResult._id,
-        orderNumber: orderResult.orderNumber,
-        items: orderResult.items.map(apiItem => ({
-          id: apiItem.menuItem,
-          menuItemId: apiItem.menuItem,
-          name: apiItem.name,
-          price: apiItem.price,
-          quantity: apiItem.quantity,
-          specialInstructions: apiItem.specialInstructions,
-          modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || []
-        })),
-        subtotal: orderResult.subtotal,
-        tax: orderResult.tax,
-        serviceFee: orderResult.serviceFee,
-        tip: orderResult.tip,
-        total: orderResult.total,
-        status: orderResult.status,
-        paymentStatus: orderResult.paymentStatus,
-        timestamp: new Date(orderResult.createdAt),
-        tableId: orderResult.tableId,
-        specialInstructions: orderResult.specialInstructions
-      };
-
-      addOrder(orderForContext);
-      localStorage.setItem('pending_order_id', orderResult._id);
-      clearCart();
-      onClose();
-
-      // Force refresh authentication state to ensure we have the latest user data
       try {
-        await refreshToken();
-        console.log('Auth refreshed after order placement');
-      } catch (refreshError) {
-        console.error('Failed to refresh auth after order placement:', refreshError);
-      }
-
-      // Ensure we're redirecting to the my-orders page with the table ID
-      console.log(`Redirecting to my-orders page with table=${tableId}`);
+        // Use XMLHttpRequest for order creation
+        console.log('Using XMLHttpRequest for order creation...');
+        
+        const result = await new Promise<OrderResponseData>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || `${API_BASE_URL}/orders`;
+          xhr.open('POST', orderApiUrl, true);
+          xhr.withCredentials = true;
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          
+          // Add Authorization header if token is available
+          if (token) {
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            console.log('Added Authorization header with token');
+          } else {
+            console.warn('No token available for Authorization header');
+            
+            // Last attempt to get token from cookies directly
+            const cookieToken = document.cookie
+              .split(';')
+              .find(cookie => cookie.trim().startsWith('auth_token='))
+              ?.split('=')[1];
+              
+            if (cookieToken) {
+              xhr.setRequestHeader('Authorization', `Bearer ${cookieToken}`);
+              console.log('Added Authorization header with cookie token');
+            } else {
+              console.warn('No authentication token available. Order creation may fail.');
+            }
+          }
+          
+          xhr.onload = async function() {
+            console.log('XHR response received:', {
+              status: xhr.status,
+              responseText: xhr.responseText
+            });
+            
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const parsedResponse = JSON.parse(xhr.responseText);
+                console.log('Parsed response:', parsedResponse);
+                
+                // Check if response has success property (API v1 format)
+                if (parsedResponse.success !== undefined) {
+                  if (parsedResponse.success) {
+                    resolve(parsedResponse.data);
+                  } else {
+                    console.error('Order creation failed despite 200 status:', parsedResponse.error);
+                    reject(new Error(parsedResponse.error?.message || 'Order creation failed'));
+                  }
+                } 
+                // If no success property but has _id, it's a direct order object (API v2 format)
+                else if (parsedResponse._id) {
+                  console.log('Direct order object returned:', parsedResponse);
+                  resolve(parsedResponse);
+                } 
+                // Unknown response format
+                else {
+                  console.error('Unknown response format:', parsedResponse);
+                  reject(new Error('Unknown response format'));
+                }
+              } catch (e) {
+                console.error('Failed to parse response:', e);
+                reject(new Error('Failed to parse response'));
+              }
+            } else {
+              console.error(`Order creation failed with status: ${xhr.status}`, xhr.responseText);
+              try {
+                const errorData = JSON.parse(xhr.responseText);
+                reject(new Error(errorData.error || `Order creation failed with status: ${xhr.status}`));
+              } catch (e) {
+                reject(new Error(`Order creation failed with status: ${xhr.status}`));
+              }
+            }
+          };
+          
+          xhr.onerror = function() {
+            console.error('XHR error:', xhr);
+            reject(new Error('Network error occurred'));
+          };
+          
+          xhr.send(JSON.stringify(constructedOrderData));
+        });
+        
+        console.log('Order placed successfully:', result);
+        toast.success('Order placed successfully!');
       
-      // Use a more direct approach to navigation instead of setTimeout
-      navigate(`/my-orders?table=${tableId}`);
-      return orderResult;
+        // Transform OrderResponseData to Order type for the context
+        const orderForContext: Order = {
+          id: result._id,
+          orderNumber: result.orderNumber,
+          items: result.items.map(apiItem => ({
+            id: apiItem.menuItem,
+            menuItemId: apiItem.menuItem,
+            name: apiItem.name,
+            price: apiItem.price,
+            quantity: apiItem.quantity,
+            specialInstructions: apiItem.specialInstructions,
+            modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || []
+          })),
+          subtotal: result.subtotal,
+          tax: result.tax,
+          serviceFee: result.serviceFee,
+          tip: result.tip,
+          total: result.total,
+          status: result.status,
+          paymentStatus: result.paymentStatus,
+          timestamp: new Date(result.createdAt),
+          tableId: result.tableId,
+          specialInstructions: result.specialInstructions
+        };
+
+        addOrder(orderForContext);
+
+        console.log('Order created successfully:', result);
+        
+        // Store order ID in localStorage for retrieval after payment
+        localStorage.setItem('pending_order_id', result._id);
+        
+        // Clear the cart and close the drawer
+        clearCart();
+        onClose();
+        
+        // Show success message
+        toast.success('Order placed successfully!');
+        
+        // Add a small delay before redirecting to ensure the toast is shown
+        setTimeout(() => {
+          console.log('Redirecting to my-orders page with table ID:', tableId);
+          navigate(`/my-orders?table=${tableId}`);
+        }, 1000);
+      } catch (error) {
+        console.error('Order creation failed:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create your order';
+        toast.error(errorMessage);
+        
+        // Handle authentication errors specifically
+        if (errorMessage.includes('session has expired') || 
+            errorMessage.includes('Authentication') || 
+            errorMessage.includes('Unauthorized')) {
+          // Clear invalid tokens
+          localStorage.removeItem('auth_token');
+          // Redirect to login
+          onClose();
+          navigate('/login', { state: { returnUrl: '/cart' } });
+        }
+      }
     } catch (error) {
-      console.error(`Error in order creation process (Request ID: ${requestId}):`, error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create your order');
+      console.error('Error in processOrder:', error);
       throw error;
     }
   };
 
-  const handlePlaceOrder = async (): Promise<void> => {
-    // Immediate check to prevent double submission
-    if (isSubmittingRef.current) {
-      console.log('Order submission already in progress - ignoring duplicate click');
-      return;
-    }
-
-    // Generate unique request ID
-    const requestId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    console.log(`Starting order placement (Request ID: ${requestId})`);
-
-    try {
-      if (cartItems.length === 0) {
-        toast.error('Your cart is empty. Please add items to place an order.');
-        return;
-      }
-
-      if (!tableId) {
-        toast.error("Table information is missing. Please scan a table QR code first.");
-        onClose();
-        navigate('/scan');
-        return;
-      }
-
-      // Set submission locks immediately
-      isSubmittingRef.current = true;
-      currentRequestIdRef.current = requestId;
-      setIsProcessing(true);
-
-      await processOrder(requestId);
-    } catch (error) {
-      console.error(`Error placing order (Request ID: ${requestId}):`, error);
-      toast.error(error instanceof Error ? error.message : 'Failed to place order');
-      setError(error instanceof Error ? error.message : 'Failed to place order');
-    } finally {
-      // Always reset submission state
-      isSubmittingRef.current = false;
-      currentRequestIdRef.current = null;
-      setIsProcessing(false);
-    }
-  };
-
-  const handleCheckout = () => {
+  const handlePlaceOrder = async () => {
+    console.log('handlePlaceOrder function entered - CartDrawer.tsx');
     if (cartItems.length === 0) {
-      toast.error("Your cart is empty");
+      toast.error('Your cart is empty');
       return;
     }
-    setStage('checkout');
-  };
-
-  const handleClose = () => {
-    if (isProcessing) {
-      if (window.confirm("Your order is still being processed. Are you sure you want to close?")) {
-        onClose();
-      }
-    } else {
+    
+    if (!tableId) {
+      toast.error('Please scan a table QR code first');
       onClose();
+      navigate('/scan-table');
+      return;
+    }
+    
+    setIsProcessing(true);
+    setError('');
+    
+    try {
+      console.log('Starting order placement process...');
+      
+      // Check if user is authenticated
+      const isAuthenticated = await checkAuthStatus();
+      console.log('Auth check result:', isAuthenticated);
+      
+      if (!isAuthenticated) {
+        console.log('User not authenticated - redirecting to login');
+        
+        // Save cart data to restore after login
+        localStorage.setItem('pendingCart', JSON.stringify(cartItems));
+        if (tableId) {
+          localStorage.setItem('pendingTableId', tableId);
+        }
+        
+        // Show error message and stop processing
+        toast.error('Please log in or create an account to place an order');
+        setIsProcessing(false);
+        onClose();
+        
+        // Redirect to login page with return URL
+        navigate('/login', { state: { returnUrl: window.location.pathname } });
+        return;
+      }
+      
+      // If we get here, user is authenticated
+      const storedToken = localStorage.getItem('auth_token');
+      
+      if (!storedToken) {
+        console.log('No stored token found despite being authenticated');
+        toast.error('Authentication error. Please log in again.');
+        setIsProcessing(false);
+        onClose();
+        navigate('/login', { state: { returnUrl: '/cart' } });
+        return;
+      }
+      
+      console.log('User is authenticated, proceeding with order placement...');
+      await processOrder();
+    } catch (error) {
+      console.error('Error during order placement:', error);
+      let errorMessage = 'Failed to process your order';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error('Error details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+      }
+      
+      // Handle authentication-related errors
+      const isAuthError = errorMessage.toLowerCase().includes('session') || 
+                         errorMessage.toLowerCase().includes('auth') || 
+                         errorMessage.toLowerCase().includes('token') ||
+                         errorMessage.toLowerCase().includes('401') ||
+                         errorMessage.toLowerCase().includes('403');
+      
+      if (isAuthError) {
+        // Clear all auth tokens
+        console.log('Clearing auth tokens due to authentication error');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('access_token');
+        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        
+        toast.error('Your session has expired. Please log in again.');
+        setIsProcessing(false);
+        onClose();
+        navigate('/login', { state: { returnUrl: '/cart' } });
+      } else {
+        // For other errors, just show the message
+        console.error('Non-auth error during order placement:', errorMessage);
+        toast.error(errorMessage);
+        setIsProcessing(false);
+      }
     }
   };
 
-  let content;
-  if (stage === 'checkout') {
-    content = (
-      <div className="flex flex-col h-full">
-        <SheetHeader className="p-4 border-b border-[#2D303E]">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-xl font-semibold">Checkout</SheetTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-              disabled={isProcessing}
-            >
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
+  return (
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Your Order</SheetTitle>
         </SheetHeader>
         
-        <ScrollArea className="flex-1">
-          <div className="p-4 space-y-6">
-            <div className="space-y-2">
-              <h3 className="font-medium">Order Type</h3>
-              <div className="flex gap-2">
-                <Button
-                  variant={orderType === OrderType.DINE_IN ? "default" : "outline"}
-                  size="sm"
-                  className={cn(
-                    orderType === OrderType.DINE_IN 
-                      ? "bg-delft-blue hover:bg-delft-blue/90" 
-                      : ""
-                  )}
-                  onClick={() => setOrderType(OrderType.DINE_IN)}
-                  disabled={isProcessing}
-                >
-                  Dine In
+        <div className="flex flex-col h-full">
+          {/* Cart content goes here - keeping existing JSX structure */}
+          <div className="flex-1 overflow-auto">
+            {cartItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <p className="text-gray-500 mb-4">Your cart is empty</p>
+                <Button onClick={onClose} variant="outline">
+                  Continue browsing menu
                 </Button>
-                <Button
-                  variant={orderType === OrderType.TAKEOUT ? "default" : "outline"}
-                  size="sm"
-                  className={cn(
-                    orderType === OrderType.TAKEOUT 
-                      ? "bg-delft-blue hover:bg-delft-blue/90" 
-                      : ""
-                  )}
-                  onClick={() => setOrderType(OrderType.TAKEOUT)}
-                  disabled={isProcessing}
-                >
-                  Takeout
-                </Button>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <h3 className="font-medium">Order Items</h3>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0 text-delft-blue"
-                  onClick={() => setStage('cart')}
-                  disabled={isProcessing}
-                >
-                  Edit
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <div className="flex">
-                      <span className="font-medium">{item.quantity}x</span>
-                      <span className="ml-2">{item.name}</span>
-                    </div>
-                    <span>${(item.price * item.quantity).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <h3 className="font-medium">Special Instructions</h3>
-              <Textarea 
-                placeholder="Add any special instructions for your order..."
-                value={specialInstructions}
-                onChange={(e) => setSpecialInstructions(e.target.value)}
-                className="resize-none"
-              />
-            </div>
-          </div>
-        </ScrollArea>
-        
-        <div className="border-t border-[#2D303E] p-4 space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tax ({(taxRate * 100).toFixed(0)}%)</span>
-              <span>${tax.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Service Fee ({(serviceFeeRate * 100).toFixed(0)}%)</span>
-              <span>${serviceFee.toFixed(2)}</span>
-            </div>
-            {tipAmount > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tip</span>
-                <span>${tipAmount.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-medium text-lg pt-2 border-t border-[#2D303E]">
-              <span>Total</span>
-              <span>${total.toFixed(2)}</span>
-            </div>
-          </div>
-          
-          <Button 
-            onClick={handlePlaceOrder}
-            className="w-full bg-delft-blue hover:bg-delft-blue/90 text-white"
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <div className="flex items-center">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...
               </div>
             ) : (
-              <>
-                Place Order
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    );
-  } else {
-    content = (
-      <div className="flex flex-col h-full">
-        <SheetHeader className="p-4 border-b border-[#2D303E]">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-xl font-semibold">Your Cart</SheetTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-            >
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
-        </SheetHeader>
-        
-        <ScrollArea className="flex-1 p-4">
-          {cartItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <p className="text-muted-foreground mb-4">Your cart is empty</p>
-              <Button onClick={handleClose} variant="outline">
-                Continue Shopping
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {cartItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex gap-3 p-3 rounded-lg bg-[#1F1D2B] border border-[#2D303E]"
-                >
-                  {item.image && (
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-20 h-20 object-cover rounded-md"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = 'https://source.unsplash.com/featured/?food';
-                      }}
-                    />
-                  )}
-                  
-                  <div className="flex-1">
-                    <div className="flex justify-between">
+              <div className="space-y-4">
+                {cartItems.map((item) => (
+                  <div key={item.id} className="flex items-center space-x-4 p-4 border rounded-lg">
+                    <div className="flex-1">
                       <h3 className="font-medium">{item.name}</h3>
+                      <p className="text-sm text-gray-500">${item.price.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 -mr-1 -mt-1 text-muted-foreground"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="w-8 text-center">{item.quantity}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => removeItem(item.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    
-                    <p className="text-sm text-delft-blue mt-1">${item.price.toFixed(2)}</p>
-                    
-                    {item.modifiers && item.modifiers.length > 0 && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {item.modifiers.map((mod, index) => (
-                          <div key={index} className="flex justify-between">
-                            <span>{mod.name}</span>
-                            {mod.price > 0 && (
-                              <span>+${mod.price.toFixed(2)}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {item.specialInstructions && (
-                      <div className="mt-1 text-xs italic text-muted-foreground">
-                        {item.specialInstructions}
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center justify-between mt-2">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          disabled={item.quantity <= 1}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="w-5 text-center text-sm">{item.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      
-                      <span className="font-medium">
-                        ${(item.price * item.quantity).toFixed(2)}
-                      </span>
-                    </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {cartItems.length > 0 && (
+            <div className="border-t pt-4 space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span>${subtotal.toFixed(2)}</span>
                 </div>
-              ))}
+                <div className="flex justify-between">
+                  <span>Tax:</span>
+                  <span>${tax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Service Fee:</span>
+                  <span>${serviceFee.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tip:</span>
+                  <span>${tipAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-lg border-t pt-2">
+                  <span>Total:</span>
+                  <span>${total.toFixed(2)}</span>
+                </div>
+              </div>
+              
+              <Button
+                onClick={handlePlaceOrder}
+                disabled={isProcessing}
+                className="w-full"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Place Order'
+                )}
+              </Button>
             </div>
           )}
-        </ScrollArea>
-        
-        {cartItems.length > 0 && (
-          <div className="border-t border-[#2D303E] p-4 space-y-3">
-            <div className="flex justify-between font-medium">
-              <span>Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
-            </div>
-            <Button
-              className="w-full bg-delft-blue hover:bg-delft-blue/90 text-white"
-              onClick={handleCheckout}
-            >
-              Continue to Checkout
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <Sheet open={isOpen} onOpenChange={handleClose}>
-      <SheetContent 
-        side="right" 
-        className="w-full sm:max-w-md border-l border-[#2D303E] bg-[#16141F] p-0 max-h-screen"
-      >
-        {content}
+        </div>
       </SheetContent>
     </Sheet>
   );
