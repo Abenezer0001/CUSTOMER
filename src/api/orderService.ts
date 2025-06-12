@@ -412,7 +412,7 @@ if (process.env.NODE_ENV === 'development') {
 
 /**
  * Helper function to prepare request headers with auth token
- * Only checks for access_token in cookies and sets proper Bearer token
+ * Tries multiple methods to get the authentication token
  * @returns Object with appropriate headers including auth token if available
  */
 const getAuthHeaders = (): HeadersInit => {
@@ -420,47 +420,48 @@ const getAuthHeaders = (): HeadersInit => {
     'Content-Type': 'application/json'
   };
   
-  // Get token using authService's method
-  const token = getEffectiveToken();
-  if (token && token !== 'http-only-cookie-present') {
-    headers['Authorization'] = `Bearer ${token}`;
-    console.log('Added Authorization header with token');
-  } else {
-    // Try to directly extract tokens from cookie string as a fallback
-    const rawCookie = document.cookie;
-    console.log('Raw cookie string in getAuthHeaders:', rawCookie);
-    
-    // Parse cookies using our utility function
-    const cookies = parseCookies();
-    console.log('All parsed cookies:', Object.keys(cookies));
-    
-    // Check for access_token first (for backward compatibility)
-    if (cookies['access_token']) {
-      headers['Authorization'] = `Bearer ${cookies['access_token']}`;
-      console.log('Using access_token from cookies for request');
-    // Then check for auth_token if access_token isn't found
-    } else if (cookies['auth_token']) {
-      headers['Authorization'] = `Bearer ${cookies['auth_token']}`;
-      console.log('Using auth_token from cookies for request');
-    } else {
-      // Fallback: Try to manually extract the token from raw cookie string
-      const accessTokenMatch = rawCookie.match(/access_token=([^;]+)/);
-      const authTokenMatch = rawCookie.match(/auth_token=([^;]+)/);
+  // Get token using authService's method first
+  let token = getEffectiveToken();
+  
+  // If no token from authService, try to get from localStorage directly
+  if (!token || token === 'http-only-cookie-present') {
+    token = localStorage.getItem('auth_token');
+    console.log('Fallback: Got token from localStorage:', token ? 'Token found' : 'No token');
+  }
+  
+  // If still no token, try to parse cookies manually
+  if (!token || token === 'http-only-cookie-present') {
+    try {
+      const cookies = document.cookie.split(';').map(c => c.trim());
       
-      if (accessTokenMatch && accessTokenMatch[1]) {
-        headers['Authorization'] = `Bearer ${accessTokenMatch[1]}`;
-        console.log('Using access_token extracted directly from cookie string');
-      } else if (authTokenMatch && authTokenMatch[1]) {
-        headers['Authorization'] = `Bearer ${authTokenMatch[1]}`;
-        console.log('Using auth_token extracted directly from cookie string');
-      } else {
-        console.log('No auth token found in cookies (checked parsed cookies and raw string)');
+      // Check for various token cookie names
+      const tokenCookieNames = ['access_token=', 'auth_token=', 'jwt=', 'token='];
+      
+      for (const cookieName of tokenCookieNames) {
+        const cookieMatch = cookies.find(cookie => cookie.startsWith(cookieName));
+        if (cookieMatch) {
+          token = cookieMatch.split('=')[1];
+          console.log(`Found token in ${cookieName.replace('=', '')} cookie`);
+          break;
+        }
       }
+    } catch (error) {
+      console.error('Error parsing cookies for token:', error);
     }
   }
   
-  // Log the final headers being used
-  console.log('Final authorization header set:', headers.Authorization ? 'Yes' : 'No');
+  // Set Authorization header if we have a valid token
+  if (token && token !== 'http-only-cookie-present' && token.length > 10) {
+    headers['Authorization'] = `Bearer ${token}`;
+    console.log('Added Authorization header with token (length:', token.length, ')');
+  } else {
+    console.log('No valid auth token available for Authorization header');
+    
+    // If we have any cookies at all, log them for debugging
+    if (document.cookie) {
+      console.log('Available cookies (for debugging):', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+    }
+  }
   
   return headers;
 };

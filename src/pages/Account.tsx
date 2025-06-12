@@ -46,11 +46,10 @@ const Account: React.FC = () => {
         console.log('Auth cookie found but not authenticated in state - attempting token refresh first');
         try {
           // Try customer auth service first (for Google sign-in users)
-          let userData = null;
           try {
             const customerResponse = await customerAuthService.getCurrentUser();
             if (customerResponse && customerResponse.success && customerResponse.user) {
-              userData = customerResponse.user;
+              const userData = customerResponse.user;
               console.log('Successfully retrieved user data from customer service');
               
               // Update auth state directly - this should trigger a re-render with isAuthenticated=true
@@ -63,13 +62,15 @@ const Account: React.FC = () => {
             console.log('Customer auth failed, trying regular AuthService');
             // Fallback to regular AuthService
             try {
-            await AuthService.refreshToken();
-            userData = await AuthService.getCurrentUser();
-          if (userData) {
+              await AuthService.refreshToken();
+              const authData = await AuthService.getCurrentUser();
+              if (authData && (authData.success || authData.id)) {
+                // Handle both wrapped and direct user data formats
+                const userData = authData.user || authData;
                 console.log('Successfully retrieved user data from AuthService');
-            window.dispatchEvent(new CustomEvent('auth-state-changed', { 
-              detail: { isAuthenticated: true, user: userData } 
-            }));
+                window.dispatchEvent(new CustomEvent('auth-state-changed', { 
+                  detail: { isAuthenticated: true, user: userData } 
+                }));
                 return;
               }
             } catch (authError) {
@@ -84,8 +85,8 @@ const Account: React.FC = () => {
       // If we get here and still not authenticated, check if we should redirect
       if (!isAuthenticated && !hasAuthCookie()) {
         console.log('No authentication found, redirecting to login from account page');
-          // Store the current path to redirect back after login
-          navigate('/login', { state: { from: pathname }, replace: true });
+        // Store the current path to redirect back after login
+        navigate('/login', { state: { from: pathname }, replace: true });
       }
     };
     

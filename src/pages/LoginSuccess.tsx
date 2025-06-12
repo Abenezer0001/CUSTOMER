@@ -4,6 +4,7 @@ import { useTableInfo } from '@/context/TableContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { AuthService } from '@/services/AuthService';
+import customerAuthService from '@/api/customerAuthService';
 
 const LoginSuccess: React.FC = () => {
   const navigate = useNavigate();
@@ -37,9 +38,28 @@ const LoginSuccess: React.FC = () => {
         console.log('LoginSuccess: Attempting to fetch user data from backend...');
         
         try {
-          // Use the AuthService that's properly configured with the backend URL
-          const userData = await AuthService.getCurrentUser();
-          console.log('LoginSuccess: AuthService response:', userData);
+          // Try customer auth service first (Google OAuth uses this)
+          let userData = null;
+          try {
+            const customerResponse = await customerAuthService.getCurrentUser();
+            console.log('LoginSuccess: customerAuthService response:', customerResponse);
+            
+            if (customerResponse.success && customerResponse.user) {
+              userData = customerResponse.user;
+              console.log('LoginSuccess: Using customer auth data');
+            }
+          } catch (customerError) {
+            console.log('LoginSuccess: Customer auth failed, trying AuthService');
+            
+            // Fallback to regular AuthService
+            const authResponse = await AuthService.getCurrentUser();
+            console.log('LoginSuccess: AuthService response:', authResponse);
+            
+            if (authResponse && (authResponse.success || authResponse.id)) {
+              userData = authResponse.user || authResponse;
+              console.log('LoginSuccess: Using auth service data');
+            }
+          }
           
           if (userData && userData.id && userData.email) {
             // Create normalized user object

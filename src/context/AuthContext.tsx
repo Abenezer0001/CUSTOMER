@@ -189,11 +189,49 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
           setIsAuthenticated(false); // Reset auth state
         }
         
-        // Try to get user data from AuthService
+        // Try to get user data from customer auth service first (for Google OAuth users)
         try {
-          console.log('Attempting to fetch user profile from AuthService');
+          console.log('Attempting to fetch user profile from customerAuthService');
           
-          // Use AuthService which is properly configured with backend URL and credentials
+          // First try customer auth service (handles Google OAuth properly)
+          const customerResponse = await customerAuthService.getCurrentUser();
+          console.log('AuthContext: customerAuthService response:', customerResponse);
+          
+          if (customerResponse.success && customerResponse.user) {
+            const userData = customerResponse.user;
+            console.log('Found user data from customerAuthService:', userData);
+            
+            // Generate a display name from available fields
+            const firstName = userData.firstName || '';
+            const lastName = userData.lastName || '';
+            const email = userData.email || '';
+            const displayName = firstName && lastName 
+              ? `${firstName} ${lastName}`.trim() 
+              : email || 'User';
+            
+            // Create the normalized user object with all required fields
+            const normalizedUser: AuthUser = {
+              id: userData.id,
+              email: email,
+              firstName: firstName,
+              lastName: lastName,
+              role: userData.role || 'customer',
+              loyaltyPoints: userData.loyaltyPoints || 0,
+              name: displayName,
+              createdAt: (userData as any).createdAt || new Date().toISOString(),
+              orders: (userData as any).orders || [],
+            };
+            
+            setUser(normalizedUser);
+            setIsAuthenticated(true);
+            localStorage.setItem('user', JSON.stringify(normalizedUser));
+            
+            console.log('Authentication successful via customerAuthService, user set:', normalizedUser.email);
+            return; // Exit early on success
+          }
+          
+          // If customer auth fails, try regular AuthService as fallback
+          console.log('Customer auth failed, trying AuthService as fallback');
           const userData = await AuthService.getCurrentUser();
           console.log('AuthContext: AuthService response:', userData);
           
@@ -327,22 +365,49 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(normalizedUser);
         setIsAuthenticated(true);
         localStorage.setItem('user', JSON.stringify(normalizedUser));
+        
+        // Also update token from the latest source
+        const latestToken = getTokenFromAllSources();
+        if (latestToken) {
+          setToken(latestToken);
+        }
+        
         console.log('Updated user from auth state change:', normalizedUser.email);
       } else if (authStatus === false) {
         setUser(null);
         setIsAuthenticated(false);
+        setToken(null);
         localStorage.removeItem('user');
+        localStorage.removeItem('auth_token');
         console.log('Cleared user due to auth state change');
+      }
+    };
+
+    // Listen for token updates from other parts of the app
+    const handleTokenUpdate = (event: any) => {
+      const { token: newToken } = event.detail;
+      if (newToken) {
+        console.log('Received token update event');
+        setToken(newToken);
+        localStorage.setItem('auth_token', newToken);
+        
+        // If we have a token but no user, try to fetch user data
+        if (!user && !loading) {
+          console.log('Have token but no user, attempting to fetch user data');
+          checkAuth();
+        }
       }
     };
     
     window.addEventListener('auth-state-changed', handleAuthStateChange);
+    window.addEventListener('token-updated', handleTokenUpdate);
     
     // Initialize authentication check
     checkAuth();
     
     return () => {
       window.removeEventListener('auth-state-changed', handleAuthStateChange);
+      window.removeEventListener('token-updated', handleTokenUpdate);
     };
   }, []); // Run only once on mount
 
@@ -492,7 +557,17 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const googleLogin = (): void => {
-    // Get the base URL without the /api/auth path
+    // Store current table ID before redirecting
+    const currentTableId = localStorage.getItem('currentTableId') || 
+                          localStorage.getItem('tableId') || 
+                          new URLSearchParams(window.location.search).get('table');
+    
+    if (currentTableId) {
+      sessionStorage.setItem('tableId', currentTableId);
+      console.log('Stored table ID before Google login:', currentTableId);
+    }
+
+    // Use customer auth service for Google OAuth
     const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || import.meta.env.VITE_API_BASE_URL || 'https://api.inseat.achievengine.com';
     const googleAuthUrl = `${baseUrl}/api/auth/google`;
     console.log('Google login redirecting to:', googleAuthUrl);
@@ -506,7 +581,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     
     try {
-      console.log('Attempting guest login via AuthService...');
+      console.log('Attempting guest login...');
       
       // Create a device ID if not already stored
       const deviceId = localStorage.getItem('device_id') || `device_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
@@ -514,17 +589,27 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem('device_id', deviceId);
       }
       
-      // Use the correct endpoint: guest-token
-      const response = await AuthService.guestLogin(tableId || '');
+      // Get current table ID from various sources
+      const effectiveTableId = tableId || 
+                              localStorage.getItem('currentTableId') || 
+                              localStorage.getItem('tableId') || 
+                              new URLSearchParams(window.location.search).get('table') || 
+                              '';
+      
+      console.log('Guest login with tableId:', effectiveTableId);
+      
+      // Use AuthService guest login
+      const response = await AuthService.guestLogin(effectiveTableId);
       
       if (response.success && response.token) {
-        // Set token in cookie for cross-page consistency
+        // Set token in cookie and localStorage for cross-page consistency
+        localStorage.setItem('auth_token', response.token);
         document.cookie = `auth_token=${response.token}; path=/; max-age=86400; SameSite=Lax`;
         
         // Create a minimal user object
         const guestUser: AuthUser = {
-          id: response.user?.id || 'guest',
-          email: response.user?.email || 'guest@example.com',
+          id: response.user?.id || deviceId,
+          email: 'guest@inseat.app',
           firstName: 'Guest',
           lastName: 'User',
           role: 'guest',
@@ -537,15 +622,19 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(guestUser);
         setToken(response.token);
         setIsAuthenticated(true);
+        localStorage.setItem('user', JSON.stringify(guestUser));
         
         console.log('Guest login successful');
+        toast.success('Welcome! You can now browse the menu and place orders.');
         return true;
       }
       
       console.error('Guest login failed:', response);
+      toast.error('Failed to initialize guest session. Please try again.');
       return false;
     } catch (error) {
       console.error('Guest login error:', error);
+      toast.error('Failed to initialize guest session. Please try again.');
       return false;
     } finally {
       setLoading(false);
@@ -769,8 +858,24 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const customerGoogleLogin = () => {
+    // Store current table ID before redirecting
+    const currentTableId = localStorage.getItem('currentTableId') || 
+                          localStorage.getItem('tableId') || 
+                          new URLSearchParams(window.location.search).get('table');
+    
+    if (currentTableId) {
+      sessionStorage.setItem('tableId', currentTableId);
+      console.log('Stored table ID before customer Google login:', currentTableId);
+    }
+
     const baseUrl = import.meta.env.VITE_AUTH_API_URL?.split('/api/auth')[0] || import.meta.env.VITE_API_BASE_URL || 'https://api.inseat.achievengine.com';
-    const googleAuthUrl = `${baseUrl}/api/customer/google`;
+    let googleAuthUrl = `${baseUrl}/api/auth/google`;
+    
+    // Add table ID to URL if available
+    if (currentTableId) {
+      googleAuthUrl += `?table=${encodeURIComponent(currentTableId)}`;
+    }
+    
     console.log('Customer Google login redirecting to:', googleAuthUrl);
     window.location.href = googleAuthUrl;
   };

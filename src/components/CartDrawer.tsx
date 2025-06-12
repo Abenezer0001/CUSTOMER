@@ -4,6 +4,7 @@ import { useCart } from '@/context/CartContext';
 import { useOrders } from '@/context/OrdersContext';
 import { useAuth } from '@/hooks/useAuth';
 import authService from '@/api/authService';
+import customerAuthService from '@/api/customerAuthService';
 import apiClient from '@/api/apiClient';
 import { useTableInfo } from '@/context/TableContext';
 import { Button } from '@/components/ui/button';
@@ -88,7 +89,7 @@ interface CartDrawerProps {
 const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
   const { cartItems, removeFromCart: removeItem, updateQuantity, clearCart, addTip } = useCart();
   const { tableId, restaurantName } = useTableInfo();
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated, token, user } = useAuth();
   const { addOrder } = useOrders();
   const navigate = useNavigate();
   
@@ -124,42 +125,71 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // Helper function to check authentication
+  // Helper function to check authentication using the auth context
   const checkAuthStatus = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
+      console.log('Checking auth status from CartDrawer');
+      console.log('Current auth state:', { isAuthenticated, token, user: user?.email });
       
-      if (token) {
-        // We have a token, check if it's valid
+      // First check if we're already authenticated in the context
+      if (isAuthenticated && user && token) {
+        console.log('User is authenticated in context');
         return true;
       }
       
-      // If we still don't have a token, make a regular auth check
-      console.log('Attempting regular auth check as fallback...');
-      const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || `${API_BASE_URL}/api/auth`;
+      // If not authenticated in context but we have cookies, try to refresh auth
+      const cookies = document.cookie.split(';').map(c => c.trim());
+      const hasAuthCookies = cookies.some(cookie => 
+        cookie.startsWith('access_token=') || 
+        cookie.startsWith('auth_token=') ||
+        cookie.startsWith('refresh_token=')
+      );
       
-      try {
-        const authResponse = await fetch(`${apiBaseUrl}/me`, {
-          method: 'GET',
-          credentials: 'include'
-        });
+      if (hasAuthCookies) {
+        console.log('Found auth cookies, attempting to refresh auth state');
         
-        if (authResponse.ok) {
-          const authData = await authResponse.json();
-          console.log('Auth check successful:', authData);
-          
-          if (authData.token) {
-            localStorage.setItem('auth_token', authData.token);
+        // Try to get current user from customer auth service
+        try {
+          const customerResponse = await customerAuthService.getCurrentUser();
+          if (customerResponse.success && customerResponse.user) {
+            console.log('Successfully refreshed auth state via customer service');
+            
+            // Dispatch auth state change event to update the context
+            window.dispatchEvent(new CustomEvent('auth-state-changed', { 
+              detail: { 
+                isAuthenticated: true, 
+                user: customerResponse.user 
+              } 
+            }));
+            
             return true;
           }
-        } else {
-          const responseText = await authResponse.text();
-          console.error('Authentication check failed:', responseText);
+        } catch (error) {
+          console.log('Customer auth service failed, trying regular auth service');
+          
+          // Fallback to regular auth service
+          try {
+            const authResponse = await authService.getCurrentUser();
+            if (authResponse.success && authResponse.user) {
+              console.log('Successfully refreshed auth state via auth service');
+              
+              // Dispatch auth state change event
+              window.dispatchEvent(new CustomEvent('auth-state-changed', { 
+                detail: { 
+                  isAuthenticated: true, 
+                  user: authResponse.user 
+                } 
+              }));
+              
+              return true;
+            }
+          } catch (authError) {
+            console.log('Both auth services failed');
+          }
         }
-      } catch (fetchError) {
-        console.error('Error during authentication fetch:', fetchError);
       }
       
+      console.log('User is not authenticated');
       return false;
     } catch (error) {
       console.error('Error checking auth status:', error);
