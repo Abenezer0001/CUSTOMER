@@ -2,7 +2,7 @@
 // Get API URL from environment variables, default to production URL
 const envApiUrl = import.meta.env.VITE_API_BASE_URL;
 
-// Ensure API_BASE_URL is the true root (e.g., http://localhost:3001)
+// Ensure API_BASE_URL is the true root
 let processedApiUrl = envApiUrl || 'https://api.inseat.achievengine.com';
 if (processedApiUrl.endsWith('/api')) {
   processedApiUrl = processedApiUrl.slice(0, -4); // Remove last /api
@@ -16,6 +16,7 @@ console.log('Processed API base URL for constants:', API_BASE_URL);
 
 // Auth API URL
 export const AUTH_API_URL = `${API_BASE_URL}/api/auth`;
+
 
 // Customer API URL
 export const CUSTOMER_API_URL = `${API_BASE_URL}/api/customer`;

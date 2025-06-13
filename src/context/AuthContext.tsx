@@ -171,10 +171,11 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (hasHttpOnlyAuth()) {
             console.log('HTTP-only authentication cookies detected, attempting to verify');
           } else {
-            console.log('No authentication detected');
-          setLoading(false);
-          return;
-        }
+            console.log('No authentication detected, user should login');
+            setLoading(false);
+            setIsAuthenticated(false);
+            return;
+          }
         }
         
         // Check if we have Google OAuth cookies - if so, clear any guest data

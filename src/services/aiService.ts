@@ -58,7 +58,7 @@ class AIService {
   constructor() {
     // Use environment variable for API URL with fallback to localhost during development
     const envApiUrl = import.meta.env.VITE_API_BASE_URL;
-    let processedApiUrl = envApiUrl || 'http://localhost:3001';
+    let processedApiUrl = envApiUrl;
     
     // Ensure we have the base URL without /api suffix
     if (processedApiUrl.endsWith('/api')) {

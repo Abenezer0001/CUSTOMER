@@ -1,99 +1,61 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { toast } from 'sonner';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  redirectTo?: string;
+  requireAuth?: boolean;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
-  children,
-  redirectTo = '/login',
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
+  children, 
+  requireAuth = true 
 }) => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, token } = useAuth();
   const location = useLocation();
-  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
-  // Helper function to check for auth indicators
-  const hasAuthIndicators = () => {
-    // Check if we're marked as authenticated in context
-    if (isAuthenticated) return true;
+  // Helper function to check if user has any valid token
+  const hasValidToken = (): boolean => {
+    // Check for token in context
+    if (token) return true;
     
-    // Check for auth cookies
-    const cookies = document.cookie.split(';');
-    const hasAuthCookie = cookies.some(cookie => 
-      cookie.trim().startsWith('auth_token=') || 
-      cookie.trim().startsWith('access_token=') ||
-      cookie.trim().includes('session') ||
-      cookie.trim().includes('sid')
-    );
-    if (hasAuthCookie) return true;
+    // Check localStorage
+    const localToken = localStorage.getItem('auth_token');
+    if (localToken) return true;
     
-    // Check if we have user data indicating previous authentication
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const userObj = JSON.parse(storedUser);
-        if (userObj && userObj.id && userObj.email) {
-          return true;
-        }
-      } catch (e) {
-        console.error('Error parsing stored user data:', e);
-      }
+    // Check cookies for auth tokens
+    try {
+      const cookies = document.cookie.split(';');
+      const hasAuthToken = cookies.some(cookie => 
+        cookie.trim().startsWith('auth_token=') || 
+        cookie.trim().startsWith('access_token=')
+      );
+      if (hasAuthToken) return true;
+    } catch (error) {
+      console.error('Error checking cookies:', error);
     }
     
-    // Check for substantial cookie content that might indicate HTTP-only auth
-    const cookieString = document.cookie;
-    return cookieString.length > 50;
+    return false;
   };
 
-  useEffect(() => {
-    if (!isLoading) {
-      // Give the auth context a bit more time to initialize if we have auth indicators
-      if (!isAuthenticated && hasAuthIndicators()) {
-        console.log('Auth indicators found, waiting a bit for auth context to initialize');
-        const timer = setTimeout(() => {
-          setHasCheckedAuth(true);
-        }, 500); // Reduced from 1000ms to 500ms to prevent long waits
-        
-        return () => clearTimeout(timer);
-      } else {
-        setHasCheckedAuth(true);
-      }
-    }
-  }, [isLoading, isAuthenticated]);
-
-  useEffect(() => {
-    if (hasCheckedAuth && !isLoading && !isAuthenticated && !hasAuthIndicators()) {
-      toast.error('You must be logged in to access this page');
-    }
-  }, [hasCheckedAuth, isLoading, isAuthenticated]);
-
-  // Still loading auth context
+  // Show loading while checking authentication
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 dark:border-emerald-400"></div>
+      <div className="min-h-screen bg-[#16141F] flex items-center justify-center">
+        <div className="text-white">Loading...</div>
       </div>
     );
   }
 
-  // Still checking auth or have auth indicators - show loading
-  if (!hasCheckedAuth || (!isAuthenticated && hasAuthIndicators())) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 dark:border-emerald-400"></div>
-      </div>
-    );
+  // If authentication is required but user is not authenticated and has no valid token
+  if (requireAuth && !isAuthenticated && !hasValidToken()) {
+    console.log('ProtectedRoute: No authentication found, redirecting to login');
+    // Redirect to login page, preserving the intended destination
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // No authentication and no indicators - redirect to login
-  if (!isAuthenticated) {
-    // Save the location the user was trying to visit
-    return <Navigate to={redirectTo} state={{ from: location }} replace />;
-  }
-
+  // If user is authenticated or auth is not required, render children
   return <>{children}</>;
 };
+
+export default ProtectedRoute;

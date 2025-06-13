@@ -10,7 +10,7 @@ import { OrdersProvider } from "@/context/OrdersContext";
 import { TableProvider } from "@/context/TableContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "next-themes";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Layout from "./pages/Layout";
 import Index from "./pages/Index";
@@ -59,22 +59,46 @@ const App = () => {
                           <Route element={<Layout />}>
                             <Route path="/" element={<Index />} />
                             <Route path="/scan" element={<ScanTable />} />
-                            <Route path="/menu" element={<Menu />} />
-                            <Route path="/menu/:id" element={<MenuItemDetail />} />
-                            <Route path="/category/:categoryId" element={<CategoryDetail />} />
+                            <Route path="/menu" element={
+                              <ProtectedRoute>
+                                <Menu />
+                              </ProtectedRoute>
+                            } />
+                            <Route path="/menu/:id" element={
+                              <ProtectedRoute>
+                                <MenuItemDetail />
+                              </ProtectedRoute>
+                            } />
+                            <Route path="/category/:categoryId" element={
+                              <ProtectedRoute>
+                                <CategoryDetail />
+                              </ProtectedRoute>
+                            } />
                             <Route path="/my-orders" element={
                               <ProtectedRoute>
                                 <MyOrders />
                               </ProtectedRoute>
                             } />
-                            <Route path="/call-waiter" element={<CallWaiter />} />
-                            <Route path="/bill" element={<Bill />} />
+                            <Route path="/call-waiter" element={
+                              <ProtectedRoute>
+                                <CallWaiter />
+                              </ProtectedRoute>
+                            } />
+                            <Route path="/bill" element={
+                              <ProtectedRoute>
+                                <Bill />
+                              </ProtectedRoute>
+                            } />
                             <Route path="/checkout" element={
                               <ProtectedRoute>
                                 <Checkout />
                               </ProtectedRoute>
                             } />
-                            <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                            <Route path="/order-confirmation" element={
+                              <ProtectedRoute>
+                                <OrderConfirmation />
+                              </ProtectedRoute>
+                            } />
                             <Route path="/payment/success" element={<PaymentSuccess />} />
                             <Route path="/payment/cancel" element={<PaymentCancel />} />
                             <Route path="/login" element={<Login />} />

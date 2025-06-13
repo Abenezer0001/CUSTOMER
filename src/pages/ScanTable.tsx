@@ -104,9 +104,6 @@ const ScanTable: React.FC = () => {
     
     if (!context || video.videoWidth === 0 || video.videoHeight === 0) return;
     
-    // Add debugging
-    console.log('Scanning QR code, video dimensions:', video.videoWidth, 'x', video.videoHeight);
-    
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -118,38 +115,54 @@ const ScanTable: React.FC = () => {
       // Get image data for QR code detection
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
       
-      // Use jsQR to detect QR code
+      // Use jsQR to detect QR code with more aggressive settings
       const code = jsQR(
         imageData.data,
         imageData.width,
         imageData.height,
         {
-          inversionAttempts: "dontInvert",
+          inversionAttempts: "attemptBoth", // Try both normal and inverted
         }
       );
       
       // If QR code is detected
       if (code) {
+        console.log('Raw QR code data detected:', code.data);
+        
         // Extract table ID from the QR code data
-        // This assumes the QR code contains a URL like "https://example.com/?table=123"
-        // or just the table ID directly
         let tableId = code.data;
         
         // Try to extract table ID from URL if the QR code contains a URL
         try {
           const url = new URL(code.data);
+          console.log('QR code contains URL:', url.toString());
+          
+          // Check for table parameter in different formats
           const params = new URLSearchParams(url.search);
-          const urlTableId = params.get('table');
+          const urlTableId = params.get('table') || params.get('tableId') || params.get('id');
           
           if (urlTableId) {
             tableId = urlTableId;
+            console.log('Extracted table ID from URL:', tableId);
+          } else {
+            // Try to extract from pathname (e.g., /table/123)
+            const pathMatch = url.pathname.match(/\/table\/([^\/]+)/);
+            if (pathMatch) {
+              tableId = pathMatch[1];
+              console.log('Extracted table ID from path:', tableId);
+            }
           }
         } catch (e) {
           // Not a URL, use the raw data as the table ID
+          console.log('QR code is not a URL, using raw data as table ID:', tableId);
         }
         
-        if (tableId) {
-          handleQRCodeDetected(tableId);
+        // Validate table ID format (should be alphanumeric)
+        if (tableId && /^[a-zA-Z0-9_-]+$/.test(tableId.trim())) {
+          console.log('Valid table ID format detected:', tableId.trim());
+          handleQRCodeDetected(tableId.trim());
+        } else {
+          console.warn('Invalid table ID format:', tableId);
         }
       }
     } catch (err) {
@@ -161,32 +174,44 @@ const ScanTable: React.FC = () => {
   const handleQRCodeDetected = async (tableId: string) => {
     if (!tableId || loading) return;
     
+    console.log('QR Code detected:', tableId);
     setLoading(true);
     stopCamera();
     
     try {
+      console.log('Verifying table status for:', tableId);
       const verification = await verifyTableStatus(tableId);
+      console.log('Table verification result:', verification);
       
       if (verification.exists && verification.isAvailable) {
-        // Store the tableId in the URL and navigate to the menu
-        // This ensures the TableContext can pick it up from the URL
-        navigate(`/?table=${tableId}`);
+        console.log('Table is valid, navigating to menu with table ID:', tableId);
+        // Store the tableId in localStorage for the TableContext
+        localStorage.setItem('currentTableId', tableId);
+        
+        // Navigate to the menu page with table parameter
+        navigate(`/menu?table=${tableId}`);
       } else {
-        setError(verification.exists ? 
+        const errorMsg = verification.exists ? 
           'This table is currently not available.' : 
-          'Invalid table ID from QR code.');
+          'Invalid table ID from QR code.';
+        console.error('Table verification failed:', errorMsg);
+        setError(errorMsg);
         setLoading(false);
         
-        // Restart camera if there was an error
-        startCamera();
+        // Restart camera after a short delay
+        setTimeout(() => {
+          startCamera();
+        }, 2000);
       }
     } catch (err) {
       console.error('Error verifying scanned table:', err);
       setError('Failed to verify the scanned table. Please try again.');
       setLoading(false);
       
-      // Restart camera if there was an error
-      startCamera();
+      // Restart camera after a short delay
+      setTimeout(() => {
+        startCamera();
+      }, 2000);
     }
   };
 
@@ -258,6 +283,8 @@ const ScanTable: React.FC = () => {
                 </>
               )}
             </div>
+            
+          
             <p className="text-center text-sm text-muted-foreground">
               Position the QR code in the center of the frame
             </p>

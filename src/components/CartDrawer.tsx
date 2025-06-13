@@ -132,7 +132,8 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       console.log('Current auth state:', { isAuthenticated, token, user: user?.email });
       
       // First check if we're already authenticated in the context
-      if (isAuthenticated && user && token) {
+      // For credential users, token might be in cookies, so we check isAuthenticated && user
+      if (isAuthenticated && user) {
         console.log('User is authenticated in context');
         return true;
       }
@@ -257,12 +258,18 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       // Try to get a token from all possible sources
       let token = localStorage.getItem('auth_token');
       
-      // If no token found yet, try to extract from cookies
+      // Clean up the placeholder if it exists
+      if (token === 'http-only-cookie-present') {
+        localStorage.removeItem('auth_token');
+        token = null;
+      }
+      
+      // If no token found yet, try to extract from non-HTTP-only cookies (guest users)
       if (!token) {
         const cookies = document.cookie.split(';');
         const tokenCookie = cookies.find(cookie => 
           cookie.trim().startsWith('auth_token=') || 
-          cookie.trim().startsWith('access_token=')
+          cookie.trim().startsWith('jwt=')
         );
         
         if (tokenCookie) {
@@ -270,35 +277,19 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         }
       }
       
-      // If still no token, make a regular auth check
-      if (!token) {
-        console.log('Attempting regular auth check as fallback...');
-        const apiBaseUrl = import.meta.env.VITE_AUTH_API_URL || `${API_BASE_URL}/api/auth`;
-        const authResponse = await fetch(`${apiBaseUrl}/me`, {
-          method: 'GET',
-          credentials: 'include'
-        });
-        
-        if (authResponse.ok) {
-          const authData = await authResponse.json();
-          console.log('Auth check successful:', authData);
-          
-          if (authData.token) {
-            token = authData.token;
-            localStorage.setItem('auth_token', authData.token);
-          }
-        } else {
-          console.error('Authentication check failed:', await authResponse.text());
-        }
-      }
+      // Check if we have HTTP-only cookies (credential users)
+      const cookies = document.cookie.split(';').map(c => c.trim());
+      const hasHttpOnlyCookies = cookies.some(cookie => 
+        cookie.startsWith('access_token=') || 
+        cookie.startsWith('refresh_token=') ||
+        cookie.startsWith('_dd_s=') // DataDog session cookie indicates HTTP-only cookies
+      );
       
-      console.log('Using token for order placement:', token ? 'Token available' : 'No token available');
-      
-      // If we have a token, make sure it's saved to localStorage for future requests
-      if (token && !localStorage.getItem('auth_token')) {
-        localStorage.setItem('auth_token', token);
-        console.log('Saved token to localStorage');
-      }
+      console.log('Token status:', {
+        hasLocalStorageToken: !!token,
+        hasHttpOnlyCookies,
+        tokenLength: token ? token.length : 0
+      });
       
       try {
         // Use XMLHttpRequest for order creation
@@ -308,28 +299,17 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
           const xhr = new XMLHttpRequest();
           const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || `${API_BASE_URL}/orders`;
           xhr.open('POST', orderApiUrl, true);
-          xhr.withCredentials = true;
+          xhr.withCredentials = true; // This ensures HTTP-only cookies are sent
           xhr.setRequestHeader('Content-Type', 'application/json');
           
-          // Add Authorization header if token is available
-          if (token) {
+          // Only add Authorization header if we have a valid token (not for HTTP-only cookie users)
+          if (token && token !== 'http-only-cookie-present' && token.length > 10) {
             xhr.setRequestHeader('Authorization', `Bearer ${token}`);
             console.log('Added Authorization header with token');
+          } else if (hasHttpOnlyCookies) {
+            console.log('Using HTTP-only cookies for authentication (no Authorization header needed)');
           } else {
-            console.warn('No token available for Authorization header');
-            
-            // Last attempt to get token from cookies directly
-            const cookieToken = document.cookie
-              .split(';')
-              .find(cookie => cookie.trim().startsWith('auth_token='))
-              ?.split('=')[1];
-              
-            if (cookieToken) {
-              xhr.setRequestHeader('Authorization', `Bearer ${cookieToken}`);
-              console.log('Added Authorization header with cookie token');
-            } else {
-              console.warn('No authentication token available. Order creation may fail.');
-            }
+            console.warn('No authentication token available. Order creation may fail.');
           }
           
           xhr.onload = async function() {
@@ -427,6 +407,9 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         // Show success message
         toast.success('Order placed successfully!');
         
+        // Reset processing state before navigation
+        setIsProcessing(false);
+        
         // Add a small delay before redirecting to ensure the toast is shown
         setTimeout(() => {
           console.log('Redirecting to my-orders page with table ID:', tableId);
@@ -468,6 +451,9 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       return;
     }
     
+    // Clear any existing pending order ID to prevent conflicts
+    localStorage.removeItem('pending_order_id');
+    
     setIsProcessing(true);
     setError('');
     
@@ -497,18 +483,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         return;
       }
       
-      // If we get here, user is authenticated
-      const storedToken = localStorage.getItem('auth_token');
-      
-      if (!storedToken) {
-        console.log('No stored token found despite being authenticated');
-        toast.error('Authentication error. Please log in again.');
-        setIsProcessing(false);
-        onClose();
-        navigate('/login', { state: { returnUrl: '/cart' } });
-        return;
-      }
-      
+      // If we get here, user is authenticated - proceed with order regardless of token storage method
       console.log('User is authenticated, proceeding with order placement...');
       await processOrder();
     } catch (error) {

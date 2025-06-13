@@ -167,7 +167,7 @@ const Account: React.FC = () => {
     try {
       console.log('Manually refreshing orders...');
       
-      const orderApiUrl = import.meta.env.VITE_ORDER_API_URL || 'http://localhost:3001/api/orders';
+      const orderApiUrl = import.meta.env.VITE_ORDER_API_URL;
       const response = await fetch(`${orderApiUrl}/my-orders`, {
         method: 'GET',
         credentials: 'include',

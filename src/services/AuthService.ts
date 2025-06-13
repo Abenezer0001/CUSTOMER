@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 // API URL configuration
 // Extract base URL without any trailing /api to prevent double prefixes
-let API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+let API_BASE = import.meta.env.VITE_API_BASE_URL;
 // Remove any trailing /api if present to avoid double prefix
 if (API_BASE.endsWith('/api')) {
   API_BASE = API_BASE.slice(0, -4);
@@ -220,8 +220,8 @@ export const AuthService = {
       });
       
       if (response.data.success && response.data.token) {
-        // Store the token in localStorage as a fallback
-        // Only using cookies for token storage, not localStorage
+        // Store the token in localStorage for consistent access across the app
+        localStorage.setItem('auth_token', response.data.token);
         
         // Set token in cookie for cross-page consistency
         document.cookie = `auth_token=${response.data.token}; path=/; max-age=86400; SameSite=Lax`;

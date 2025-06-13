@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define base API URL - should come from environment variables in production
-const envApiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001';
+const envApiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_AUTH_API_URL;
 
 // Ensure we have the base URL without /api suffix
 let processedApiUrl = envApiUrl;
@@ -50,38 +50,29 @@ export interface AuthResponse {
 // Helper function to get token from localStorage and cookies
 export const getEffectiveToken = (): string | null => {
   try {
-    // First check localStorage for direct token access
+    // First check localStorage for token
     const localToken = localStorage.getItem('auth_token');
-    if (localToken && localToken !== 'http-only-cookie-present') {
+    
+    // If we have a valid token in localStorage (not the placeholder), return it
+    if (localToken && localToken !== 'http-only-cookie-present' && localToken.length > 10) {
       console.log('Found valid token in localStorage');
       return localToken;
     }
     
-    // Then check for accessible cookies
-    const cookies = document.cookie.split(';');
-    const possibleCookieNames = ['auth_token=', 'access_token=', 'token=', 'jwt='];
+    // Check for HTTP-only cookies by looking for common cookie indicators
+    const cookies = document.cookie.split(';').map(c => c.trim());
+    const hasHttpOnlyCookies = cookies.some(cookie => 
+      cookie.startsWith('_dd_s=') || // DataDog session cookie indicates we have HTTP-only cookies
+      cookie.includes('session') ||
+      cookie.includes('csrf')
+    );
     
-    for (const cookieName of possibleCookieNames) {
-      const cookieValue = cookies.find(cookie => cookie.trim().startsWith(cookieName));
-      if (cookieValue) {
-        const token = cookieValue.split('=')[1]?.trim();
-        if (token && token.length > 10) { // Basic validation
-          console.log(`Found ${cookieName.replace('=', '')} in cookies`);
-          // Store in localStorage for future access
-          localStorage.setItem('auth_token', token);
-          return token;
-        }
-      }
-    }
-    
-    // Check if we have HTTP-only cookies by looking at cookie existence
-    const hasHttpOnlyCookies = document.cookie.length > 50 || 
-                               cookies.some(cookie => cookie.includes('session') || cookie.includes('sid'));
-    
+    // For HTTP-only cookies, we return null so the frontend doesn't try to send a Bearer token
+    // The cookies will be sent automatically with credentials: 'include'
     if (hasHttpOnlyCookies && !localToken) {
-      console.log('HTTP-only cookies detected, marking token as present');
-      localStorage.setItem('auth_token', 'http-only-cookie-present');
-      return 'http-only-cookie-present';
+      console.log('HTTP-only cookies detected, returning null (cookies will be sent automatically)');
+      // Don't store the placeholder in localStorage anymore
+      return null;
     }
     
     console.log('No authentication token found');
@@ -111,20 +102,25 @@ api.interceptors.request.use(
     const cookies = document.cookie.split(';').map(c => c.trim());
     const hasAccessToken = cookies.some(c => c.startsWith('access_token='));
     const hasRefreshToken = cookies.some(c => c.startsWith('refresh_token='));
+    const hasAuthToken = cookies.some(c => c.startsWith('auth_token='));
     
     console.log('Request interceptor - Cookies status:');
     console.log('- Has access_token cookie:', hasAccessToken);
     console.log('- Has refresh_token cookie:', hasRefreshToken);
+    console.log('- Has auth_token cookie:', hasAuthToken);
     
     // Get token from localStorage if available
     const token = getEffectiveToken();
-    if (token) {
+    if (token && token !== 'http-only-cookie-present') {
       config.headers['Authorization'] = `Bearer ${token}`;
       console.log('✅ Added token from localStorage to request headers');
-    } else if (hasAccessToken) {
-      console.log('✅ No localStorage token, but access_token cookie exists');
+    } else if (hasAccessToken || hasRefreshToken) {
+      console.log('✅ No localStorage token, but HTTP-only cookies exist - relying on automatic transmission');
       // No need to extract the cookie value, it will be sent automatically
       // due to withCredentials: true
+    } else if (hasAuthToken) {
+      console.log('✅ Found auth_token cookie for guest user');
+      // For guest users, the auth_token cookie is not HTTP-only and can be read
     } else {
       console.log('⚠️ No authentication token available');
     }
@@ -257,16 +253,26 @@ const authService = {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Always clear local storage
+      // Clear authentication data
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user');
+      
+      // Clear app-specific data on logout
+      localStorage.removeItem('cart');
+      localStorage.removeItem('pending_order_id');
+      localStorage.removeItem('currentTableId');
+      localStorage.removeItem('favorites');
+      localStorage.removeItem('device_id');
+      
+      // Clear any analytics/tracking data
+      localStorage.removeItem('jam_ephemeral_events_host-network-events');
       
       // Clear cookies by setting them to expire in the past
       document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       document.cookie = 'refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       
-      console.log('Cleared authentication data from localStorage and cookies');
+      console.log('Cleared all user data from localStorage and cookies');
     }
   },
 
@@ -432,6 +438,42 @@ const authService = {
   // Get the effective token (exposed for components)
   getToken(): string | null {
     return getEffectiveToken();
+  },
+
+  // Check if user should be redirected to login
+  shouldRedirectToLogin(): boolean {
+    // Check if we have any valid token
+    const token = getEffectiveToken();
+    if (token) return false;
+    
+    // Check for auth cookies
+    try {
+      const cookies = document.cookie.split(';');
+      const hasAuthCookie = cookies.some(cookie => 
+        cookie.trim().startsWith('auth_token=') || 
+        cookie.trim().startsWith('access_token=') ||
+        cookie.trim().startsWith('refresh_token=')
+      );
+      if (hasAuthCookie) return false;
+    } catch (error) {
+      console.error('Error checking auth cookies:', error);
+    }
+    
+    // Check if we have stored user data (might indicate previous auth)
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const userObj = JSON.parse(storedUser);
+        if (userObj && userObj.id && userObj.email) {
+          return false; // User data exists, don't redirect
+        }
+      }
+    } catch (error) {
+      console.error('Error checking stored user:', error);
+    }
+    
+    // No authentication found, should redirect to login
+    return true;
   },
 
   // Get user profile from the server

@@ -2,9 +2,9 @@ import axios from 'axios';
 
 // Get API URL directly from environment variables with fallback
 const envApiUrl = import.meta.env.VITE_API_BASE_URL;
-let processedApiUrl = envApiUrl || 'http://localhost:3001';
+let processedApiUrl = envApiUrl;
 
-// Ensure API_BASE_URL is the true root (e.g., http://localhost:3001)
+// Ensure API_BASE_URL is the true root
 if (processedApiUrl.endsWith('/api')) {
   processedApiUrl = processedApiUrl.slice(0, -4); // Remove last /api
 } else if (processedApiUrl.endsWith('/api/')) { // also handle trailing slash
@@ -22,21 +22,29 @@ console.log('Processed BASE_URL for API client:', BASE_URL);
 const getEffectiveToken = (): string | null => {
   // Try localStorage first
   const localToken = localStorage.getItem('auth_token');
-  if (localToken) {
+  if (localToken && localToken !== 'http-only-cookie-present') {
+    console.log('Found valid token in localStorage');
     return localToken;
   }
   
   // Then try cookies
   const cookies = document.cookie.split(';');
-  const tokenCookie = cookies.find(cookie => 
-    cookie.trim().startsWith('auth_token=') || 
-    cookie.trim().startsWith('access_token=')
-  );
+  const possibleCookieNames = ['auth_token=', 'access_token=', 'token=', 'jwt='];
   
-  if (tokenCookie) {
-    return tokenCookie.split('=')[1].trim();
+  for (const cookieName of possibleCookieNames) {
+    const cookieValue = cookies.find(cookie => cookie.trim().startsWith(cookieName));
+    if (cookieValue) {
+      const token = cookieValue.split('=')[1]?.trim();
+      if (token && token.length > 10) { // Basic validation
+        console.log(`Found ${cookieName.replace('=', '')} in cookies`);
+        // Store in localStorage for future access
+        localStorage.setItem('auth_token', token);
+        return token;
+      }
+    }
   }
   
+  console.log('No authentication token found');
   return null;
 };
 

@@ -2,7 +2,7 @@ import axios, { AxiosError, AxiosResponse } from 'axios';
 import { getEffectiveToken } from './authService';
 
 // Define base API URL - should come from environment variables in production
-const envApiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001';
+const envApiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_AUTH_API_URL ;
 
 console.log('Environment VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
 console.log('Environment VITE_AUTH_API_URL:', import.meta.env.VITE_AUTH_API_URL);
@@ -270,76 +270,113 @@ const customerAuthService = {
       console.log('auth_token cookie exists:', !!authTokenCookie);
       console.log('localStorage token exists:', !!localToken);
       
-      // If there's no token in localStorage but we have cookie tokens, we'll still try the request
-      // The cookies will be sent automatically due to withCredentials: true
+      // Get auth headers using multiple fallback methods
+      const getAuthHeaders = () => {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        };
+
+        // Try to get token from multiple sources
+        let token = localStorage.getItem('auth_token') ||
+                   localStorage.getItem('access_token') ||
+                   localStorage.getItem('jwt');
+        
+        // If no token in localStorage, try to extract from non-HTTP-only cookies
+        if (!token) {
+          const cookies = document.cookie.split(';');
+          const tokenCookie = cookies.find(cookie => 
+            cookie.trim().startsWith('auth_token=') || 
+            cookie.trim().startsWith('access_token=') ||
+            cookie.trim().startsWith('jwt=')
+          );
+          
+          if (tokenCookie) {
+            token = tokenCookie.split('=')[1].trim();
+          }
+        }
+
+        if (token && token !== 'http-only-cookie-present') {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        return headers;
+      };
       
-      // For debugging, we'll include any token we have in the Authorization header
-      // Though with httpOnly cookies, the browser will automatically include them
-      let explicitToken = null;
-      if (accessTokenCookie) {
-        explicitToken = accessTokenCookie.split('=')[1];
-        console.log('Using access_token cookie for explicit Authorization header');
-      } else if (authTokenCookie) {
-        explicitToken = authTokenCookie.split('=')[1];
-        console.log('Using auth_token cookie for explicit Authorization header');
-      } else if (localToken) {
-        explicitToken = localToken;
-        console.log('Using localStorage token for explicit Authorization header');
-      }
+      const authHeaders = getAuthHeaders();
+      console.log('Using auth headers:', authHeaders);
       
       // Set auth state to true if we have any token
-      if (explicitToken) {
+      if (authHeaders.Authorization) {
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { isAuthenticated: true } }));
       }
       
-      // Make the request config once
-      const requestConfig: any = { withCredentials: true };
-      
-      if (explicitToken) {
-        requestConfig.headers = {
-          Authorization: `Bearer ${explicitToken}`
-        };
-      }
-      
-      // Try customer endpoint first
+      // Try customer endpoint first using fetch
       try {
-        console.log('Making customer /me request with config:', requestConfig);
-      const response = await api.get('/me', requestConfig);
-        console.log('Current customer retrieved successfully from customer endpoint:', response.data);
+        console.log('Making customer /me request with fetch...');
+        const response = await fetch(`${CUSTOMER_API_ENDPOINT}/me`, {
+          method: 'GET',
+          headers: authHeaders,
+          credentials: 'include'
+        });
         
-        return {
-          success: true,
-          user: response.data.user
-        };
+        console.log('Customer endpoint response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Current customer retrieved successfully from customer endpoint:', data);
+          
+          return {
+            success: true,
+            user: data.user
+          };
+        } else {
+          throw new Error(`Customer endpoint failed with status: ${response.status}`);
+        }
       } catch (customerError) {
         console.log('Customer endpoint failed, trying auth endpoint:', customerError);
         
         // Fallback to auth endpoint if customer endpoint fails
         try {
-          console.log('Making auth /me request with config:', requestConfig);
-          const response = await authApi.get('/me', requestConfig);
-          console.log('Current user retrieved successfully from auth endpoint:', response.data);
+          console.log('Making auth /me request with fetch...');
+          const response = await fetch(`${AUTH_API_ENDPOINT}/me`, {
+            method: 'GET',
+            headers: authHeaders,
+            credentials: 'include'
+          });
+          
+          console.log('Auth endpoint response status:', response.status);
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Current user retrieved successfully from auth endpoint:', data);
       
-      return {
-        success: true,
-        user: response.data.user
-      };
+            return {
+              success: true,
+              user: data.user
+            };
+          } else {
+            throw new Error(`Auth endpoint failed with status: ${response.status}`);
+          }
         } catch (authError) {
           console.error('Both customer and auth endpoints failed:', authError);
-          throw authError; // Throw the auth error to be handled below
+          throw authError;
         }
       }
     } catch (error) {
       console.error('Get current customer error:', error);
       
-      if (axios.isAxiosError(error) && error.response) {
-        if (error.response.status === 401) {
-          console.log('Customer authentication failed (401), clearing tokens');
-          localStorage.removeItem('auth_token');
-          document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-          document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        }
-        return error.response.data as AuthResponse;
+      // Handle 401 errors specifically
+      if (error instanceof Error && error.message.includes('401')) {
+        console.log('Customer authentication failed (401), clearing tokens');
+        localStorage.removeItem('auth_token');
+        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        
+        return {
+          success: false,
+          message: 'Authentication failed'
+        };
       }
       
       return {
@@ -402,23 +439,78 @@ const customerAuthService = {
   // Check authentication status
   checkAuthStatus: async (): Promise<boolean> => {
     try {
-      const token = getEffectiveToken();
+      // Get auth headers using the same method as getCurrentUser
+      const getAuthHeaders = () => {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        };
+
+        // Try to get token from multiple sources
+        let token = localStorage.getItem('auth_token') ||
+                   localStorage.getItem('access_token') ||
+                   localStorage.getItem('jwt');
+        
+        // If no token in localStorage, try to extract from non-HTTP-only cookies
+        if (!token) {
+          const cookies = document.cookie.split(';');
+          const tokenCookie = cookies.find(cookie => 
+            cookie.trim().startsWith('auth_token=') || 
+            cookie.trim().startsWith('access_token=') ||
+            cookie.trim().startsWith('jwt=')
+          );
+          
+          if (tokenCookie) {
+            token = tokenCookie.split('=')[1].trim();
+          }
+        }
+
+        if (token && token !== 'http-only-cookie-present') {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        return headers;
+      };
       
-      if (!token) {
-        console.log('No token available, user is not authenticated');
+      const authHeaders = getAuthHeaders();
+      console.log('Checking auth status with headers:', authHeaders);
+      
+      // Check if we have any token indication (including HTTP-only cookies)
+      const hasAnyTokenIndication = authHeaders.Authorization || 
+                                   document.cookie.includes('auth_token=') ||
+                                   document.cookie.includes('access_token=') ||
+                                   localStorage.getItem('auth_token') ||
+                                   localStorage.getItem('access_token');
+      
+      if (!hasAnyTokenIndication) {
+        console.log('No token indication available, user is not authenticated');
         return false;
       }
       
-      const response = await authApi.get('/me');
+      // Try auth endpoint using fetch
+      const response = await fetch(`${AUTH_API_ENDPOINT}/me`, {
+        method: 'GET',
+        headers: authHeaders,
+        credentials: 'include'
+      });
       
-      return response.data.success === true;
+      console.log('Auth status check response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.success === true;
+      } else if (response.status === 401) {
+        console.log('Auth check failed (401), clearing tokens');
+        localStorage.removeItem('auth_token');
+        return false;
+      }
+      
+      return false;
     } catch (error) {
       console.error('Auth status check error:', error);
       
-      if (axios.isAxiosError(error) && error.response) {
-        if (error.response.status === 401) {
-          localStorage.removeItem('auth_token');
-        }
+      if (error instanceof Error && error.message.includes('401')) {
+        localStorage.removeItem('auth_token');
       }
       
       return false;

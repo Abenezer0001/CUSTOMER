@@ -1,7 +1,7 @@
 // API Configuration
 // Get API URL from environment variables with fallback to local development URL
 const envApiUrl = import.meta.env.VITE_API_BASE_URL;
-export const API_BASE_URL = envApiUrl || 'http://localhost:3001/api';
+export const API_BASE_URL = envApiUrl;
 
 // Log the API URL being used for debugging
 console.log('Environment VITE_API_BASE_URL:', envApiUrl);

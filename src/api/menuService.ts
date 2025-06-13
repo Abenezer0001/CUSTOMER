@@ -1,5 +1,5 @@
-import axios, { AxiosError } from 'axios';
 import { API_BASE_URL } from '@/constants';
+import { getEffectiveToken } from './authService';
 
 // Custom error types for better error handling
 export class ApiError extends Error {
@@ -35,22 +35,79 @@ export class TableNotAvailableError extends ApiError {
   }
 }
 
-// Helper function to handle API errors
-const handleApiError = (error: unknown, defaultMessage: string): never => {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError;
-    if (axiosError.response) {
-      // Type assertion for response data to access error property safely
-      const responseData = axiosError.response.data as { error?: string };
-      throw new ApiError(
-        responseData.error || defaultMessage,
-        axiosError.response.status,
-        axiosError.response.data
-      );
-    } else if (axiosError.request) {
-      throw new ApiError('No response received from server', 503);
+/**
+ * Helper function to prepare request headers with auth token
+ * Uses the same pattern as orderService.ts that's working correctly
+ */
+const getAuthHeaders = (): HeadersInit => {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  };
+  
+  // Get token using authService's method first
+  let token = getEffectiveToken();
+  
+  // If token is "http-only-cookie-present", don't add Authorization header
+  // The HTTP-only cookies will be sent automatically with credentials: 'include'
+  if (token === 'http-only-cookie-present') {
+    console.log('MenuService: HTTP-only cookies detected, relying on automatic cookie transmission');
+    return headers;
+  }
+  
+  // If no token from authService, try to get from localStorage directly
+  if (!token) {
+    token = localStorage.getItem('auth_token');
+    console.log('MenuService: Fallback - Got token from localStorage:', token ? 'Token found' : 'No token');
+  }
+  
+  // If still no token, try to parse non-HTTP-only cookies manually (for guest users)
+  if (!token) {
+    try {
+      const cookies = document.cookie.split(';').map(c => c.trim());
+      
+      // Check for guest user token cookie names (these are not HTTP-only)
+      const tokenCookieNames = ['auth_token=', 'jwt=', 'token='];
+      
+      for (const cookieName of tokenCookieNames) {
+        const cookieMatch = cookies.find(cookie => cookie.startsWith(cookieName));
+        if (cookieMatch) {
+          token = cookieMatch.split('=')[1];
+          console.log(`MenuService: Found token in ${cookieName.replace('=', '')} cookie`);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('MenuService: Error parsing cookies for token:', error);
     }
   }
+  
+  // Set Authorization header if we have a valid token
+  if (token && token !== 'http-only-cookie-present' && token.length > 10) {
+    headers['Authorization'] = `Bearer ${token}`;
+    console.log('MenuService: Added Authorization header with token (length:', token.length, ')');
+  } else {
+    console.log('MenuService: No valid auth token available for Authorization header, relying on cookies');
+    
+    // If we have any cookies at all, log them for debugging (excluding HTTP-only ones)
+    if (document.cookie) {
+      console.log('MenuService: Available non-HTTP-only cookies (for debugging):', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+    }
+  }
+  
+  return headers;
+};
+
+// Helper function to handle API errors
+const handleApiError = (error: unknown, defaultMessage: string): never => {
+  if (error instanceof Response) {
+    throw new ApiError(
+      defaultMessage,
+      error.status,
+      error.statusText
+    );
+  }
+  
   // Handle unknown error types safely
   throw new ApiError(
     error instanceof Error ? error.message : defaultMessage
@@ -122,7 +179,7 @@ export interface TableMenu {
   };
 }
 
-// API Functions
+// API Functions using fetch (same pattern as orderService.ts)
 export const verifyTableStatus = async (tableId: string): Promise<{
   exists: boolean;
   isAvailable: boolean;
@@ -130,63 +187,160 @@ export const verifyTableStatus = async (tableId: string): Promise<{
   table?: Table;
 }> => {
   try {
-    console.log(`Verifying table status for table ID: ${tableId}`);
-    const response = await axios.get(`${API_BASE_URL}/tables/${tableId}/verify`, {
-      timeout: 5000 // Add a 5 second timeout for faster feedback
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error verifying table:', error);
+    console.log(`MenuService: Verifying table status for table ID: ${tableId}`);
     
-    // Check for specific error types
-    if (axios.isAxiosError(error)) {
+    const response = await fetch(`${API_BASE_URL}/tables/${tableId}/verify`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include' // This ensures cookies are sent with requests
+    });
+    
+    if (!response.ok) {
+      console.error('MenuService: Table verification failed:', response.status, response.statusText);
+      
       // If it's a 404 Not Found, the table doesn't exist
-      if (error.response?.status === 404) {
+      if (response.status === 404) {
         throw new TableNotFoundError(tableId);
       }
+      
+      // For other errors, get the error message from response
+      let errorMessage = `Failed to verify table status for table ID ${tableId}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      
+      throw new ApiError(errorMessage, response.status);
     }
     
-    // For all other errors, throw an appropriate error
-    handleApiError(error, `Failed to verify table status for table ID ${tableId}`);
+    const data = await response.json();
+    console.log('MenuService: Table verification successful:', data);
+    return data;
+  } catch (error) {
+    console.error('MenuService: Error verifying table:', error);
+    
+    // Re-throw known errors
+    if (error instanceof TableNotFoundError || error instanceof ApiError) {
+      throw error;
+    }
+    
+    // For all other errors, wrap in ApiError
+    throw new ApiError(
+      error instanceof Error ? error.message : `Failed to verify table status for table ID ${tableId}`
+    );
   }
 };
 
 export const getTableMenu = async (tableId: string): Promise<TableMenu> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/tables/${tableId}/menu`);
-    return response.data;
+    console.log(`MenuService: Fetching menu for table ID: ${tableId}`);
+    
+    const response = await fetch(`${API_BASE_URL}/tables/${tableId}/menu`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Failed to fetch menu for table ID ${tableId}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching table menu:', error);
+    console.error('MenuService: Error fetching table menu:', error);
     handleApiError(error, `Failed to fetch menu for table ID ${tableId}`);
   }
 };
 
 export const getCategories = async (): Promise<Category[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/categories`);
-    return response.data;
+    console.log('MenuService: Fetching categories');
+    
+    const response = await fetch(`${API_BASE_URL}/categories`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = 'Failed to fetch categories';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching categories:', error);
+    console.error('MenuService: Error fetching categories:', error);
     handleApiError(error, 'Failed to fetch categories');
   }
 };
 
 export const getSubcategories = async (categoryId: string): Promise<Subcategory[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/categories/${categoryId}/subcategories`);
-    return response.data;
+    console.log(`MenuService: Fetching subcategories for category: ${categoryId}`);
+    
+    const response = await fetch(`${API_BASE_URL}/categories/${categoryId}/subcategories`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Failed to fetch subcategories for category ${categoryId}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching subcategories:', error);
+    console.error('MenuService: Error fetching subcategories:', error);
     handleApiError(error, `Failed to fetch subcategories for category ${categoryId}`);
   }
 };
 
 export const getSubSubcategories = async (subcategoryId: string): Promise<Subcategory[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/subcategories/${subcategoryId}/subsubcategories`);
-    return response.data;
+    console.log(`MenuService: Fetching subsubcategories for subcategory: ${subcategoryId}`);
+    
+    const response = await fetch(`${API_BASE_URL}/subcategories/${subcategoryId}/subsubcategories`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Failed to fetch subsubcategories for subcategory ${subcategoryId}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching subsubcategories:', error);
+    console.error('MenuService: Error fetching subsubcategories:', error);
     handleApiError(error, `Failed to fetch subsubcategories for subcategory ${subcategoryId}`);
   }
 };
@@ -202,30 +356,84 @@ export const getMenuItems = async (categoryId?: string, subcategoryId?: string):
       url += `?${params.toString()}`;
     }
     
-    const response = await axios.get(url);
-    return response.data;
+    console.log(`MenuService: Fetching menu items with URL: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = 'Failed to fetch menu items';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching menu items:', error);
+    console.error('MenuService: Error fetching menu items:', error);
     handleApiError(error, 'Failed to fetch menu items');
   }
 };
 
 export const getVenueById = async (venueId: string): Promise<Venue> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/venues/${venueId}`);
-    return response.data;
+    console.log(`MenuService: Fetching venue: ${venueId}`);
+    
+    const response = await fetch(`${API_BASE_URL}/venues/${venueId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Failed to fetch venue with ID ${venueId}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching venue:', error);
+    console.error('MenuService: Error fetching venue:', error);
     handleApiError(error, `Failed to fetch venue with ID ${venueId}`);
   }
 };
 
 export const getVenueMenuItems = async (venueId: string): Promise<MenuItem[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/venues/${venueId}/menu-items`);
-    return response.data;
+    console.log(`MenuService: Fetching venue menu items for: ${venueId}`);
+    
+    const response = await fetch(`${API_BASE_URL}/venues/${venueId}/menu-items`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Failed to fetch menu items for venue ${venueId}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching venue menu items:', error);
+    console.error('MenuService: Error fetching venue menu items:', error);
     handleApiError(error, `Failed to fetch menu items for venue ${venueId}`);
   }
 };
@@ -264,17 +472,35 @@ export const getFullMenuHierarchy = async (venueId: string): Promise<{
       menuItems
     };
   } catch (error) {
-    console.error('Error fetching full menu hierarchy:', error);
+    console.error('MenuService: Error fetching full menu hierarchy:', error);
     handleApiError(error, `Failed to fetch full menu hierarchy for venue ${venueId}`);
   }
 };
 
 export const getTableById = async (tableId: string): Promise<Table> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/tables/${tableId}`);
-    return response.data;
+    console.log(`MenuService: Fetching table: ${tableId}`);
+    
+    const response = await fetch(`${API_BASE_URL}/tables/${tableId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Failed to fetch table with ID ${tableId}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        console.log('MenuService: Could not parse error response');
+      }
+      throw new ApiError(errorMessage, response.status);
+    }
+    
+    return await response.json();
   } catch (error) {
-    console.error('Error fetching table:', error);
+    console.error('MenuService: Error fetching table:', error);
     handleApiError(error, `Failed to fetch table with ID ${tableId}`);
   }
 };
