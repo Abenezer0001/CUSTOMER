@@ -78,17 +78,34 @@ interface Voice {
 
 // ElevenLabs configuration from environment variables
 const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || 'sk_1aff2da803c0fc7cb47d27a955e06a93244fbbb2600ad7b2';
-const DEFAULT_VOICE_ID = "scOwDtmlUjD3prqpp97I"; // Rachel voice
+const DEFAULT_VOICE_ID = "scOwDtmlUjD3prqpp97I"; // Rachel voice (English)
+const ARABIC_VOICE_ID = "VR6AewLTigWG4xSOukaG"; // Adam voice (Arabic compatible - Multilingual model)
+
+// Voice configuration for different languages
+const VOICE_CONFIG = {
+  en: {
+    voiceId: DEFAULT_VOICE_ID,
+    lang: 'en-US',
+    model: 'eleven_turbo_v2'
+  },
+  ar: {
+    voiceId: ARABIC_VOICE_ID,
+    lang: 'ar-SA', 
+    model: 'eleven_multilingual_v2' // Required for Arabic
+  }
+} as const;
 
 console.log('🔊 ElevenLabs Configuration:');
 console.log('  - API Key Source:', import.meta.env.VITE_ELEVENLABS_API_KEY ? 'Environment Variable' : 'Fallback/Hardcoded');
 console.log('  - API Key Available:', ELEVENLABS_API_KEY ? `Yes (${ELEVENLABS_API_KEY.slice(0, 10)}...)` : 'No');
-console.log('  - Voice ID:', DEFAULT_VOICE_ID);
+console.log('  - English Voice ID:', DEFAULT_VOICE_ID);
+console.log('  - Arabic Voice ID:', ARABIC_VOICE_ID);
 
 class AIService {
   private baseUrl: string;
   private currentAudio: HTMLAudioElement | null = null;
   private ttsConfig: TTSConfig | null = null;
+  private voicesLoaded: boolean = false;
 
   constructor() {
     // Use environment variable for API URL with fallback to localhost during development
@@ -107,6 +124,38 @@ class AIService {
     
     // Initialize TTS configuration
     this.initializeTTS();
+    
+    // Initialize browser voices
+    this.initializeBrowserVoices();
+  }
+
+  /**
+   * Initialize browser voices for TTS
+   */
+  private initializeBrowserVoices(): void {
+    if ('speechSynthesis' in window) {
+      // Load voices immediately if available
+      const voices = speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        this.voicesLoaded = true;
+        console.log(`🗣️ Browser TTS: ${voices.length} voices loaded immediately`);
+      } else {
+        // Wait for voices to load
+        speechSynthesis.onvoiceschanged = () => {
+          const loadedVoices = speechSynthesis.getVoices();
+          this.voicesLoaded = true;
+          console.log(`🗣️ Browser TTS: ${loadedVoices.length} voices loaded after initialization`);
+          
+          // Log available Arabic voices for debugging
+          const arabicVoices = loadedVoices.filter(voice => voice.lang.startsWith('ar'));
+          if (arabicVoices.length > 0) {
+            console.log('🗣️ Available Arabic voices:', arabicVoices.map(v => `${v.name} (${v.lang})`));
+          } else {
+            console.log('🗣️ No Arabic voices found in browser');
+          }
+        };
+      }
+    }
   }
 
   /**
@@ -291,10 +340,10 @@ class AIService {
   }
 
   /**
-   * Play text as speech using ElevenLabs API directly or browser fallback
+   * Play text as speech using ElevenLabs API directly or browser fallback with language support
    */
-  async playTextAsSpeech(text: string, voiceId?: string): Promise<void> {
-    console.log('🔊 TTS: Starting playTextAsSpeech with text:', text.substring(0, 50) + '...');
+  async playTextAsSpeech(text: string, language: 'en' | 'ar' = 'en', customVoiceId?: string): Promise<void> {
+    console.log('🔊 TTS: Starting playTextAsSpeech with text:', text.substring(0, 50) + '...', 'Language:', language);
     
     if (!text || !text.trim()) {
       console.warn('🔊 TTS: Empty text provided');
@@ -302,26 +351,42 @@ class AIService {
     }
 
     const cleanText = this.cleanTextForSpeech(text);
+    const voiceConfig = VOICE_CONFIG[language];
     
-    // Default to browser TTS if ElevenLabs fails
-    const useBrowserTTS = () => {
-      console.log('🗣️ TTS: Using browser speech synthesis fallback...');
+    // Language-aware browser TTS fallback
+    const useBrowserTTS = (lang: 'en' | 'ar') => {
+      console.log(`🗣️ TTS: Using browser speech synthesis fallback for ${lang}...`);
       if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.rate = 0.9;
         utterance.pitch = 1.0;
         utterance.volume = 0.8;
+        utterance.lang = voiceConfig.lang;
         
-        // Handle voice selection
+        // Handle voice selection based on language
         const voices = speechSynthesis.getVoices();
         if (voices.length > 0) {
-          const preferredVoice = voices.find(voice => 
-            voice.lang.startsWith('en-') && 
-            (voice.name.includes('Natural') || voice.name.includes('Enhanced') || voice.default)
-          ) || voices.find(voice => voice.lang.startsWith('en-')) || voices[0];
+          let preferredVoice;
+          
+          if (lang === 'ar') {
+            // Look for Arabic voices
+            preferredVoice = voices.find(voice => 
+              voice.lang.startsWith('ar') && 
+              (voice.name.includes('Arabic') || voice.name.includes('العربية'))
+            ) || voices.find(voice => voice.lang.startsWith('ar'));
+          } else {
+            // Look for English voices
+            preferredVoice = voices.find(voice => 
+              voice.lang.startsWith('en-') && 
+              (voice.name.includes('Natural') || voice.name.includes('Enhanced') || voice.default)
+            ) || voices.find(voice => voice.lang.startsWith('en-'));
+          }
           
           if (preferredVoice) {
             utterance.voice = preferredVoice;
+            console.log(`🗣️ TTS: Selected voice: ${preferredVoice.name} (${preferredVoice.lang})`);
+          } else {
+            console.log(`🗣️ TTS: No specific ${lang} voice found, using default`);
           }
         }
         
@@ -344,8 +409,9 @@ class AIService {
     // Try ElevenLabs first if API key is available
     if (ELEVENLABS_API_KEY) {
       try {
-        console.log('🔊 TTS: Attempting ElevenLabs TTS...');
-        const voice_id = voiceId || DEFAULT_VOICE_ID;
+        console.log(`🔊 TTS: Attempting ElevenLabs TTS for ${language}...`);
+        const voice_id = customVoiceId || voiceConfig.voiceId;
+        const model_id = voiceConfig.model;
         
         const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}/stream`, {
           method: 'POST',
@@ -356,7 +422,7 @@ class AIService {
           },
           body: JSON.stringify({
             text: cleanText,
-            model_id: 'eleven_turbo_v2',
+            model_id: model_id,
             voice_settings: {
               stability: 0.7,
               similarity_boost: 0.8,
@@ -373,7 +439,7 @@ class AIService {
           throw new Error(`ElevenLabs API error: ${response.status}`);
         }
 
-        console.log('🔊 TTS: ElevenLabs response successful, creating audio...');
+        console.log(`🔊 TTS: ElevenLabs response successful for ${language}, creating audio...`);
         const audioBlob = await response.blob();
         const audioUrl = URL.createObjectURL(audioBlob);
         
@@ -389,25 +455,25 @@ class AIService {
           if (!this.currentAudio) return reject(new Error('Audio creation failed'));
           
           this.currentAudio.onended = () => {
-            console.log('🔊 TTS: ElevenLabs audio playback completed');
+            console.log(`🔊 TTS: ElevenLabs audio playback completed for ${language}`);
             URL.revokeObjectURL(audioUrl);
             resolve();
           };
           
           this.currentAudio.onerror = (error) => {
-            console.error('🔊 TTS: ElevenLabs audio playback error:', error);
+            console.error(`🔊 TTS: ElevenLabs audio playback error for ${language}:`, error);
             URL.revokeObjectURL(audioUrl);
             // Fall back to browser TTS on audio error
-            useBrowserTTS();
+            useBrowserTTS(language);
             resolve(); // Don't reject, just fall back
           };
           
           this.currentAudio.onloadedmetadata = () => {
             this.currentAudio?.play().catch(error => {
-              console.error('🔊 TTS: Error starting ElevenLabs playback:', error);
+              console.error(`🔊 TTS: Error starting ElevenLabs playback for ${language}:`, error);
               URL.revokeObjectURL(audioUrl);
               // Fall back to browser TTS
-              useBrowserTTS();
+              useBrowserTTS(language);
               resolve(); // Don't reject, just fall back
             });
           };
@@ -416,13 +482,13 @@ class AIService {
         });
         
       } catch (elevenlabsError) {
-        console.error('🔊 TTS: ElevenLabs error:', elevenlabsError);
+        console.error(`🔊 TTS: ElevenLabs error for ${language}:`, elevenlabsError);
         // Fall back to browser TTS
-        useBrowserTTS();
+        useBrowserTTS(language);
       }
     } else {
-      console.log('🔊 TTS: No ElevenLabs API key, using browser TTS...');
-      useBrowserTTS();
+      console.log(`🔊 TTS: No ElevenLabs API key, using browser TTS for ${language}...`);
+      useBrowserTTS(language);
     }
   }
 
@@ -452,14 +518,15 @@ class AIService {
     return text
       .replace(/Finding perfect matches\.\.\.*/gi, '') // Remove "Finding perfect matches..." text
       .replace(/Hi there!?\s*/gi, '') // Remove "Hi there!" greeting if needed
-      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold
-      .replace(/\*(.*?)\*/g, '$1')     // Remove italic
-      .replace(/`(.*?)`/g, '$1')       // Remove code
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markdown
+      .replace(/\*(.*?)\*/g, '$1')     // Remove italic markdown
+      .replace(/`(.*?)`/g, '$1')       // Remove code markdown
       .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove links, keep text
       .replace(/#{1,6}\s/g, '')        // Remove headers
       .replace(/\n+/g, '. ')           // Replace newlines with periods
       .replace(/\s+/g, ' ')            // Normalize whitespace
-      .replace(/[^\w\s.,!?-]/g, '')    // Remove special characters
+      .replace(/[🍽️✨🎉🔥💡👍❤️🌟⭐🚀🎯💫🏆🎊🌈💰🔥🎁🎪🎵🎨🎭🎪🎯🎲🎳🎮🎯🎪🎭🎨🎵🎁🎉🎊🎈]/g, '') // Remove specific emojis that don't speak well
+      .replace(/([.!?])\s*$/, '$1')    // Ensure proper ending punctuation
       .trim();
   }
 

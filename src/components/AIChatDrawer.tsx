@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
-import { Wand2, X, Send, Clock, Users, Flame, Loader2, Brain, Sparkles, Volume2, VolumeX, Pause, Mic, MicOff } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Wand2, X, Send, Clock, Users, Flame, Loader2, Brain, Sparkles, Volume2, VolumeX, Pause, Mic, MicOff, Languages } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import aiService, { AIService, type StreamingChunk, type MenuItem } from '@/services/aiService';
 import ReactMarkdown from 'react-markdown';
@@ -17,7 +18,26 @@ interface Message {
   suggestions?: string[];
   isStreaming?: boolean;
   isComplete?: boolean;
+  language?: 'en' | 'ar';
 }
+
+// Language configuration
+const LANGUAGES = {
+  en: {
+    code: 'en-US',
+    name: 'English',
+    flag: '🇺🇸',
+    direction: 'ltr'
+  },
+  ar: {
+    code: 'ar-SA', 
+    name: 'العربية',
+    flag: '🇸🇦',
+    direction: 'rtl'
+  }
+} as const;
+
+type LanguageCode = keyof typeof LANGUAGES;
 
 const TypingIndicator: React.FC = () => (
   <div className="flex justify-start">
@@ -43,8 +63,9 @@ const ThinkingMessage: React.FC<{ content: string }> = ({ content }) => (
 
 const SpeakerButton: React.FC<{
   text: string;
+  language: LanguageCode;
   className?: string;
-}> = ({ text, className }) => {
+}> = ({ text, language, className }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -53,7 +74,8 @@ const SpeakerButton: React.FC<{
 
     try {
       if (isSpeaking) {
-        // Stop current speech
+        // Stop current speech using aiService
+        console.log('🔊 Stopping speech via aiService');
         aiService.stopSpeech();
         setIsSpeaking(false);
         return;
@@ -62,45 +84,36 @@ const SpeakerButton: React.FC<{
       setIsLoading(true);
       setIsSpeaking(true);
 
-      // Always try to play speech - service handles fallback internally
-      await aiService.playTextAsSpeech(text);
+      // Clean text for speech
+      const cleanText = cleanTextForSpeech(text);
+      console.log(`🔊 Playing TTS via aiService with text: "${cleanText.substring(0, 50)}..." in language: ${language}`);
+
+      // Use aiService TTS method which handles ElevenLabs integration with language support
+      await aiService.playTextAsSpeech(cleanText, language);
       
-      // Speech completed
       setIsSpeaking(false);
     } catch (error) {
-      console.error('Text-to-speech error:', error);
+      console.error('🔊 Text-to-speech error:', error);
       setIsSpeaking(false);
-      
-      // If all else fails, try browser TTS directly
-      try {
-        await playBrowserTTS(text);
-      } catch (browserError) {
-        console.error('Browser TTS also failed:', browserError);
-      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Simple browser TTS fallback function
-  const playBrowserTTS = (text: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!('speechSynthesis' in window)) {
-        reject(new Error('Speech synthesis not supported'));
-        return;
-      }
-
-      speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9;
-      utterance.pitch = 1.0;
-      utterance.volume = 0.8;
-      
-      utterance.onend = () => resolve();
-      utterance.onerror = (event) => reject(new Error(`Speech error: ${event.error}`));
-      
-      speechSynthesis.speak(utterance);
-    });
+  const cleanTextForSpeech = (text: string): string => {
+    return text
+      .replace(/Finding perfect matches\.\.\.*/gi, '')
+      .replace(/Hi there!?\s*/gi, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`(.*?)`/g, '$1')
+      .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\n+/g, '. ')
+      .replace(/\s+/g, ' ')
+      .replace(/[🍽️✨🎉🔥💡👍❤️🌟⭐🚀🎯💫🏆🎊🌈💰🔥🎁🎪🎵🎨🎭🎪🎯🎲🎳🎮🎯🎪🎭🎨🎵🎁🎉🎊🎈]/g, '')
+      .replace(/([.!?])\s*$/, '$1')
+      .trim();
   };
 
   const getIcon = () => {
@@ -232,11 +245,47 @@ const StreamingMessage: React.FC<{
   isComplete: boolean;
   items?: MenuItem[];
   suggestions?: string[];
+  language: LanguageCode;
   onSuggestionClick?: (suggestion: string) => void;
   onAddToCart?: (item: MenuItem) => void;
-}> = ({ content, isComplete, items, suggestions, onSuggestionClick, onAddToCart }) => {
+  autoPlayTTS?: boolean;
+}> = ({ content, isComplete, items, suggestions, language, onSuggestionClick, onAddToCart, autoPlayTTS = false }) => {
+  const [hasPlayedTTS, setHasPlayedTTS] = useState(false);
+
+  // Auto-play TTS when message is complete and content is available
+  useEffect(() => {
+    if (isComplete && content.trim() && autoPlayTTS && !hasPlayedTTS) {
+      setHasPlayedTTS(true);
+      // Small delay to ensure the message is fully rendered
+      setTimeout(async () => {
+        const cleanText = content
+          .replace(/Finding perfect matches\.\.\.*/gi, '')
+          .replace(/Hi there!?\s*/gi, '')
+          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .replace(/\*(.*?)\*/g, '$1')
+          .replace(/`(.*?)`/g, '$1')
+          .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+          .replace(/#{1,6}\s/g, '')
+          .replace(/\n+/g, '. ')
+          .replace(/\s+/g, ' ')
+          .replace(/[🍽️✨🎉🔥💡👍❤️🌟⭐🚀🎯💫🏆🎊🌈💰🔥🎁🎪🎵🎨🎭🎪🎯🎲🎳🎮🎯🎪🎭🎨🎵🎁🎉🎊🎈]/g, '')
+          .replace(/([.!?])\s*$/, '$1')
+          .trim();
+
+        if (cleanText) {
+          try {
+            console.log(`🔊 Auto-playing TTS via aiService for message: "${cleanText.substring(0, 50)}..." in language: ${language}`);
+            await aiService.playTextAsSpeech(cleanText, language);
+          } catch (error) {
+            console.error('🔊 Auto TTS error:', error);
+          }
+        }
+      }, 500);
+    }
+  }, [isComplete, content, autoPlayTTS, hasPlayedTTS, language]);
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" dir={LANGUAGES[language].direction}>
       {/* AI Response with Speaker Button */}
       {content && (
         <div className="space-y-2">
@@ -247,10 +296,10 @@ const StreamingMessage: React.FC<{
                 <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1 align-middle" />
               )}
             </div>
-            {/* Speaker Button - only show when message is complete */}
-            {isComplete && content.trim() && (
+            {/* Speaker Button - always show when there's content */}
+            {content.trim() && (
               <div className="flex-shrink-0 mt-1">
-                <SpeakerButton text={content} />
+                <SpeakerButton text={content} language={language} />
               </div>
             )}
           </div>
@@ -350,6 +399,7 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
   const [aiHealth, setAiHealth] = useState<any>(null);
   const [isListening, setIsListening] = useState(false);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>('en');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -384,7 +434,7 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
       const recognitionInstance = new SpeechRecognitionAPI();
       recognitionInstance.continuous = true;
       recognitionInstance.interimResults = true;
-      recognitionInstance.lang = 'en-US';
+      recognitionInstance.lang = LANGUAGES[selectedLanguage].code;
 
       recognitionInstance.onresult = (event: any) => {
         let transcript = '';
@@ -408,7 +458,14 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
     } else {
       console.warn('Speech recognition not supported in this browser');
     }
-  }, []);
+  }, [selectedLanguage]);
+
+  // Update recognition language when language changes
+  useEffect(() => {
+    if (recognition) {
+      recognition.lang = LANGUAGES[selectedLanguage].code;
+    }
+  }, [selectedLanguage, recognition]);
 
   const toggleVoiceInput = () => {
     if (!recognition) {
@@ -434,6 +491,7 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
       type: 'user',
       content: message,
       timestamp: new Date(),
+      language: selectedLanguage,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -449,6 +507,7 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
         timestamp: new Date(),
         isStreaming: true,
         isComplete: false,
+        language: selectedLanguage,
       };
 
       setCurrentStreamingMessage(streamingMessage);
@@ -457,8 +516,13 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
       // Generate a unique session ID for each message to avoid conversation mixing
       const currentSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+      // Add language context to the message
+      const languagePrompt = selectedLanguage === 'ar' 
+        ? `Please respond in Arabic. User message: ${message}`
+        : message;
+
       // Stream the AI response with session ID
-      for await (const chunk of aiService.streamMessage(message, currentSessionId)) {
+      for await (const chunk of aiService.streamMessage(languagePrompt, currentSessionId)) {
         switch (chunk.type) {
           case 'start':
             // Keep the streaming message as is
@@ -532,6 +596,7 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
               timestamp: new Date(),
               isStreaming: false,
               isComplete: true,
+              language: selectedLanguage,
             };
             setCurrentStreamingMessage(finalMessage);
             break;
@@ -551,10 +616,13 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
       const errorMessage: Message = {
         id: (Date.now() + 3).toString(),
         type: 'ai',
-        content: 'Sorry, I\'m having trouble connecting to the AI service right now. Please try again.',
+        content: selectedLanguage === 'ar' 
+          ? 'عذراً، أواجه مشكلة في الاتصال بخدمة الذكاء الاصطناعي الآن. يرجى المحاولة مرة أخرى.'
+          : 'Sorry, I\'m having trouble connecting to the AI service right now. Please try again.',
         timestamp: new Date(),
         isStreaming: false,
         isComplete: true,
+        language: selectedLanguage,
       };
       setMessages(prev => [...prev, errorMessage]);
       setCurrentStreamingMessage(null);
@@ -587,6 +655,34 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
       // ItemDetailDrawer will be opened by the parent component
     }
   };
+
+  const getWelcomeMessage = () => {
+    if (selectedLanguage === 'ar') {
+      return {
+        title: 'مرحباً بك في ذكاء INSEAT الاصطناعي! 🍽️',
+        subtitle: 'أنا مساعدك الذكي للطعام. يمكنني مساعدتك في العثور على الأطباق المثالية بناءً على تفضيلاتك ومتطلباتك الغذائية ورغباتك!',
+        suggestions: [
+          'أظهر لي خيارات نباتية حارة',
+          'ما هي الحلويات المتاحة؟',
+          'شيء أقل من 15 دولار',
+          'فاجئني بتوصية'
+        ]
+      };
+    } else {
+      return {
+        title: 'Welcome to INSEAT AI! 🍽️',
+        subtitle: 'I\'m your intelligent food assistant. I can help you find the perfect dishes based on your preferences, dietary needs, and cravings!',
+        suggestions: [
+          'Show me spicy vegetarian options',
+          'What desserts do you have?',
+          'Something under $15',
+          'Surprise me with a recommendation'
+        ]
+      };
+    }
+  };
+
+  const welcomeMessage = getWelcomeMessage();
 
   return (
     <Drawer open={isOpen} onOpenChange={setIsOpen}>
@@ -625,21 +721,16 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
             {/* Welcome Message */}
             {messages.length === 0 && !currentStreamingMessage && (
               <div className="text-center p-8 space-y-4">
-                <div className="p-4 bg-gray-800/50 border border-gray-700 rounded-xl">
+                <div className="p-4 bg-gray-800/50 border border-gray-700 rounded-xl" dir={LANGUAGES[selectedLanguage].direction}>
                   <Sparkles className="w-8 h-8 mx-auto text-purple-400 mb-2" />
                   <h3 className="text-lg font-semibold text-white mb-2">
-                    Welcome to INSEAT AI! 🍽️
+                    {welcomeMessage.title}
                   </h3>
                   <p className="text-gray-300 mb-4">
-                    I'm your intelligent food assistant. I can help you find the perfect dishes based on your preferences, dietary needs, and cravings!
+                    {welcomeMessage.subtitle}
                   </p>
                   <div className="grid grid-cols-2 gap-2 max-w-md mx-auto">
-                    {[
-                      'Show me spicy vegetarian options',
-                      'What desserts do you have?',
-                      'Something under $15',
-                      'Surprise me with a recommendation'
-                    ].map((suggestion) => (
+                    {welcomeMessage.suggestions.map((suggestion) => (
                       <button
                         key={suggestion}
                         onClick={() => handleSendMessage(suggestion)}
@@ -669,6 +760,7 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
                       ? 'bg-purple-600 text-white'
                       : 'bg-gray-800 border border-gray-700 text-gray-100'
                   )}
+                  dir={LANGUAGES[message.language || selectedLanguage].direction}
                 >
                   {message.type === 'user' ? (
                     <p>{message.content}</p>
@@ -678,8 +770,10 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
                       isComplete={message.isComplete || false}
                       items={message.items}
                       suggestions={message.suggestions}
+                      language={message.language || selectedLanguage}
                       onSuggestionClick={handleSuggestionClick}
                       onAddToCart={handleAddToCart}
+                      autoPlayTTS={true}
                     />
                   )}
                 </div>
@@ -695,8 +789,10 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
                     isComplete={currentStreamingMessage.isComplete || false}
                     items={currentStreamingMessage.items}
                     suggestions={currentStreamingMessage.suggestions}
+                    language={currentStreamingMessage.language || selectedLanguage}
                     onSuggestionClick={handleSuggestionClick}
                     onAddToCart={handleAddToCart}
+                    autoPlayTTS={true}
                   />
                 </div>
               </div>
@@ -715,19 +811,49 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
               <div className="mb-3 bg-red-900/50 border border-red-700 rounded-lg p-2 text-center">
                 <div className="flex items-center justify-center gap-2 text-red-300">
                   <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-medium">Listening for voice input...</span>
+                  <span className="text-sm font-medium">
+                    {selectedLanguage === 'ar' ? 'جاري الاستماع للصوت...' : 'Listening for voice input...'}
+                  </span>
                 </div>
               </div>
             )}
             
             <div className="flex space-x-2">
+              {/* Language Selector */}
+              <Select value={selectedLanguage} onValueChange={(value: LanguageCode) => setSelectedLanguage(value)}>
+                <SelectTrigger className="w-[140px] bg-gray-800 border-gray-600 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-600">
+                  {Object.entries(LANGUAGES).map(([code, lang]) => (
+                    <SelectItem 
+                      key={code} 
+                      value={code}
+                      className="text-white hover:bg-gray-700 focus:bg-gray-700"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span>{lang.flag}</span>
+                        <span>{lang.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder={isListening ? "Speak now..." : "Ask me about our menu... (e.g., 'Show me vegan options')"}
+                placeholder={
+                  isListening 
+                    ? (selectedLanguage === 'ar' ? 'تحدث الآن...' : 'Speak now...') 
+                    : (selectedLanguage === 'ar' 
+                        ? 'اسألني عن قائمة الطعام...' 
+                        : "Ask me about our menu... (e.g., 'Show me vegan options')")
+                }
                 disabled={isLoading}
                 className="flex-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-purple-500"
+                dir={LANGUAGES[selectedLanguage].direction}
               />
               {/* Microphone Button */}
               <Button
@@ -740,7 +866,10 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
                     ? "bg-red-500 hover:bg-red-600 animate-pulse text-white"
                     : "bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white"
                 )}
-                title={isListening ? "Stop listening" : "Start voice input"}
+                title={isListening 
+                  ? (selectedLanguage === 'ar' ? 'إيقاف الاستماع' : 'Stop listening') 
+                  : (selectedLanguage === 'ar' ? 'بدء إدخال الصوت' : 'Start voice input')
+                }
               >
                 {isListening ? (
                   <MicOff className="w-4 h-4" />
