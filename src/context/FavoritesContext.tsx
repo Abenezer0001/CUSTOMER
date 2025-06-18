@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { FavoritesContextType } from '@/types';
 import { toast } from 'sonner';
@@ -10,6 +9,21 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const savedFavorites = localStorage.getItem('favorites');
     return savedFavorites ? JSON.parse(savedFavorites) : [];
   });
+
+  // Listen for favorites clear events from logout
+  useEffect(() => {
+    const handleFavoritesClear = () => {
+      console.log('Favorites cleared due to logout');
+      localStorage.removeItem('favorites');
+      setFavorites([]);
+    };
+    
+    window.addEventListener('favorites-cleared', handleFavoritesClear);
+    
+    return () => {
+      window.removeEventListener('favorites-cleared', handleFavoritesClear);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('favorites', JSON.stringify(favorites));

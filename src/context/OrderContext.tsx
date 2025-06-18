@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { CartItem } from './CartContext';
 import { useAuth } from './AuthContext';
 import { Order } from '../types/Order';
@@ -46,6 +46,25 @@ export const OrderProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [error, setError] = useState<string | null>(null);
   const [orderHistory, setOrderHistory] = useState<Order[]>([]);
   const { user } = useAuth();
+
+  // Listen for logout events to clear order data
+  useEffect(() => {
+    const handleAuthStateChange = (event: any) => {
+      if (event.detail && !event.detail.isAuthenticated) {
+        console.log('Orders cleared due to logout');
+        setOrders([]);
+        setCurrentOrder(null);
+        setOrderHistory([]);
+        setError(null);
+      }
+    };
+    
+    window.addEventListener('auth-state-changed', handleAuthStateChange);
+    
+    return () => {
+      window.removeEventListener('auth-state-changed', handleAuthStateChange);
+    };
+  }, []);
 
   // Simulate restaurant and venue IDs (in a real app these would come from a configuration or current selection)
   const restaurantId = "restaurant-1";

@@ -4,7 +4,7 @@ import { TableHeader } from '@/components/TableHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { useTableInfo } from '@/context/TableContext';
 import { useTheme } from 'next-themes';
-import { ScanLine, ShoppingCart, Wand2 } from 'lucide-react';
+import { ShoppingCart, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';

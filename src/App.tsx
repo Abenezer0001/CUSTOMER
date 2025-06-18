@@ -59,29 +59,13 @@ const App = () => {
                           <Route element={<Layout />}>
                             <Route path="/" element={<Index />} />
                             <Route path="/scan" element={<ScanTable />} />
-                            <Route path="/menu" element={
-                              <ProtectedRoute>
-                                <Menu />
-                              </ProtectedRoute>
-                            } />
-                            <Route path="/menu/:id" element={
-                              <ProtectedRoute>
-                                <MenuItemDetail />
-                              </ProtectedRoute>
-                            } />
-                            <Route path="/category/:categoryId" element={
-                              <ProtectedRoute>
-                                <CategoryDetail />
-                              </ProtectedRoute>
-                            } />
+                            <Route path="/menu" element={<Menu />} />
+                            <Route path="/menu/:id" element={<MenuItemDetail />} />
+                            <Route path="/category/:categoryId" element={<CategoryDetail />} />
+                            <Route path="/call-waiter" element={<CallWaiter />} />
                             <Route path="/my-orders" element={
                               <ProtectedRoute>
                                 <MyOrders />
-                              </ProtectedRoute>
-                            } />
-                            <Route path="/call-waiter" element={
-                              <ProtectedRoute>
-                                <CallWaiter />
                               </ProtectedRoute>
                             } />
                             <Route path="/bill" element={

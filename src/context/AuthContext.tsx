@@ -535,20 +535,39 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       setToken(null);
       setIsAuthenticated(false);
       
-      // Clear localStorage
+      // Clear user-specific localStorage items
       localStorage.removeItem('user');
       localStorage.removeItem('auth_token');
-      localStorage.removeItem('cart'); // Clear cart on logout
+      localStorage.removeItem('cart');
+      localStorage.removeItem('pendingCart'); // Clear pending cart items
+      localStorage.removeItem('favorites'); // Clear user favorites
+      localStorage.removeItem('access_token'); // Clear any access tokens
+      localStorage.removeItem('refresh_token'); // Clear refresh tokens
+      localStorage.removeItem('orders'); // Clear user orders data
+      localStorage.removeItem('pending_order_id'); // Clear pending order IDs
+      localStorage.removeItem('pendingPaymentOrderId'); // Clear pending payment orders
+      localStorage.removeItem('stripeSessionId'); // Clear Stripe session
+      localStorage.removeItem('currentPaymentOrderId'); // Clear current payment order
+      
+      // Keep table/venue context for continued browsing:
+      // - currentTableId, pendingTableId (table context)
+      // - currentVenueId (venue context) 
+      // - tableInfo (table information)
+      // - device_id (for guest access if needed)
       
       // Clear cookies by setting expiration to past date
       document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
       document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie = 'refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
       
       // Notify other components about the authentication state change
       window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { isAuthenticated: false } }));
       
       // Dispatch cart clear event
       window.dispatchEvent(new CustomEvent('cart-cleared'));
+      
+      // Dispatch favorites clear event
+      window.dispatchEvent(new CustomEvent('favorites-cleared'));
       
       toast.success('Logged out successfully');
     } catch (error) {

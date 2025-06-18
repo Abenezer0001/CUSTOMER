@@ -9,77 +9,113 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, QrCode, AlertTriangle, X, ScanLine } from 'lucide-react';
-import jsQR from 'jsqr';
 import { cn } from '@/lib/utils';
+import QrScanner from 'qr-scanner';
 
 const ScanTable: React.FC = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [cameraPermission, setCameraPermission] = useState<boolean | null>(null);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [scanInterval, setScanInterval] = useState<number | null>(null);
+  const qrBoxRef = useRef<HTMLDivElement>(null);
+  const scannerRef = useRef<QrScanner>();
+  const [qrOn, setQrOn] = useState<boolean>(false);
+
+  // Handle QR scan success
+  const onScanSuccess = (result: QrScanner.ScanResult) => {
+    console.log('QR Scanner: Raw result detected:', result);
+    
+    if (result?.data) {
+      console.log('Raw QR code data detected:', result.data);
+      
+      // Extract table ID from the QR code data
+      let tableId = result.data;
+      
+      // Try to extract table ID from URL if the QR code contains a URL
+      try {
+        const url = new URL(result.data);
+        console.log('QR code contains URL:', url.toString());
+        
+        // Check for table parameter in different formats
+        const params = new URLSearchParams(url.search);
+        const urlTableId = params.get('table') || params.get('tableId') || params.get('id');
+        
+        if (urlTableId) {
+          tableId = urlTableId;
+          console.log('Extracted table ID from URL:', tableId);
+        } else {
+          // Try to extract from pathname (e.g., /table/123)
+          const pathMatch = url.pathname.match(/\/table\/([^\/]+)/);
+          if (pathMatch) {
+            tableId = pathMatch[1];
+            console.log('Extracted table ID from path:', tableId);
+          }
+        }
+      } catch (e) {
+        // Not a URL, use the raw data as the table ID
+        console.log('QR code is not a URL, using raw data as table ID:', tableId);
+      }
+      
+      // Validate table ID format (should be alphanumeric)
+      if (tableId && /^[a-zA-Z0-9_-]+$/.test(tableId.trim())) {
+        console.log('Valid table ID format detected:', tableId.trim());
+        handleQRCodeDetected(tableId.trim());
+      } else {
+        console.warn('Invalid table ID format:', tableId);
+      }
+    }
+  };
+
+  // Handle QR scan failure
+  const onScanFail = (err: string | Error) => {
+    // Don't log every scan failure as it's normal when no QR code is present
+    // console.log('QR Scanner: Scan attempt failed:', err);
+  };
 
   // Start camera for QR scanning
   const startCamera = async () => {
     try {
       setError(null);
+      console.log('Starting QR scanner...');
       
-      // Check if browser supports getUserMedia
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Your browser does not support camera access');
+      if (videoRef.current && !scannerRef.current) {
+        // Create QR Scanner instance
+        scannerRef.current = new QrScanner(
+          videoRef.current,
+          onScanSuccess,
+          {
+            onDecodeError: onScanFail,
+            preferredCamera: "environment", // Use back camera on mobile
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            overlay: qrBoxRef.current || undefined,
+          }
+        );
+
+        // Start QR Scanner
+        await scannerRef.current.start();
+        setQrOn(true);
+        setCameraPermission(true);
+        console.log('QR scanner started successfully');
       }
-      
-      // Request camera permission
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' } // Use back camera on mobile devices
-      });
-      
-      setCameraPermission(true);
-      setCameraStream(stream);
-      
-      // Set video source
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        // Wait for loadedmetadata event before playing to avoid interrupt errors
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(err => {
-            console.error('Error playing video:', err);
-          });
-        };
-      }
-      
-      // Start scanning for QR codes
-      const interval = window.setInterval(() => {
-        scanQRCode();
-      }, 500) as unknown as number;
-      
-      setScanInterval(interval);
-      
     } catch (err) {
       console.error('Camera access error:', err);
       setCameraPermission(false);
+      setQrOn(false);
       setError('Could not access camera. Please check permissions.');
     }
   };
 
   // Stop camera and clean up
   const stopCamera = () => {
-    if (scanInterval) {
-      clearInterval(scanInterval);
-      setScanInterval(null);
+    console.log('Stopping QR scanner...');
+    if (scannerRef.current) {
+      scannerRef.current.stop();
+      scannerRef.current.destroy();
+      scannerRef.current = undefined;
     }
-    
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-      setCameraStream(null);
-    }
-    
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    setQrOn(false);
   };
 
   // Clean up on component unmount
@@ -93,82 +129,6 @@ const ScanTable: React.FC = () => {
   useEffect(() => {
     startCamera();
   }, []);
-
-  // Scan video frame for QR code
-  const scanQRCode = async () => {
-    if (!videoRef.current || !canvasRef.current || !cameraStream) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    
-    if (!context || video.videoWidth === 0 || video.videoHeight === 0) return;
-    
-    // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    // Draw current video frame to canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    try {
-      // Get image data for QR code detection
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      
-      // Use jsQR to detect QR code with more aggressive settings
-      const code = jsQR(
-        imageData.data,
-        imageData.width,
-        imageData.height,
-        {
-          inversionAttempts: "attemptBoth", // Try both normal and inverted
-        }
-      );
-      
-      // If QR code is detected
-      if (code) {
-        console.log('Raw QR code data detected:', code.data);
-        
-        // Extract table ID from the QR code data
-        let tableId = code.data;
-        
-        // Try to extract table ID from URL if the QR code contains a URL
-        try {
-          const url = new URL(code.data);
-          console.log('QR code contains URL:', url.toString());
-          
-          // Check for table parameter in different formats
-          const params = new URLSearchParams(url.search);
-          const urlTableId = params.get('table') || params.get('tableId') || params.get('id');
-          
-          if (urlTableId) {
-            tableId = urlTableId;
-            console.log('Extracted table ID from URL:', tableId);
-          } else {
-            // Try to extract from pathname (e.g., /table/123)
-            const pathMatch = url.pathname.match(/\/table\/([^\/]+)/);
-            if (pathMatch) {
-              tableId = pathMatch[1];
-              console.log('Extracted table ID from path:', tableId);
-            }
-          }
-        } catch (e) {
-          // Not a URL, use the raw data as the table ID
-          console.log('QR code is not a URL, using raw data as table ID:', tableId);
-        }
-        
-        // Validate table ID format (should be alphanumeric)
-        if (tableId && /^[a-zA-Z0-9_-]+$/.test(tableId.trim())) {
-          console.log('Valid table ID format detected:', tableId.trim());
-          handleQRCodeDetected(tableId.trim());
-        } else {
-          console.warn('Invalid table ID format:', tableId);
-        }
-      }
-    } catch (err) {
-      console.error('QR Code scanning error:', err);
-    }
-  };
 
   // Handle detected QR code
   const handleQRCodeDetected = async (tableId: string) => {
@@ -273,13 +233,12 @@ const ScanTable: React.FC = () => {
                     playsInline 
                     muted
                   />
-                  <div className="absolute inset-0 flex items-center justify-center">
+                  <div 
+                    ref={qrBoxRef}
+                    className="absolute inset-0 flex items-center justify-center"
+                  >
                     <div className="w-3/4 h-3/4 border-2 border-white/50 rounded-lg" />
                   </div>
-                  <canvas 
-                    ref={canvasRef} 
-                    className="hidden"
-                  />
                 </>
               )}
             </div>

@@ -79,6 +79,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleCartClear = () => {
       console.log('Cart cleared due to logout');
       localStorage.removeItem('cart');
+      localStorage.removeItem('pendingCart'); // Also clear pending cart
       setCartItems([]);
     };
     

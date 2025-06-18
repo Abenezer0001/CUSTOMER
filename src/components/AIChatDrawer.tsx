@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
-import { Wand2, X, Send, Clock, Users, Flame, Loader2, Brain, Sparkles } from 'lucide-react';
+import { Wand2, X, Send, Clock, Users, Flame, Loader2, Brain, Sparkles, Volume2, VolumeX, Pause, Mic, MicOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import aiService, { AIService, type StreamingChunk, type MenuItem } from '@/services/aiService';
 import ReactMarkdown from 'react-markdown';
@@ -40,6 +40,93 @@ const ThinkingMessage: React.FC<{ content: string }> = ({ content }) => (
     <span className="text-blue-700 text-sm italic">{content}</span>
   </div>
 );
+
+const SpeakerButton: React.FC<{
+  text: string;
+  className?: string;
+}> = ({ text, className }) => {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSpeech = async () => {
+    if (!text || !text.trim()) return;
+
+    try {
+      if (isSpeaking) {
+        // Stop current speech
+        aiService.stopSpeech();
+        setIsSpeaking(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setIsSpeaking(true);
+
+      // Always try to play speech - service handles fallback internally
+      await aiService.playTextAsSpeech(text);
+      
+      // Speech completed
+      setIsSpeaking(false);
+    } catch (error) {
+      console.error('Text-to-speech error:', error);
+      setIsSpeaking(false);
+      
+      // If all else fails, try browser TTS directly
+      try {
+        await playBrowserTTS(text);
+      } catch (browserError) {
+        console.error('Browser TTS also failed:', browserError);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Simple browser TTS fallback function
+  const playBrowserTTS = (text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!('speechSynthesis' in window)) {
+        reject(new Error('Speech synthesis not supported'));
+        return;
+      }
+
+      speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.8;
+      
+      utterance.onend = () => resolve();
+      utterance.onerror = (event) => reject(new Error(`Speech error: ${event.error}`));
+      
+      speechSynthesis.speak(utterance);
+    });
+  };
+
+  const getIcon = () => {
+    if (isLoading) return <Loader2 className="w-4 h-4 animate-spin" />;
+    if (isSpeaking) return <Pause className="w-4 h-4" />;
+    return <Volume2 className="w-4 h-4" />;
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleSpeech}
+      disabled={isLoading}
+      className={cn(
+        "h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700/50 transition-all duration-200",
+        isSpeaking && "text-blue-400 animate-pulse",
+        isLoading && "text-yellow-400",
+        className
+      )}
+      title={isSpeaking ? "Stop speech" : "Play speech"}
+    >
+      {getIcon()}
+    </Button>
+  );
+};
 
 const MenuItemCard: React.FC<{ 
   item: MenuItem; 
@@ -150,13 +237,23 @@ const StreamingMessage: React.FC<{
 }> = ({ content, isComplete, items, suggestions, onSuggestionClick, onAddToCart }) => {
   return (
     <div className="space-y-3">
-      {/* AI Response */}
+      {/* AI Response with Speaker Button */}
       {content && (
-        <div className="prose prose-sm max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-          {!isComplete && (
-            <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1 align-middle" />
-          )}
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="prose prose-sm max-w-none flex-1">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              {!isComplete && (
+                <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1 align-middle" />
+              )}
+            </div>
+            {/* Speaker Button - only show when message is complete */}
+            {isComplete && content.trim() && (
+              <div className="flex-shrink-0 mt-1">
+                <SpeakerButton text={content} />
+              </div>
+            )}
+          </div>
         </div>
       )}
       
@@ -203,6 +300,47 @@ const StreamingMessage: React.FC<{
   );
 };
 
+// Add TypeScript definitions for the Web Speech API
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+}
+
 const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ onAddToCart }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -210,6 +348,8 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
   const [isLoading, setIsLoading] = useState(false);
   const [currentStreamingMessage, setCurrentStreamingMessage] = useState<Message | null>(null);
   const [aiHealth, setAiHealth] = useState<any>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -235,6 +375,56 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
       checkHealth();
     }
   }, [isOpen]);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    const SpeechRecognitionAPI = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const recognitionInstance = new SpeechRecognitionAPI();
+      recognitionInstance.continuous = true;
+      recognitionInstance.interimResults = true;
+      recognitionInstance.lang = 'en-US';
+
+      recognitionInstance.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setInputValue(transcript);
+      };
+
+      recognitionInstance.onend = () => {
+        console.log('Speech recognition ended');
+        setIsListening(false);
+      };
+
+      recognitionInstance.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      setRecognition(recognitionInstance);
+    } else {
+      console.warn('Speech recognition not supported in this browser');
+    }
+  }, []);
+
+  const toggleVoiceInput = () => {
+    if (!recognition) {
+      console.warn('Speech recognition not available');
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      setInputValue(''); // Clear input when starting voice
+      recognition.start();
+      setIsListening(true);
+    }
+  };
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim() || isLoading) return;
@@ -520,15 +710,45 @@ const AIChatDrawer: React.FC<{ onAddToCart?: (item: MenuItem) => void }> = ({ on
           
           {/* Input Area */}
           <div className="border-t border-gray-700 p-4" style={{ backgroundColor: '#16141F' }}>
+            {/* Listening Indicator */}
+            {isListening && (
+              <div className="mb-3 bg-red-900/50 border border-red-700 rounded-lg p-2 text-center">
+                <div className="flex items-center justify-center gap-2 text-red-300">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium">Listening for voice input...</span>
+                </div>
+              </div>
+            )}
+            
             <div className="flex space-x-2">
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask me about our menu... (e.g., 'Show me vegan options')"
+                placeholder={isListening ? "Speak now..." : "Ask me about our menu... (e.g., 'Show me vegan options')"}
                 disabled={isLoading}
                 className="flex-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-purple-500"
               />
+              {/* Microphone Button */}
+              <Button
+                onClick={toggleVoiceInput}
+                disabled={isLoading}
+                size="icon"
+                className={cn(
+                  "transition-all duration-300",
+                  isListening
+                    ? "bg-red-500 hover:bg-red-600 animate-pulse text-white"
+                    : "bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white"
+                )}
+                title={isListening ? "Stop listening" : "Start voice input"}
+              >
+                {isListening ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </Button>
+              {/* Send Button */}
               <Button 
                 onClick={() => handleSendMessage(inputValue)}
                 disabled={isLoading || !inputValue.trim()}

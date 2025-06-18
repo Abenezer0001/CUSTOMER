@@ -208,6 +208,26 @@ const MyOrders: React.FC = () => {
   const [processingPaymentOrderId, setProcessingPaymentOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('today');
   
+  // Early authentication check - redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      // Check for any auth tokens or user data
+      const hasToken = token || localStorage.getItem('access_token') || document.cookie.includes('access_token');
+      const hasUserData = localStorage.getItem('user');
+      
+      if (!hasToken && !hasUserData) {
+        console.log('User not authenticated, redirecting to login');
+        navigate('/login', { 
+          state: { 
+            returnUrl: `/my-orders${window.location.search}`,
+            message: 'Please log in to view your orders'
+          } 
+        });
+        return;
+      }
+    }
+  }, [isAuthenticated, isLoading, token, navigate]);
+
   // Order card skeleton component
   const OrderCardSkeleton = () => (
     <div className="p-4 rounded-xl bg-[#1F1D2B]/70 border border-purple-500/10 backdrop-blur-sm mb-4">
@@ -613,7 +633,7 @@ const MyOrders: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // Show loading state while checking authentication
   if (isLoading) {
     return (
@@ -629,6 +649,11 @@ const MyOrders: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  // If not authenticated after loading is complete, don't render the component (redirect will happen)
+  if (!isAuthenticated && !token && !localStorage.getItem('access_token') && !document.cookie.includes('access_token')) {
+    return null;
   }
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useOrders } from '@/context/OrdersContext';
 import { Button } from '@/components/ui/button';
 import { CreditCard, Landmark, Banknote, Check } from 'lucide-react';
@@ -7,13 +7,59 @@ import { useTableInfo } from '@/context/TableContext';
 import { format } from 'date-fns';
 import TableHeader from '@/components/TableHeader';
 import * as paymentService from '@/api/paymentService';
+import { useAuth } from '@/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Bill: React.FC = () => {
   const { orders, clearOrders } = useOrders();
   const { tableNumber, restaurantName } = useTableInfo();
+  const { isAuthenticated, isLoading, token } = useAuth();
+  const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const [isPaying, setIsPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  
+  // Early authentication check - redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      // Check for any auth tokens or user data
+      const hasToken = token || localStorage.getItem('access_token') || document.cookie.includes('access_token');
+      const hasUserData = localStorage.getItem('user');
+      
+      if (!hasToken && !hasUserData) {
+        console.log('User not authenticated, redirecting to login');
+        navigate('/login', { 
+          state: { 
+            returnUrl: `/bill${window.location.search}`,
+            message: 'Please log in to view your bill'
+          } 
+        });
+        return;
+      }
+    }
+  }, [isAuthenticated, isLoading, token, navigate]);
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#16141F] text-white">
+        <TableHeader 
+          venueName={restaurantName || 'Restaurant'}
+          className="bg-[#16141F] text-white"
+        />
+        <div className="px-4 py-8 mt-16">
+          <div className="text-center py-16">
+            <p className="text-gray-400">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated after loading is complete, don't render the component (redirect will happen)
+  if (!isAuthenticated && !token && !localStorage.getItem('access_token') && !document.cookie.includes('access_token')) {
+    return null;
+  }
   
   // Calculate total from all orders
   const subtotal = orders.reduce((sum, order) => sum + order.subtotal, 0);

@@ -145,12 +145,12 @@ const LoginSuccess: React.FC = () => {
       // Redirect with a short delay to allow auth processing
       setTimeout(() => {
         if (effectiveTableId) {
-          console.log(`LoginSuccess: Table ID found: ${effectiveTableId}, redirecting to menu`);
+          console.log(`LoginSuccess: Table ID found: ${effectiveTableId}, redirecting to menu with table`);
           navigate(`/?table=${effectiveTableId}`, { replace: true });
         } else {
-          // No table ID found, redirect to home page
-          console.log('LoginSuccess: No table ID found, redirecting to home page');
-          navigate('/', { replace: true });
+          // No table ID found, redirect to scan page to get a table
+          console.log('LoginSuccess: No table ID found, redirecting to scan page');
+          navigate('/scan', { replace: true });
       }
       }, 500);
     };

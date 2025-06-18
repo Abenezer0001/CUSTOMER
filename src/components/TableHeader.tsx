@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTableInfo } from '@/context/TableContext';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { User, ScanLine, Loader2 } from 'lucide-react';
+import { User, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
@@ -94,24 +94,6 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, tableName, tableId, debouncedSetTableInfo]);
   
-  // Handle scanning a new table
-  const handleScanClick = () => {
-    console.log('Clearing all table information and cart');
-    // Clear all table information
-    clearTableInfo();
-    
-    // Clear the cart as well when table info is cleared
-    clearCart();
-    
-    // Remove from localStorage
-    localStorage.removeItem('tableInfo');
-    localStorage.removeItem('currentTableId');
-    localStorage.removeItem('currentVenueId');
-    
-    // Navigate to scan page
-    navigate('/scan');
-  };
-  
   // Use props with fallbacks to context values
   const displayVenueName = venueName || restaurantName || 'InSeat';
   
@@ -148,16 +130,7 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
         </div>
         
         <div className="flex-1 flex justify-end items-center gap-3">
-          {/* QR Scan button */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8 text-white"
-            onClick={handleScanClick}
-            aria-label="Scan QR Code"
-          >
-            <ScanLine className="h-5 w-5" />
-          </Button>
+          {/* QR Scan button removed as per user request */}
           
           {/* Account button */}
           <Button
