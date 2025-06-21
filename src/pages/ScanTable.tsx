@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { verifyTableStatus } from '@/api/menuService';
 import { 
@@ -7,136 +7,23 @@ import {
   AlertDescription 
 } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, QrCode, AlertTriangle, X, ScanLine } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import QrScanner from 'qr-scanner';
+import { Card, CardContent } from '@/components/ui/card';
+import { Loader2, Camera, AlertTriangle } from 'lucide-react';
+import QRIcon from '@/assets/qr.svg';
 
 const ScanTable: React.FC = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cameraPermission, setCameraPermission] = useState<boolean | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const qrBoxRef = useRef<HTMLDivElement>(null);
-  const scannerRef = useRef<QrScanner>();
-  const [qrOn, setQrOn] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle QR scan success
-  const onScanSuccess = (result: QrScanner.ScanResult) => {
-    console.log('QR Scanner: Raw result detected:', result);
-    
-    if (result?.data) {
-      console.log('Raw QR code data detected:', result.data);
-      
-      // Extract table ID from the QR code data
-      let tableId = result.data;
-      
-      // Try to extract table ID from URL if the QR code contains a URL
-      try {
-        const url = new URL(result.data);
-        console.log('QR code contains URL:', url.toString());
-        
-        // Check for table parameter in different formats
-        const params = new URLSearchParams(url.search);
-        const urlTableId = params.get('table') || params.get('tableId') || params.get('id');
-        
-        if (urlTableId) {
-          tableId = urlTableId;
-          console.log('Extracted table ID from URL:', tableId);
-        } else {
-          // Try to extract from pathname (e.g., /table/123)
-          const pathMatch = url.pathname.match(/\/table\/([^\/]+)/);
-          if (pathMatch) {
-            tableId = pathMatch[1];
-            console.log('Extracted table ID from path:', tableId);
-          }
-        }
-      } catch (e) {
-        // Not a URL, use the raw data as the table ID
-        console.log('QR code is not a URL, using raw data as table ID:', tableId);
-      }
-      
-      // Validate table ID format (should be alphanumeric)
-      if (tableId && /^[a-zA-Z0-9_-]+$/.test(tableId.trim())) {
-        console.log('Valid table ID format detected:', tableId.trim());
-        handleQRCodeDetected(tableId.trim());
-      } else {
-        console.warn('Invalid table ID format:', tableId);
-      }
-    }
-  };
-
-  // Handle QR scan failure
-  const onScanFail = (err: string | Error) => {
-    // Don't log every scan failure as it's normal when no QR code is present
-    // console.log('QR Scanner: Scan attempt failed:', err);
-  };
-
-  // Start camera for QR scanning
-  const startCamera = async () => {
-    try {
-      setError(null);
-      console.log('Starting QR scanner...');
-      
-      if (videoRef.current && !scannerRef.current) {
-        // Create QR Scanner instance
-        scannerRef.current = new QrScanner(
-          videoRef.current,
-          onScanSuccess,
-          {
-            onDecodeError: onScanFail,
-            preferredCamera: "environment", // Use back camera on mobile
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            overlay: qrBoxRef.current || undefined,
-          }
-        );
-
-        // Start QR Scanner
-        await scannerRef.current.start();
-        setQrOn(true);
-        setCameraPermission(true);
-        console.log('QR scanner started successfully');
-      }
-    } catch (err) {
-      console.error('Camera access error:', err);
-      setCameraPermission(false);
-      setQrOn(false);
-      setError('Could not access camera. Please check permissions.');
-    }
-  };
-
-  // Stop camera and clean up
-  const stopCamera = () => {
-    console.log('Stopping QR scanner...');
-    if (scannerRef.current) {
-      scannerRef.current.stop();
-      scannerRef.current.destroy();
-      scannerRef.current = undefined;
-    }
-    setQrOn(false);
-  };
-
-  // Clean up on component unmount
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
-  }, []);
-
-  // Start camera on component mount
-  useEffect(() => {
-    startCamera();
-  }, []);
-
-  // Handle detected QR code
-  const handleQRCodeDetected = async (tableId: string) => {
+  // Handle manual table ID input (if user types in table ID from QR code)
+  const handleManualTableId = async (tableId: string) => {
     if (!tableId || loading) return;
     
-    console.log('QR Code detected:', tableId);
+    console.log('Manual table ID entered:', tableId);
     setLoading(true);
-    stopCamera();
+    setError(null);
     
     try {
       console.log('Verifying table status for:', tableId);
@@ -153,25 +40,35 @@ const ScanTable: React.FC = () => {
       } else {
         const errorMsg = verification.exists ? 
           'This table is currently not available.' : 
-          'Invalid table ID from QR code.';
+          'Invalid table ID.';
         console.error('Table verification failed:', errorMsg);
         setError(errorMsg);
-        setLoading(false);
-        
-        // Restart camera after a short delay
-        setTimeout(() => {
-          startCamera();
-        }, 2000);
       }
     } catch (err) {
-      console.error('Error verifying scanned table:', err);
-      setError('Failed to verify the scanned table. Please try again.');
+      console.error('Error verifying table:', err);
+      setError('Failed to verify the table. Please try again.');
+    } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle native camera button click
+  const handleCameraClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  // Handle file selection from native camera
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      console.log('Image captured from native camera:', file.name);
+      // Reset the input so the same file can be selected again
+      event.target.value = '';
       
-      // Restart camera after a short delay
-      setTimeout(() => {
-        startCamera();
-      }, 2000);
+      // Show message to user about manually entering table ID
+      setError('Please look at your QR code and enter the table ID manually in the input field below, or try scanning again.');
     }
   };
 
@@ -200,59 +97,62 @@ const ScanTable: React.FC = () => {
           <h1 className="text-2xl font-bold mb-2">Welcome to InSeat</h1>
           <p className="text-muted-foreground">Scan your table's QR code to get started</p>
         </div>
-        <CardContent>
+        
+        <CardContent className="px-6 pb-6">
+          {/* QR Code - Clickable to open native camera */}
+          <div className="flex justify-center items-center mb-6 h-96 md:h-[30rem]">
+            <button
+              onClick={handleCameraClick}
+              disabled={loading}
+              className="relative transition-transform hover:scale-105 disabled:opacity-50 w-full h-full flex items-center justify-center p-0"
+            >
+              {/* Custom styled QR code to maximize size */}
+              <div className="w-full h-full p-4 flex items-center justify-center">
+                <div className="relative w-full h-full max-w-[400px] max-h-[400px]">
+                  <img 
+                    src={QRIcon} 
+                    alt="QR Code Scanner" 
+                    className="w-full h-full object-contain"
+                    style={{
+                      filter: 'brightness(1.2) contrast(1.2)',
+                      transform: 'scale(3.0)',
+                      transformOrigin: 'center center',
+                    }}
+                  />
+                </div>
+              </div>
+              {loading && (
+                <div className="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 text-white animate-spin" />
+                </div>
+              )}
+            </button>
+          </div>
+          
+          <p className="text-center text-muted-foreground text-sm mb-4">
+            Tap the QR code to open your camera and scan
+          </p>
+
+          {/* Hidden file input for camera capture */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+
+          {/* Error Display */}
           {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+            <Alert className="bg-red-500/10 border-red-500/20">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              <AlertTitle className="text-red-400">Notice</AlertTitle>
+              <AlertDescription className="text-red-300">
+                {error}
+              </AlertDescription>
             </Alert>
           )}
-          
-          <div className="space-y-4">
-            <div className="relative overflow-hidden rounded-lg bg-black aspect-square">
-              {cameraPermission === false ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-gray-900">
-                  <AlertTriangle className="h-10 w-10 text-yellow-500 mb-2" />
-                  <p className="text-center text-white">
-                    Camera access denied. Please enable camera permissions.
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    className="mt-4"
-                    onClick={() => startCamera()}
-                  >
-                    Try Again
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <video 
-                    ref={videoRef} 
-                    className="absolute inset-0 h-full w-full object-cover"
-                    playsInline 
-                    muted
-                  />
-                  <div 
-                    ref={qrBoxRef}
-                    className="absolute inset-0 flex items-center justify-center"
-                  >
-                    <div className="w-3/4 h-3/4 border-2 border-white/50 rounded-lg" />
-                  </div>
-                </>
-              )}
-            </div>
-            
-          
-            <p className="text-center text-sm text-muted-foreground">
-              Position the QR code in the center of the frame
-            </p>
-            {loading && (
-              <div className="flex justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-              </div>
-            )}
-          </div>
         </CardContent>
       </Card>
     </div>

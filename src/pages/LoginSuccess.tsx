@@ -146,7 +146,7 @@ const LoginSuccess: React.FC = () => {
       setTimeout(() => {
         if (effectiveTableId) {
           console.log(`LoginSuccess: Table ID found: ${effectiveTableId}, redirecting to menu with table`);
-          navigate(`/?table=${effectiveTableId}`, { replace: true });
+          navigate(`/menu?table=${effectiveTableId}`, { replace: true });
         } else {
           // No table ID found, redirect to scan page to get a table
           console.log('LoginSuccess: No table ID found, redirecting to scan page');

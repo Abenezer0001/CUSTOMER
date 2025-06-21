@@ -65,12 +65,13 @@ const Login: React.FC = () => {
           console.log(`Redirecting to return URL: ${returnUrl}`);
           navigate(returnUrl);
         } else if (effectiveTableId) {
-          // If we have a table ID, redirect to the table page
-          console.log(`Redirecting to table page with ID: ${effectiveTableId}`);
-          navigate(`/?table=${effectiveTableId}`);
+          // If we have a table ID, redirect to the menu page
+          console.log(`Redirecting to menu page with ID: ${effectiveTableId}`);
+          navigate(`/menu?table=${effectiveTableId}`);
         } else {
-          // Default success page
-          navigate('/login/success');
+          // No table ID found, redirect to scan page
+          console.log('No table ID found, redirecting to scan page');
+          navigate('/scan');
         }
         return;
       }
@@ -86,9 +87,9 @@ const Login: React.FC = () => {
         if (returnUrl && returnUrl !== '/login') {
           navigate(returnUrl);
         } else if (effectiveTableId) {
-          navigate(`/?table=${effectiveTableId}`);
+          navigate(`/menu?table=${effectiveTableId}`);
         } else {
-          navigate('/login/success');
+          navigate('/scan');
         }
       }
     } finally {

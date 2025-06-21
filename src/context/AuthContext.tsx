@@ -78,6 +78,43 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // Helper function to handle post-login redirection
+  const handlePostLoginRedirection = () => {
+    try {
+      // Check all possible sources for table ID
+      const currentTableId = localStorage.getItem('currentTableId');
+      const simpleTableId = localStorage.getItem('tableId');
+      const tableIdFromSession = sessionStorage.getItem('tableId');
+      const urlParams = new URLSearchParams(window.location.search);
+      const tableIdFromUrl = urlParams.get('table');
+      
+      // Use the first valid table ID found
+      const effectiveTableId = currentTableId || simpleTableId || tableIdFromSession || tableIdFromUrl;
+      
+      console.log('Post-login redirection check:', {
+        currentTableId,
+        simpleTableId,
+        tableIdFromSession,
+        tableIdFromUrl,
+        effectiveTableId
+      });
+      
+      if (effectiveTableId) {
+        // Store the table ID to ensure consistency
+        localStorage.setItem('currentTableId', effectiveTableId);
+        console.log(`Table ID found: ${effectiveTableId}, redirecting to menu`);
+        navigate(`/menu?table=${effectiveTableId}`, { replace: true });
+      } else {
+        console.log('No table ID found, redirecting to scan page');
+        navigate('/scan', { replace: true });
+      }
+    } catch (error) {
+      console.error('Error in post-login redirection:', error);
+      // Fallback to scan page on error
+      navigate('/scan', { replace: true });
+    }
+  };
+
   // Helper function to get token from all possible sources
   function getTokenFromAllSources(): string | null {
     try {
@@ -461,6 +498,12 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         
         toast.success('Login successful!');
+        
+        // Handle post-login redirection
+        setTimeout(() => {
+          handlePostLoginRedirection();
+        }, 500);
+        
         return true;
       }
       
@@ -791,6 +834,12 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         
         toast.success('Login successful!');
+        
+        // Handle post-login redirection
+        setTimeout(() => {
+          handlePostLoginRedirection();
+        }, 500);
+        
         return true;
       }
       
