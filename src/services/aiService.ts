@@ -77,7 +77,7 @@ interface Voice {
 }
 
 // ElevenLabs configuration from environment variables
-const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || 'sk_1aff2da803c0fc7cb47d27a955e06a93244fbbb2600ad7b2';
+const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || 'sk_883523c71e676a72f7c4c36a8e49f6548c567547662a1ef4';
 const DEFAULT_VOICE_ID = "scOwDtmlUjD3prqpp97I"; // Rachel voice (English)
 const ARABIC_VOICE_ID = "VR6AewLTigWG4xSOukaG"; // Adam voice (Arabic compatible - Multilingual model)
 
