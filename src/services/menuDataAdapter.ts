@@ -2,6 +2,16 @@ import axios from 'axios';
 import { MenuItem as UIMenuItem } from '@/types/menu';
 import { API_BASE_URL } from '@/config/api';
 
+// Create a public axios instance for read operations that don't require authentication
+const publicAxios = axios.create({
+  withCredentials: true, // Keep cookies for session management
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  },
+  timeout: 15000,
+});
+
 // API Base URL imported from centralized configuration
 
 // Restaurant ID - Cinema City Arabian Centre
@@ -116,7 +126,7 @@ export const mapAPIToUIMenuItem = (
  */
 export const fetchCategories = async (): Promise<APICategory[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/categories`);
+    const response = await publicAxios.get(`${API_BASE_URL}/public/menu/categories?restaurantId=${RESTAURANT_ID}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -142,7 +152,7 @@ export const createCategory = async (category: Omit<APICategory, '_id'>): Promis
  */
 export const fetchSubcategories = async (categoryId: string): Promise<APISubcategory[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/categories/${categoryId}/subcategories`);
+    const response = await publicAxios.get(`${API_BASE_URL}/public/menu/subcategories?categoryId=${categoryId}`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching subcategories for category ${categoryId}:`, error);
@@ -181,17 +191,17 @@ export const fetchMenuItems = async (
   subcategoryId?: string
 ): Promise<APIMenuItem[]> => {
   try {
-    let url = `${API_BASE_URL}/menu-items`;
+    let url = `${API_BASE_URL}/public/menu/menu-items`;
     const params = new URLSearchParams();
     
     if (categoryId) params.append('categoryId', categoryId);
-    if (subcategoryId) params.append('subcategoryId', subcategoryId);
+    if (subcategoryId) params.append('subCategoryId', subcategoryId);
     
     if (params.toString()) {
       url += `?${params.toString()}`;
     }
     
-    const response = await axios.get(url);
+    const response = await publicAxios.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching menu items:', error);

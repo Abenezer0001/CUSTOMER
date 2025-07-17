@@ -10,10 +10,11 @@ import { cn } from '@/lib/utils';
 import TableHeader from '@/components/TableHeader';
 import MenuItemCard from '@/components/menu/MenuItemCard';
 import { ItemDetailDrawer } from '@/components/ItemDetailDrawer';
-// Removed import for local api service
 import { Category, MenuItem, SubCategory } from '@/types/menu';
 import { API_BASE_URL } from '@/constants';
 import { useTableInfo } from '@/context/TableContext';
+import { TableService } from '@/api/tableService';
+import { publicMenuService } from '@/api/publicMenuService';
 
 const CategoryDetail: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
@@ -23,6 +24,7 @@ const CategoryDetail: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [restaurantId, setRestaurantId] = useState<string | null>(null);
 
   // Get table ID from URL query params
   useEffect(() => {
@@ -39,6 +41,26 @@ const CategoryDetail: React.FC = () => {
   // Debug log to ensure tableId is being set correctly
   useEffect(() => {
     console.log('Current tableId state:', tableId);
+  }, [tableId]);
+
+  // Fetch restaurant ID when table ID changes
+  useEffect(() => {
+    const fetchRestaurantId = async () => {
+      if (tableId) {
+        try {
+          console.log('Fetching restaurant ID for table:', tableId);
+          const restaurantIdFromTable = await TableService.getRestaurantIdFromTableId(tableId);
+          setRestaurantId(restaurantIdFromTable);
+          console.log('Restaurant ID set:', restaurantIdFromTable);
+        } catch (error) {
+          console.error('Error fetching restaurant ID:', error);
+          // Set a default restaurant ID if extraction fails
+          setRestaurantId('67563e1b24ae70b95d7bc123');
+        }
+      }
+    };
+
+    fetchRestaurantId();
   }, [tableId]);
 
   // We'll use a more reliable approach for demo - hard code the category data
@@ -69,7 +91,7 @@ const CategoryDetail: React.FC = () => {
 
   // Fetch category details - with hardcoded fallback for reliability
   const { data: category, isLoading: isCategoryLoading } = useQuery({
-    queryKey: ['category', categoryId],
+    queryKey: ['category', categoryId, restaurantId],
     queryFn: async () => {
       if (!categoryId) {
         setError("No category ID provided");
@@ -84,16 +106,13 @@ const CategoryDetail: React.FC = () => {
         }
         
         // If not in our hardcoded data, try the API
-        if (tableId) {
-          const response = await axios.get<Category>(
-            `${API_BASE_URL}/categories/${categoryId}`,
-            { timeout: 5000 }
-          );
-          console.log('Category fetched from API:', response.data);
-          return response.data;
+        if (categoryId) {
+          const category = await publicMenuService.getCategoryById(categoryId);
+          console.log('Category fetched from API:', category);
+          return category;
         } else {
-          setError("Missing table information");
-          throw new Error("Missing table information");
+          setError("Missing category ID");
+          throw new Error("Missing category ID");
         }
       } catch (error) {
         console.error("Error fetching category data:", error);
@@ -114,14 +133,11 @@ const CategoryDetail: React.FC = () => {
 
   // Fetch subcategories if needed
   const { data: subCategories = [] } = useQuery({
-    queryKey: ['subcategories', categoryId, tableId],
+    queryKey: ['subcategories', categoryId],
     queryFn: async () => {
-      if (tableId) {
+      if (categoryId) {
         try {
-          const response = await axios.get<SubCategory[]>(
-            `${API_BASE_URL}/subcategories?categoryId=${categoryId}`
-          );
-          return response.data;
+          return await publicMenuService.getSubCategories(categoryId);
         } catch (error) {
           console.error("Error fetching subcategories:", error);
           return [];
@@ -129,35 +145,42 @@ const CategoryDetail: React.FC = () => {
       }
       return [];
     },
-    enabled: !!categoryId && !!tableId && !error,
+    enabled: !!categoryId,
   });
 
   // Fetch menu items
   const { data: menuItems = [], isLoading: isItemsLoading } = useQuery({
-    queryKey: ['menuItemsByCategory', categoryId, selectedSubCategory, tableId],
+    queryKey: ['menuItemsByCategory', categoryId, selectedSubCategory, restaurantId],
     queryFn: async () => {
-      if (tableId) {
+      if (categoryId) {
         try {
-          // Construct query params for API
-          const params = new URLSearchParams();
-          if (categoryId) params.append('categoryId', categoryId);
-          if (selectedSubCategory) params.append('subCategoryId', selectedSubCategory);
+          const items = await publicMenuService.getMenuItems(categoryId, selectedSubCategory, restaurantId);
           
-          const response = await axios.get<MenuItem[]>(
-            `${API_BASE_URL}/menu-items?${params.toString()}`
-          );
-          return response.data;
+          // Transform the backend response to match frontend expectations
+          return items.map((item: any) => ({
+            ...item,
+            id: item._id || item.id, // Ensure we have an id field
+            modifiers: item.modifierGroups?.map((group: any) => ({
+              name: group.name,
+              type: group.selectionType === 'SINGLE' ? 'single-select' : 'multi-select',
+              required: group.isRequired || false,
+              options: group.options?.map((option: any) => ({
+                name: option.name,
+                price: option.price || 0
+              })) || []
+            })) || []
+          }));
         } catch (error) {
           console.error("Error fetching menu items:", error);
           return [];
         }
       } else {
-        // No tableId, return empty array
-        console.error("Missing table information for menu items");
+        // No categoryId, return empty array
+        console.error("Missing category information for menu items");
         return [];
       }
     },
-    enabled: !!categoryId && !!tableId && !error,
+    enabled: !!categoryId,
   });
 
   // Get venue information from the context

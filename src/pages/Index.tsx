@@ -15,6 +15,16 @@ import { Category, Menu, TableVerification } from '@/types/menu';
 import { verifyTableStatus } from '@/api/menuService';
 import { API_BASE_URL } from '@/constants';
 
+// Create a public axios instance without authentication headers
+const publicAxios = axios.create({
+  withCredentials: true, // Keep cookies for session management
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  },
+  timeout: 15000,
+});
+
 // Interface for formatted category display
 interface FormattedCategory {
   id: string;
@@ -89,7 +99,7 @@ const Index: React.FC = () => {
     queryFn: async () => {
       if (!tableData?.venue?._id) throw new Error('No venue ID available');
       
-      const response = await axios.get<Menu[]>(
+      const response = await publicAxios.get<Menu[]>(
         `${API_BASE_URL}/menus?venueId=${tableData.venue._id}&populate=true`
       );
       

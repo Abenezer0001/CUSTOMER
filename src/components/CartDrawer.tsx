@@ -98,7 +98,13 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Derived values
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = cartItems.reduce((sum, item) => {
+    const itemTotal = item.price * item.quantity;
+    const modifiersTotal = item.modifiers 
+      ? item.modifiers.reduce((mSum, modifier) => mSum + modifier.price, 0) * item.quantity
+      : 0;
+    return sum + itemTotal + modifiersTotal;
+  }, 0);
   const serviceFeePct = 0.1; // 10% service fee
   const serviceFee = subtotal * serviceFeePct;
   const taxRate = 0.0825; // 8.25% sales tax
@@ -220,18 +226,65 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       // Format items according to API schema
       const formattedItems = cartItems.map(item => {
         // Ensure we have a valid string for menuItem
-        const menuItemId = ('menuItemId' in item && item.menuItemId) || item.id;
+        let menuItemId = ('menuItemId' in item && item.menuItemId) || item.id;
+        
+        // Clean the menuItemId to extract only the ObjectId part (first 24 characters)
+        // Remove any timestamp suffix that might be appended
+        if (menuItemId && menuItemId.includes('-')) {
+          menuItemId = menuItemId.split('-')[0];
+        }
+        
+        // Ensure it's a valid ObjectId format (24 hex characters)
+        if (menuItemId && menuItemId.length > 24) {
+          menuItemId = menuItemId.substring(0, 24);
+        }
         
         // Ensure menuItem is always a string
         const menuItem = String(menuItemId || '');
         
+        // Calculate subtotal including modifiers
+        const modifiersTotal = item.modifiers 
+          ? item.modifiers.reduce((mSum, modifier) => mSum + modifier.price, 0) * item.quantity
+          : 0;
+        const itemSubtotal = (item.price * item.quantity) + modifiersTotal;
+
+        // Format modifiers according to backend API schema
+        const formattedModifiers: any[] = [];
+        
+        if (item.modifiers && item.modifiers.length > 0) {
+          // Group modifiers by groupId
+          const modifierGroups = item.modifiers.reduce((groups, modifier) => {
+            if (modifier.groupId) {
+              if (!groups[modifier.groupId]) {
+                groups[modifier.groupId] = [];
+              }
+              groups[modifier.groupId].push(modifier);
+            }
+            return groups;
+          }, {} as Record<string, any[]>);
+          
+          // Convert to the expected format
+          Object.entries(modifierGroups).forEach(([groupId, selections]) => {
+            formattedModifiers.push({
+              groupId,
+              selections: selections.map(sel => ({
+                optionId: sel.optionId,
+                name: sel.name,
+                quantity: 1,
+                price: sel.price
+              }))
+            });
+          });
+        }
+
         return {
           menuItem,
           name: item.name,
           quantity: item.quantity,
           price: item.price,
-          subtotal: item.price * item.quantity,
-          specialInstructions: item.specialInstructions || specialInstructions || ''
+          subtotal: itemSubtotal,
+          specialInstructions: item.specialInstructions || '',
+          modifiers: formattedModifiers
         };
       });
       
@@ -551,6 +604,25 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                     <div className="flex-1">
                       <h3 className="font-medium">{item.name}</h3>
                       <p className="text-sm text-gray-500">${item.price.toFixed(2)}</p>
+                      
+                      {/* Show modifiers if any */}
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <div className="mt-1">
+                          <p className="text-xs text-gray-600">Modifiers:</p>
+                          {item.modifiers.map((modifier, index) => (
+                            <p key={index} className="text-xs text-gray-500">
+                              • {modifier.name} (+${modifier.price.toFixed(2)})
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Show special instructions if any */}
+                      {item.specialInstructions && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Note: {item.specialInstructions}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center space-x-2">
                       <Button
@@ -605,6 +677,21 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                   <span>Total:</span>
                   <span>${total.toFixed(2)}</span>
                 </div>
+              </div>
+              
+              {/* Special Instructions */}
+              <div className="space-y-2">
+                <label htmlFor="special-instructions" className="text-sm font-medium">
+                  Special Instructions (Optional)
+                </label>
+                <Textarea
+                  id="special-instructions"
+                  placeholder="Any special requests for your order..."
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  rows={3}
+                  className="w-full"
+                />
               </div>
               
               <Button

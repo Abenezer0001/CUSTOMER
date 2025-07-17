@@ -11,17 +11,20 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
-// Define modifier types
+// Define modifier types for API compatibility
 interface ModifierOption {
-  id: string;
+  _id: string;
   name: string;
   price: number;
+  isAvailable: boolean;
+  isDefault?: boolean;
 }
 
-interface Modifier {  id: string;
+interface Modifier {
+  _id: string;
   name: string;
-  type: 'radio' | 'checkbox';
-  required?: boolean;
+  selectionType: 'SINGLE' | 'MULTIPLE';
+  isRequired?: boolean;
   options: ModifierOption[];
 }
 
@@ -169,124 +172,28 @@ interface MenuItemDetailProps {
   onAddToCart: (e: React.MouseEvent) => void;
 }
 
-// Modifiers for the menu items
-const getModifiersForItem = (itemId: string): Modifier[] => {
-  // All items get size options
-  const modifiers: Modifier[] = [
-    {
-      id: 'size',
-      name: 'Size',
-      type: 'radio',
-      required: true,
-      options: [
-        { id: 'small', name: 'Small', price: -2 },
-        { id: 'medium', name: 'Medium', price: 0 },
-        { id: 'large', name: 'Large', price: 2 },
-      ]
-    }
-  ];
-  
-  // Add spice level modifier for certain items
-  if (['1', '3', '5'].includes(itemId)) {
-    modifiers.push({
-      id: 'spice-level',
-      name: 'Spice Level',
-      type: 'radio',
-      required: true,
-      options: [
-        { id: 'mild', name: 'Mild', price: 0 },
-        { id: 'medium', name: 'Medium', price: 0 },
-        { id: 'hot', name: 'Hot 🔥', price: 0 },
-        { id: 'extra-hot', name: 'Extra Hot 🔥🔥', price: 1 },
-      ]
-    });
-  }
-  
-  // Add cheese modifier for certain items
-  if (['2', '4', '12'].includes(itemId)) {
-    modifiers.push({
-      id: 'cheese',
-      name: 'Cheese Options',
-      type: 'radio',
-      required: true,
-      options: [
-        { id: 'cheddar', name: 'Cheddar', price: 0 },
-        { id: 'swiss', name: 'Swiss', price: 1 },
-        { id: 'blue', name: 'Blue Cheese', price: 1.5 },
-        { id: 'no-cheese', name: 'No Cheese', price: -1 },
-      ]
-    });
-  }
-  
-  // Add toppings for burgers and pizzas
-  if (['2', '12'].includes(itemId)) {
-    modifiers.push({
-      id: 'toppings',
-      name: 'Extra Toppings',
-      type: 'checkbox',
-      options: [
-        { id: 'bacon', name: 'Bacon', price: 2 },
-        { id: 'avocado', name: 'Avocado', price: 1.5 },
-        { id: 'egg', name: 'Fried Egg', price: 1 },
-        { id: 'jalapeños', name: 'Jalapeños', price: 0.5 },
-        { id: 'mushrooms', name: 'Mushrooms', price: 1 },
-      ]
-    });
-  }
-  
-  // Add sides for main courses
-  if (['3', '4', '5'].includes(itemId)) {
-    modifiers.push({
-      id: 'sides',
-      name: 'Side Options',
-      type: 'radio',
-      required: true,
-      options: [
-        { id: 'fries', name: 'French Fries', price: 0 },
-        { id: 'salad', name: 'Side Salad', price: 0 },
-        { id: 'mashed', name: 'Mashed Potatoes', price: 0 },
-        { id: 'truffle-fries', name: 'Truffle Fries', price: 3 },
-        { id: 'none', name: 'No Side', price: -3 },
-      ]
-    });
-  }
-  
-  // Add extras for all items
-  modifiers.push({
-    id: 'extras',
-    name: 'Extra Options',
-    type: 'checkbox',
-    options: [
-      { id: 'extra-fries', name: 'Extra Fries', price: 3 },
-      { id: 'extra-sauce', name: 'Extra Sauce', price: 1 },
-      { id: 'extra-cheese', name: 'Extra Cheese', price: 1.5 },
-      { id: 'extra-veggies', name: 'Extra Veggies', price: 2 },
-    ]
-  });
-  
-  return modifiers;
-};
 
 const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string | string[]>>({});
   const [totalPrice, setTotalPrice] = useState(item.price);
   const [specialInstructions, setSpecialInstructions] = useState('');
+  const { addItem } = useCart();
   
-  // Get modifiers for this item
-  const modifiers = getModifiersForItem(item.id);
+  // Get modifiers for this item from API data
+  const modifiers = item.modifierGroups || [];
   
   // Handle radio modifier change
   const handleRadioChange = (modifierId: string, optionId: string) => {
     // Find the option to get its price
-    const modifier = modifiers.find(m => m.id === modifierId);
-    const option = modifier?.options.find(o => o.id === optionId);
+    const modifier = modifiers.find(m => m._id === modifierId);
+    const option = modifier?.options.find(o => o._id === optionId);
     
     // Calculate price difference between old and new selection
     let priceDifference = 0;
     const oldOptionId = selectedModifiers[modifierId] as string;
     if (oldOptionId) {
-      const oldOption = modifier?.options.find(o => o.id === oldOptionId);
+      const oldOption = modifier?.options.find(o => o._id === oldOptionId);
       if (oldOption) priceDifference -= oldOption.price;
     }
     if (option) priceDifference += option.price;
@@ -303,8 +210,8 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
   
   // Handle checkbox modifier change
   const handleCheckboxChange = (modifierId: string, optionId: string, checked: boolean) => {
-    const modifier = modifiers.find(m => m.id === modifierId);
-    const option = modifier?.options.find(o => o.id === optionId);
+    const modifier = modifiers.find(m => m._id === modifierId);
+    const option = modifier?.options.find(o => o._id === optionId);
     
     // Update selected modifiers
     setSelectedModifiers(prev => {
@@ -408,29 +315,29 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
         {modifiers.length > 0 && (
           <div className="mb-4 space-y-4 max-h-[40vh] overflow-y-auto pr-1">
             {modifiers.map(modifier => (
-              <div key={modifier.id} className="space-y-3">
+              <div key={modifier._id} className="space-y-3">
                 <div className="flex justify-between">
                   <h3 className="font-medium">
                     {modifier.name}
-                    {modifier.required && <span className="text-xs text-red-500 ml-1">*</span>}
+                    {modifier.isRequired && <span className="text-xs text-red-500 ml-1">*</span>}
                   </h3>
                 </div>
                 
-                {modifier.type === 'radio' ? (
+                {modifier.selectionType === 'SINGLE' ? (
                   <RadioGroup 
-                    defaultValue={selectedModifiers[modifier.id] as string || modifier.options[0].id}
-                    onValueChange={(value) => handleRadioChange(modifier.id, value)}
+                    defaultValue={selectedModifiers[modifier._id] as string || modifier.options.find(o => o.isDefault)?._id || modifier.options[0]?._id}
+                    onValueChange={(value) => handleRadioChange(modifier._id, value)}
                   >
                     <div className="grid grid-cols-1 gap-2">
-                      {modifier.options.map(option => (
-                        <div key={option.id} className="flex items-center justify-between space-x-2 border border-border rounded-lg p-2">
+                      {modifier.options.filter(option => option.isAvailable).map(option => (
+                        <div key={option._id} className="flex items-center justify-between space-x-2 border border-border rounded-lg p-2">
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem 
-                              value={option.id} 
-                              id={`${modifier.id}-${option.id}`} 
+                              value={option._id} 
+                              id={`${modifier._id}-${option._id}`} 
                               className="text-marian-blue border-marian-blue"
                             />
-                            <Label htmlFor={`${modifier.id}-${option.id}`}>
+                            <Label htmlFor={`${modifier._id}-${option._id}`}>
                               {option.name}
                             </Label>
                           </div>
@@ -447,18 +354,18 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
                   </RadioGroup>
                 ) : (
                   <div className="grid grid-cols-1 gap-2">
-                    {modifier.options.map(option => {
-                      const isChecked = (selectedModifiers[modifier.id] as string[] || []).includes(option.id);
+                    {modifier.options.filter(option => option.isAvailable).map(option => {
+                      const isChecked = (selectedModifiers[modifier._id] as string[] || []).includes(option._id);
                       return (
-                        <div key={option.id} className="flex items-center justify-between space-x-2 border border-border rounded-lg p-2">
+                        <div key={option._id} className="flex items-center justify-between space-x-2 border border-border rounded-lg p-2">
                           <div className="flex items-center space-x-2">
                             <Checkbox 
-                              id={`${modifier.id}-${option.id}`}
+                              id={`${modifier._id}-${option._id}`}
                               checked={isChecked}
-                              onCheckedChange={(checked) => handleCheckboxChange(modifier.id, option.id, checked === true)}
+                              onCheckedChange={(checked) => handleCheckboxChange(modifier._id, option._id, checked === true)}
                               className="text-marian-blue border-marian-blue data-[state=checked]:bg-marian-blue data-[state=checked]:border-marian-blue"
                             />
-                            <Label htmlFor={`${modifier.id}-${option.id}`}>
+                            <Label htmlFor={`${modifier._id}-${option._id}`}>
                               {option.name}
                             </Label>
                           </div>
@@ -528,8 +435,45 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
           </div>
           <Button 
             onClick={(e) => {
-              // Include special instructions when adding to cart
-              onAddToCart(e);
+              // Format modifiers for cart
+              const cartModifiers = Object.entries(selectedModifiers).map(([groupId, selection]) => {
+                const modifier = modifiers.find(m => m._id === groupId);
+                if (Array.isArray(selection)) {
+                  return selection.map(optionId => {
+                    const option = modifier?.options.find(o => o._id === optionId);
+                    return {
+                      id: option?.name || optionId,
+                      name: option?.name || '',
+                      price: option?.price || 0,
+                      groupId: groupId,
+                      optionId: optionId
+                    };
+                  });
+                } else {
+                  const option = modifier?.options.find(o => o._id === selection);
+                  return {
+                    id: option?.name || selection,
+                    name: option?.name || '',
+                    price: option?.price || 0,
+                    groupId: groupId,
+                    optionId: selection
+                  };
+                }
+              }).flat();
+              
+              // Use the cart's addItem function
+              addItem(
+                item,
+                quantity,
+                cartModifiers.length > 0 ? cartModifiers : undefined,
+                undefined,
+                specialInstructions
+              );
+              
+              // Close modal if there's an onAddToCart callback
+              if (onAddToCart) {
+                onAddToCart(e);
+              }
             }}
             className="rounded-full px-8 py-6 h-auto bg-[#7B61FF] hover:bg-[#7B61FF]/90 text-white"
           >

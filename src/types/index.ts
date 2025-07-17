@@ -11,6 +11,7 @@ export interface MenuItem {
   popular?: boolean;
   tags?: string[];
   modifiers?: MenuItemModifierGroup[];
+  modifierGroups?: MenuItemModifierGroup[];
 }
 
 // Table and Venue type definitions for tableService
@@ -61,15 +62,20 @@ export interface VenueDetails extends Venue {
 
 // Represents an option within a modifier group (e.g., "Small", "Medium", "Large" for Size)
 export interface ModifierOption {
+  _id: string;
   name: string;
   price: number;
+  isAvailable: boolean;
+  isDefault?: boolean;
 }
 
 // Represents a group of modifiers for a menu item (e.g., "Size", "Toppings")
 export interface MenuItemModifierGroup {
+  _id: string;
   name: string;
-  type: 'single-select' | 'multi-select'; // Determines how the options are presented
-  required?: boolean;
+  description?: string;
+  selectionType: 'SINGLE' | 'MULTIPLE'; // Determines how the options are presented
+  isRequired?: boolean;
   options: ModifierOption[]; // The available choices for this modifier group
 }
 

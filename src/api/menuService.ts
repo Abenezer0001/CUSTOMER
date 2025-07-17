@@ -36,8 +36,19 @@ export class TableNotAvailableError extends ApiError {
 }
 
 /**
+ * Helper function to prepare basic request headers without authentication
+ * Used for public endpoints that don't require authentication
+ */
+const getBasicHeaders = (): HeadersInit => {
+  return {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  };
+};
+
+/**
  * Helper function to prepare request headers with auth token
- * Uses the same pattern as orderService.ts that's working correctly
+ * Used for endpoints that require authentication
  */
 const getAuthHeaders = (): HeadersInit => {
   const headers: HeadersInit = {
@@ -191,7 +202,7 @@ export const verifyTableStatus = async (tableId: string): Promise<{
     
     const response = await fetch(`${API_BASE_URL}/tables/${tableId}/verify`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include' // This ensures cookies are sent with requests
     });
     
@@ -239,7 +250,7 @@ export const getTableMenu = async (tableId: string): Promise<TableMenu> => {
     
     const response = await fetch(`${API_BASE_URL}/tables/${tableId}/menu`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     
@@ -261,13 +272,18 @@ export const getTableMenu = async (tableId: string): Promise<TableMenu> => {
   }
 };
 
-export const getCategories = async (): Promise<Category[]> => {
+export const getCategories = async (restaurantId?: string): Promise<Category[]> => {
   try {
     console.log('MenuService: Fetching categories');
     
-    const response = await fetch(`${API_BASE_URL}/categories`, {
+    let url = `${API_BASE_URL}/public/menu/categories`;
+    if (restaurantId) {
+      url += `?restaurantId=${restaurantId}`;
+    }
+    
+    const response = await fetch(url, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     
@@ -293,9 +309,9 @@ export const getSubcategories = async (categoryId: string): Promise<Subcategory[
   try {
     console.log(`MenuService: Fetching subcategories for category: ${categoryId}`);
     
-    const response = await fetch(`${API_BASE_URL}/categories/${categoryId}/subcategories`, {
+    const response = await fetch(`${API_BASE_URL}/public/menu/subcategories?categoryId=${categoryId}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     
@@ -323,7 +339,7 @@ export const getSubSubcategories = async (subcategoryId: string): Promise<Subcat
     
     const response = await fetch(`${API_BASE_URL}/subcategories/${subcategoryId}/subsubcategories`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     
@@ -345,12 +361,13 @@ export const getSubSubcategories = async (subcategoryId: string): Promise<Subcat
   }
 };
 
-export const getMenuItems = async (categoryId?: string, subcategoryId?: string): Promise<MenuItem[]> => {
+export const getMenuItems = async (categoryId?: string, subcategoryId?: string, restaurantId?: string): Promise<MenuItem[]> => {
   try {
-    let url = `${API_BASE_URL}/menu-items`;
+    let url = `${API_BASE_URL}/public/menu/menu-items`;
     const params = new URLSearchParams();
     if (categoryId) params.append('categoryId', categoryId);
     if (subcategoryId) params.append('subcategoryId', subcategoryId);
+    if (restaurantId) params.append('restaurantId', restaurantId);
     
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -360,7 +377,7 @@ export const getMenuItems = async (categoryId?: string, subcategoryId?: string):
     
     const response = await fetch(url, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     
@@ -388,7 +405,7 @@ export const getVenueById = async (venueId: string): Promise<Venue> => {
     
     const response = await fetch(`${API_BASE_URL}/venues/${venueId}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     
@@ -416,7 +433,7 @@ export const getVenueMenuItems = async (venueId: string): Promise<MenuItem[]> =>
     
     const response = await fetch(`${API_BASE_URL}/venues/${venueId}/menu-items`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     
@@ -483,7 +500,7 @@ export const getTableById = async (tableId: string): Promise<Table> => {
     
     const response = await fetch(`${API_BASE_URL}/tables/${tableId}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getBasicHeaders(),
       credentials: 'include'
     });
     

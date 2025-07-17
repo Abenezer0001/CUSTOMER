@@ -6,6 +6,8 @@ export interface CartModifier {
   id: string;
   name: string;
   price: number;
+  groupId?: string;
+  optionId?: string;
 }
 
 export interface CartItem {

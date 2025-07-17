@@ -6,33 +6,56 @@ import { Label } from '@/components/ui/label';
 import { Bell, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTableInfo } from '@/context/TableContext';
+import { waiterCallService, WaiterCallReason } from '@/api/waiterCallService';
 import TableHeader from '@/components/TableHeader';
 
 const CallWaiter: React.FC = () => {
-  const [selectedReason, setSelectedReason] = useState('assistance');
+  const [selectedReason, setSelectedReason] = useState<WaiterCallReason>(WaiterCallReason.NEED_ASSISTANCE);
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const { tableNumber, restaurantName } = useTableInfo();
+  const { tableNumber, restaurantName, tableId } = useTableInfo();
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!tableId) {
+      toast.error('Table information not found. Please scan the QR code again.');
+      return;
+    }
+
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      // Create device ID for guest users
+      const deviceId = localStorage.getItem('deviceId') || `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      if (!localStorage.getItem('deviceId')) {
+        localStorage.setItem('deviceId', deviceId);
+      }
+
+      await waiterCallService.createWaiterCall({
+        tableId,
+        reason: selectedReason,
+        additionalInfo: additionalInfo.trim() || undefined,
+        deviceId,
+        isGuest: true
+      });
+
       setSubmitted(true);
       toast.success('Your request has been sent to the staff');
       
       // Reset after 10 seconds
       setTimeout(() => {
         setSubmitted(false);
-        setSelectedReason('assistance');
+        setSelectedReason(WaiterCallReason.NEED_ASSISTANCE);
         setAdditionalInfo('');
       }, 10000);
-    }, 1500);
+    } catch (error: any) {
+      console.error('Error creating waiter call:', error);
+      toast.error(error.message || 'Failed to send request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -71,24 +94,24 @@ const CallWaiter: React.FC = () => {
             <h2 className="font-medium mb-4">Select a reason</h2>
             
             <RadioGroup 
-              defaultValue="assistance" 
+              defaultValue={WaiterCallReason.NEED_ASSISTANCE} 
               value={selectedReason}
-              onValueChange={setSelectedReason}
+              onValueChange={(value) => setSelectedReason(value as WaiterCallReason)}
             >
               <div className="flex items-center space-x-2 mb-3">
-                <RadioGroupItem value="assistance" id="assistance" className="text-purple-600 border-purple-600" />
+                <RadioGroupItem value={WaiterCallReason.NEED_ASSISTANCE} id="assistance" className="text-purple-600 border-purple-600" />
                 <Label htmlFor="assistance" className="text-white">Need Assistance</Label>
               </div>
               <div className="flex items-center space-x-2 mb-3">
-                <RadioGroupItem value="refill" id="refill" className="text-purple-600 border-purple-600" />
+                <RadioGroupItem value={WaiterCallReason.NEED_REFILL} id="refill" className="text-purple-600 border-purple-600" />
                 <Label htmlFor="refill" className="text-white">Need a Refill</Label>
               </div>
               <div className="flex items-center space-x-2 mb-3">
-                <RadioGroupItem value="utensils" id="utensils" className="text-purple-600 border-purple-600" />
+                <RadioGroupItem value={WaiterCallReason.NEED_UTENSILS} id="utensils" className="text-purple-600 border-purple-600" />
                 <Label htmlFor="utensils" className="text-white">Need Utensils</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="other" id="other" className="text-purple-600 border-purple-600" />
+                <RadioGroupItem value={WaiterCallReason.OTHER} id="other" className="text-purple-600 border-purple-600" />
                 <Label htmlFor="other" className="text-white">Other</Label>
               </div>
             </RadioGroup>

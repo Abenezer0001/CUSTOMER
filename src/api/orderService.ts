@@ -608,8 +608,21 @@ export const createOrder = async (
           ? item.getItemTotal() 
           : (item.price * item.quantity) + (item.modifiers?.reduce((sum, mod) => sum + mod.price, 0) || 0);
 
+        // Clean the menuItem ID to extract only the ObjectId part
+        let menuItemId = item.menuItemId || item.id;
+        
+        // Remove any timestamp suffix that might be appended
+        if (menuItemId && menuItemId.includes('-')) {
+          menuItemId = menuItemId.split('-')[0];
+        }
+        
+        // Ensure it's a valid ObjectId format (24 hex characters)
+        if (menuItemId && menuItemId.length > 24) {
+          menuItemId = menuItemId.substring(0, 24);
+        }
+
         return {
-          menuItem: item.menuItemId || item.id,
+          menuItem: menuItemId,
           name: item.name,
           quantity: item.quantity,
           price: item.price,

@@ -529,7 +529,7 @@ const Account: React.FC = () => {
                                   Order #{order.id ? order.id.substring(0, 8) : 'Unknown'}
                                 </span>
                                 <span className="text-sm text-purple-100 block">
-                                  {order.timestamp ? format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a') : 'N/A'}
+                                  {order.timestamp && !isNaN(new Date(order.timestamp).getTime()) ? format(new Date(order.timestamp), 'MMM dd, yyyy - hh:mm a') : 'N/A'}
                                 </span>
                               </div>
                               <Badge className={

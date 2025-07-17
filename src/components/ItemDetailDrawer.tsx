@@ -57,27 +57,27 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
     try {
       setSelectedModifiers(prev => {
         const newSelection = { ...prev };
-        const groupName = group.name; // Use group name as key
-        const currentGroupSelection = newSelection[groupName];
+        const groupId = group._id || group.name; // Use group _id as key, fallback to name
+        const currentGroupSelection = newSelection[groupId];
 
-        if (group.type === 'multi-select') {
+        if (group.selectionType === 'MULTIPLE' || (group as any).type === 'multi-select') {
           const currentArray = Array.isArray(currentGroupSelection) ? currentGroupSelection : [];
           if (checked === true) {
             // Add option if checked
-            newSelection[groupName] = [...currentArray, option];
+            newSelection[groupId] = [...currentArray, option];
           } else {
             // Remove option if unchecked
-            newSelection[groupName] = currentArray.filter(o => o.name !== option.name);
+            newSelection[groupId] = currentArray.filter(o => o.name !== option.name);
             // If array becomes empty, remove the key entirely (optional, but cleaner)
-            if (newSelection[groupName].length === 0) {
-              delete newSelection[groupName];
+            if (newSelection[groupId].length === 0) {
+              delete newSelection[groupId];
             }
           }
-        } else if (group.type === 'single-select') {
+        } else if (group.selectionType === 'SINGLE' || (group as any).type === 'single-select') {
           // For RadioGroup, 'checked' is the value (option.name) of the selected item
           if (typeof checked === 'string' && checked === option.name) {
              // Set the selected option directly
-             newSelection[groupName] = option;
+             newSelection[groupId] = option;
           }
           // No 'else' needed as RadioGroup handles deselection implicitly by selecting another
         }
@@ -93,10 +93,11 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
     try {
       const defaultSelections: Record<string, ModifierOption> = {};
       item.modifiers?.forEach(group => {
-        if (group.type === 'single-select' && group.required && group.options.length > 0) {
+        if ((group.selectionType === 'SINGLE' || (group as any).type === 'single-select') && (group.isRequired || (group as any).required) && group.options.length > 0) {
           // Select the first option by default if none is selected for this required group
-          if (!selectedModifiers[group.name]) {
-             defaultSelections[group.name] = group.options[0];
+          const groupId = group._id || group.name;
+          if (!selectedModifiers[groupId]) {
+             defaultSelections[groupId] = group.options[0];
           }
         }
       });
@@ -129,11 +130,12 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
     setTimeout(() => {
       try {
         // Validate required modifiers if needed
-        const missingRequiredGroups = item.modifiers?.filter(group => 
-          group.required && (!selectedModifiers[group.name] || 
-            (Array.isArray(selectedModifiers[group.name]) && 
-              (selectedModifiers[group.name] as ModifierOption[]).length === 0))
-        );
+        const missingRequiredGroups = item.modifiers?.filter(group => {
+          const groupId = group._id || group.name;
+          return (group.isRequired || (group as any).required) && (!selectedModifiers[groupId] || 
+            (Array.isArray(selectedModifiers[groupId]) && 
+              (selectedModifiers[groupId] as ModifierOption[]).length === 0));
+        });
         
         if (missingRequiredGroups && missingRequiredGroups.length > 0) {
           setSubmitError(`Please select options for: ${missingRequiredGroups.map(g => g.name).join(', ')}`);
@@ -144,7 +146,10 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
         // Flatten selected modifiers into the CartItemModifier[] format
         const cartModifiers: CartItemModifier[] = [];
         
-        Object.entries(selectedModifiers).forEach(([groupName, selection]) => {
+        Object.entries(selectedModifiers).forEach(([groupId, selection]) => {
+          // Find the corresponding modifier group to get additional info
+          const modifierGroup = item.modifiers?.find(group => (group._id || group.name) === groupId);
+          
           if (Array.isArray(selection)) {
             // Add all selections from multi-select groups
             selection.forEach(option => {
@@ -152,7 +157,9 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
                 cartModifiers.push({
                   id: option.name,
                   name: option.name,
-                  price: option.price || 0
+                  price: option.price || 0,
+                  groupId: groupId,
+                  optionId: (option as any)._id || option.name
                 });
               }
             });
@@ -161,7 +168,9 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
             cartModifiers.push({
               id: selection.name,
               name: selection.name,
-              price: selection.price || 0
+              price: selection.price || 0,
+              groupId: groupId,
+              optionId: (selection as any)._id || selection.name
             });
           }
         });
@@ -293,16 +302,16 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
         {item.modifiers && item.modifiers.length > 0 && (
           <div className="mb-6 px-4 space-y-6">
             {item.modifiers.map((group) => (
-              <div key={group.name} className="animation-fade-in"> 
+              <div key={group._id || group.name} className="animation-fade-in"> 
                 <h3 className="font-medium mb-3 flex items-center">
                   {group.name}
-                  {group.required && <span className="text-destructive ml-1">*</span>}
-                  {group.type === 'multi-select' && !group.required && (
+                  {(group.isRequired || (group as any).required) && <span className="text-destructive ml-1">*</span>}
+                  {(group.selectionType === 'MULTIPLE' || (group as any).type === 'multi-select') && !(group.isRequired || (group as any).required) && (
                     <span className="text-muted-foreground text-xs ml-2 bg-muted px-2 py-0.5 rounded-full">
                       Select multiple
                     </span>
                   )}
-                  {group.type === 'single-select' && !group.required && (
+                  {(group.selectionType === 'SINGLE' || (group as any).type === 'single-select') && !(group.isRequired || (group as any).required) && (
                     <span className="text-muted-foreground text-xs ml-2 bg-muted px-2 py-0.5 rounded-full">
                       Select one
                     </span>
@@ -310,9 +319,9 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
                 </h3>
                 
                 {/* Render RadioGroup for single-select */}
-                {group.type === 'single-select' ? (
+                {(group.selectionType === 'SINGLE' || (group as any).type === 'single-select') ? (
                   <RadioGroup
-                    value={(selectedModifiers[group.name] as ModifierOption)?.name} // Controlled component: value is the name of the selected option
+                    value={(selectedModifiers[group._id || group.name] as ModifierOption)?.name} // Controlled component: value is the name of the selected option
                     onValueChange={(value) => {
                       // Find the option object corresponding to the selected value (name)
                       const selectedOption = group.options.find(opt => opt.name === value);
@@ -329,7 +338,7 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
                           <Label htmlFor={`${group.name}-${option.name}`} className="cursor-pointer">{option.name}</Label>
                         </div>
                         <span className="text-sm font-medium text-purple-600">
-                          {option.price > 0 ? `+$${option.price.toFixed(2)}` : (group.required ? '' : 'Included')}
+                          {option.price > 0 ? `+$${option.price.toFixed(2)}` : ((group as any).required ? '' : 'Included')}
                         </span>
                       </div>
                     ))}
@@ -339,18 +348,19 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
                 <div className="space-y-2">
                   {group.options.map(option => {
                     // Determine if this checkbox option is currently selected
-                    const isChecked = Array.isArray(selectedModifiers[group.name])
-                                      ? (selectedModifiers[group.name] as ModifierOption[]).some(o => o.name === option.name)
+                    const groupId = group._id || group.name;
+                    const isChecked = Array.isArray(selectedModifiers[groupId])
+                                      ? (selectedModifiers[groupId] as ModifierOption[]).some(o => o.name === option.name)
                                       : false;
                     return (
                       <div key={option.name} className="flex items-center justify-between bg-muted/50 p-3 rounded-md">
                         <div className="flex items-center gap-2">
                           <Checkbox
-                            id={`${group.name}-${option.name}`}
+                            id={`${groupId}-${option.name}`}
                             checked={isChecked}
                             onCheckedChange={(checked) => handleModifierChange(group, option, checked === true)}
                           />
-                          <Label htmlFor={`${group.name}-${option.name}`}>{option.name}</Label>
+                          <Label htmlFor={`${groupId}-${option.name}`}>{option.name}</Label>
                         </div>
                         <span className="text-sm font-medium text-purple-600">
                           {option.price > 0 ? `+$${option.price.toFixed(2)}` : 'Included'}
@@ -412,7 +422,12 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
           // Disable if a required single-select group doesn't have a selection or is loading
           disabled={
             isLoading || 
-            item.modifiers?.some(g => g.type === 'single-select' && g.required && !selectedModifiers[g.name])
+            item.modifiers?.some(g => {
+              const groupId = (g as any)._id || g.name;
+              return ((g as any).type === 'single-select' || g.selectionType === 'SINGLE') && 
+                     ((g as any).required || g.isRequired) && 
+                     !selectedModifiers[groupId];
+            })
           }
         >
           {isLoading ? (
