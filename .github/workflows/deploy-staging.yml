@@ -1,0 +1,72 @@
+name: Deploy Customer Menu to Staging
+
+on:
+  push:
+    branches: [ staging ]
+
+jobs:
+  deploy:
+    name: Deploy Customer Menu to Staging Server
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build application
+      run: npm run build
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H ${{ secrets.STAGING_SERVER_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to staging server
+      run: |
+        # Upload dist folder to server
+        scp -r dist/ ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SERVER_HOST }}:/tmp/staging-customer-menu-dist/
+        
+        # Execute deployment on server
+        ssh ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SERVER_HOST }} << 'EOF'
+          # Create backup of existing deployment
+          if [ -d "/var/www/staging-inseat-customer" ]; then
+            sudo mv "/var/www/staging-inseat-customer" "/var/www/staging-inseat-customer.backup.$(date +%Y%m%d_%H%M%S)"
+          fi
+          
+          # Create destination directory
+          sudo mkdir -p /var/www/staging-inseat-customer
+          
+          # Copy files
+          sudo cp -r /tmp/staging-customer-menu-dist/* /var/www/staging-inseat-customer/
+          
+          # Set correct ownership and permissions
+          sudo chown -R www-data:www-data /var/www/staging-inseat-customer
+          sudo chmod -R 755 /var/www/staging-inseat-customer
+          
+          # Clean up temp files
+          rm -rf /tmp/staging-customer-menu-dist/
+        EOF
+
+    - name: Verify staging deployment
+      run: |
+        ssh ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SERVER_HOST }} << 'EOF'
+          if [ -f "/var/www/staging-inseat-customer/index.html" ]; then
+            echo "✅ Staging Customer Menu deployment successful!"
+          else
+            echo "❌ Deployment failed - index.html not found"
+            exit 1
+          fi
+        EOF
