@@ -1,0 +1,62 @@
+name: Deploy Customer Menu to Production
+
+on:
+  push:
+    branches: [ prod ]
+
+jobs:
+  deploy:
+    name: Build and Deploy Customer Menu to Production Server
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build application
+      run: npm run build
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to server
+      run: |
+        # Create backup and temporary directory
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          sudo mkdir -p /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)
+          sudo cp -r /var/www/inseat-customer/* /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
+          mkdir -p /tmp/customer-menu-dist
+        EOF
+        
+        # Upload new build
+        scp -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/customer-menu-dist/
+        
+        # Move files to production location
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          sudo rm -rf /var/www/inseat-customer/*
+          sudo cp -r /tmp/customer-menu-dist/* /var/www/inseat-customer/
+          sudo chown -R www-data:www-data /var/www/inseat-customer
+          sudo chmod -R 755 /var/www/inseat-customer
+          rm -rf /tmp/customer-menu-dist
+        EOF
+
+    - name: Verify deployment
+      run: |
+        sleep 10
+        curl -f https://menu.inseat.achievengine.com || exit 1
+        echo "✅ Customer Menu Production deployment successful!"
