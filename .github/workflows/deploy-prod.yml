@@ -47,19 +47,24 @@ jobs:
         scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/customer-menu-dist/
         
         # Deploy to production location
-        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          echo "Starting deployment to production..."
           sudo mkdir -p /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)
           sudo cp -r /var/www/inseat-customer/* /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
+          echo "Checking temp directory contents:"
+          ls -la /tmp/customer-menu-dist/
           sudo rm -rf /var/www/inseat-customer/*
           sudo cp -r /tmp/customer-menu-dist/* /var/www/inseat-customer/
           sudo chown -R www-data:www-data /var/www/inseat-customer
           sudo chmod -R 755 /var/www/inseat-customer
+          echo "Production deployment completed. Final directory contents:"
+          ls -la /var/www/inseat-customer/
           rm -rf /tmp/customer-menu-dist
-        EOFINNER
+        EOF
 
     - name: Verify deployment
       run: |
-        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           if [ -f "/var/www/inseat-customer/index.html" ]; then
             echo "✅ Customer Menu Production deployment successful!"
             echo "Deployment timestamp: $(stat -c %y /var/www/inseat-customer/index.html)"
@@ -67,4 +72,4 @@ jobs:
             echo "❌ Deployment failed - index.html not found"
             exit 1
           fi
-        EOFINNER
+        EOF

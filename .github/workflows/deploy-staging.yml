@@ -47,7 +47,7 @@ jobs:
         scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/staging-customer-menu-dist/
         
         # Move files to staging location
-        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           echo "Checking temp directory contents:"
           ls -la /tmp/staging-customer-menu-dist/
           echo "Copying files to staging directory..."
@@ -58,11 +58,11 @@ jobs:
           echo "Final staging directory contents:"
           ls -la /var/www/staging-inseat-customer/
           rm -rf /tmp/staging-customer-menu-dist
-        EOFINNER
+        EOF
 
     - name: Verify staging deployment
       run: |
-        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           if [ -f "/var/www/staging-inseat-customer/index.html" ]; then
             echo "✅ Customer Menu Staging deployment successful!"
             echo "Deployment timestamp: $(stat -c %y /var/www/staging-inseat-customer/index.html)"
@@ -70,4 +70,4 @@ jobs:
             echo "❌ Deployment failed - index.html not found"
             exit 1
           fi
-        EOFINNER
+        EOF
