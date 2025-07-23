@@ -57,6 +57,11 @@ jobs:
 
     - name: Verify deployment
       run: |
-        sleep 10
-        curl -f https://menu.inseat.achievengine.com || exit 1
-        echo "✅ Customer Menu Production deployment successful!"
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          if [ -f "/var/www/inseat-customer/index.html" ]; then
+            echo "✅ Customer Menu Production deployment successful!"
+          else
+            echo "❌ Deployment failed - index.html not found"
+            exit 1
+          fi
+        EOF
