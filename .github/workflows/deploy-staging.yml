@@ -44,10 +44,15 @@ jobs:
         
         # Move files to staging location
         ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          echo "Checking temp directory contents:"
+          ls -la /tmp/staging-customer-menu-dist/
+          echo "Copying files to staging directory..."
           sudo rm -rf /var/www/staging-inseat-customer/*
           sudo cp -r /tmp/staging-customer-menu-dist/* /var/www/staging-inseat-customer/
           sudo chown -R www-data:www-data /var/www/staging-inseat-customer
           sudo chmod -R 755 /var/www/staging-inseat-customer
+          echo "Final staging directory contents:"
+          ls -la /var/www/staging-inseat-customer/
           rm -rf /tmp/staging-customer-menu-dist
         EOF
 
