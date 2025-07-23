@@ -60,6 +60,7 @@ jobs:
         ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           if [ -f "/var/www/inseat-customer/index.html" ]; then
             echo "✅ Customer Menu Production deployment successful!"
+            echo "Deployment timestamp: $(stat -c %y /var/www/inseat-customer/index.html)"
           else
             echo "❌ Deployment failed - index.html not found"
             exit 1
