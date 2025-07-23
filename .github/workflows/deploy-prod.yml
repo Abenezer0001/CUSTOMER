@@ -36,28 +36,30 @@ jobs:
 
     - name: Deploy to server
       run: |
-        # Create backup and temporary directory
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-          sudo mkdir -p /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)
-          sudo cp -r /var/www/inseat-customer/* /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
-          mkdir -p /tmp/customer-menu-dist
-        EOF
+        # Debug DNS resolution
+        echo "Attempting to connect to: ${{ secrets.SERVER_HOST }}"
+        nslookup ${{ secrets.SERVER_HOST }} || echo "DNS lookup failed"
+        
+        # Create temporary directory for upload
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /tmp/customer-menu-dist"
         
         # Upload new build
-        scp -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/customer-menu-dist/
+        scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/customer-menu-dist/
         
-        # Move files to production location
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        # Deploy to production location
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
+          sudo mkdir -p /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)
+          sudo cp -r /var/www/inseat-customer/* /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
           sudo rm -rf /var/www/inseat-customer/*
           sudo cp -r /tmp/customer-menu-dist/* /var/www/inseat-customer/
           sudo chown -R www-data:www-data /var/www/inseat-customer
           sudo chmod -R 755 /var/www/inseat-customer
           rm -rf /tmp/customer-menu-dist
-        EOF
+        EOFINNER
 
     - name: Verify deployment
       run: |
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
           if [ -f "/var/www/inseat-customer/index.html" ]; then
             echo "✅ Customer Menu Production deployment successful!"
             echo "Deployment timestamp: $(stat -c %y /var/www/inseat-customer/index.html)"
@@ -65,4 +67,4 @@ jobs:
             echo "❌ Deployment failed - index.html not found"
             exit 1
           fi
-        EOF
+        EOFINNER

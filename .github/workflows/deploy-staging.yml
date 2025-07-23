@@ -36,14 +36,18 @@ jobs:
 
     - name: Deploy to staging server
       run: |
+        # Debug DNS resolution
+        echo "Attempting to connect to: ${{ secrets.SERVER_HOST }}"
+        nslookup ${{ secrets.SERVER_HOST }} || echo "DNS lookup failed"
+        
         # Create temporary directory for upload
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /tmp/staging-customer-menu-dist"
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /tmp/staging-customer-menu-dist"
         
         # Upload new build
-        scp -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/staging-customer-menu-dist/
+        scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/staging-customer-menu-dist/
         
         # Move files to staging location
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
           echo "Checking temp directory contents:"
           ls -la /tmp/staging-customer-menu-dist/
           echo "Copying files to staging directory..."
@@ -54,11 +58,11 @@ jobs:
           echo "Final staging directory contents:"
           ls -la /var/www/staging-inseat-customer/
           rm -rf /tmp/staging-customer-menu-dist
-        EOF
+        EOFINNER
 
     - name: Verify staging deployment
       run: |
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOFINNER'
           if [ -f "/var/www/staging-inseat-customer/index.html" ]; then
             echo "✅ Customer Menu Staging deployment successful!"
             echo "Deployment timestamp: $(stat -c %y /var/www/staging-inseat-customer/index.html)"
@@ -66,4 +70,4 @@ jobs:
             echo "❌ Deployment failed - index.html not found"
             exit 1
           fi
-        EOF
+        EOFINNER
