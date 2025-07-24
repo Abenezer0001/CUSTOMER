@@ -52,7 +52,7 @@ export const BottomNav: React.FC = () => {
     {
       path: '/bill',
       icon: <Wallet className="h-6 w-6" />,
-      label: 'Get Bill',
+      label: 'Bill',
       onClick: () => navigate(getPathWithTableId('/bill'))
     },
     {
