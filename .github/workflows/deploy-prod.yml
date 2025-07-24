@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy Customer Menu to Production Server
+    name: Build and Deploy Customer Menu to Production Server
     runs-on: ubuntu-latest
     
     steps:
@@ -20,7 +20,7 @@ jobs:
         cache: 'npm'
 
     - name: Install dependencies
-      run: npm install
+      run: npm ci
 
     - name: Build application
       run: npm run build
@@ -36,35 +36,38 @@ jobs:
 
     - name: Deploy to server
       run: |
-        # Upload dist folder to server
-        scp -r dist/ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/customer-menu-dist/
+        # Debug DNS resolution
+        echo "Attempting to connect to: ${{ secrets.SERVER_HOST }}"
+        nslookup ${{ secrets.SERVER_HOST }} || echo "DNS lookup failed"
         
-        # Execute deployment on server
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-          # Create backup of existing deployment
-          if [ -d "/var/www/inseat-customer" ]; then
-            sudo mv "/var/www/inseat-customer" "/var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)"
-          fi
-          
-          # Create destination directory
-          sudo mkdir -p /var/www/inseat-customer
-          
-          # Copy files
+        # Create temporary directory for upload
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /tmp/customer-menu-dist"
+        
+        # Upload new build
+        scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no -r dist/* ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/customer-menu-dist/
+        
+        # Deploy to production location
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          echo "Starting deployment to production..."
+          sudo mkdir -p /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)
+          sudo cp -r /var/www/inseat-customer/* /var/www/inseat-customer.backup.$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || true
+          echo "Checking temp directory contents:"
+          ls -la /tmp/customer-menu-dist/
+          sudo rm -rf /var/www/inseat-customer/*
           sudo cp -r /tmp/customer-menu-dist/* /var/www/inseat-customer/
-          
-          # Set correct ownership and permissions
           sudo chown -R www-data:www-data /var/www/inseat-customer
           sudo chmod -R 755 /var/www/inseat-customer
-          
-          # Clean up temp files
-          rm -rf /tmp/customer-menu-dist/
+          echo "Production deployment completed. Final directory contents:"
+          ls -la /var/www/inseat-customer/
+          rm -rf /tmp/customer-menu-dist
         EOF
 
     - name: Verify deployment
       run: |
-        ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           if [ -f "/var/www/inseat-customer/index.html" ]; then
-            echo "✅ Production Customer Menu deployment successful!"
+            echo "✅ Customer Menu Production deployment successful!"
+            echo "Deployment timestamp: $(stat -c %y /var/www/inseat-customer/index.html)"
           else
             echo "❌ Deployment failed - index.html not found"
             exit 1
