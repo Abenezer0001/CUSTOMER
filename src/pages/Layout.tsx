@@ -116,7 +116,7 @@ const Layout: React.FC = () => {
       <main className="flex-grow pb-20" style={{ backgroundColor: '#16141F' }}> 
         <Outlet />
       </main>
-      <BottomNav />
+      <BottomNav onCartOpen={() => setIsCartOpen(true)} />
     </div>
   );
 };

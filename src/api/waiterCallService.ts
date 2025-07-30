@@ -144,6 +144,17 @@ export const waiterCallService = {
       console.error('Error cancelling waiter call:', error);
       throw new Error(error.response?.data?.message || 'Failed to cancel waiter call');
     }
+  },
+
+  // Get waiter calls by table ID
+  async getWaiterCallsByTable(tableId: string): Promise<WaiterCall[]> {
+    try {
+      const response = await apiClient.get(`/api/waiter-calls/table/${tableId}`);
+      return response.data.data || response.data;
+    } catch (error: any) {
+      console.error('Error fetching waiter calls by table:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch waiter calls');
+    }
   }
 };
 

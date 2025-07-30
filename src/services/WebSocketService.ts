@@ -1,11 +1,13 @@
 import { toast } from 'sonner';
-import { OrderStatus } from '@/types';
+import { OrderStatus, Rating, RatingStats } from '@/types';
 
 // This is a mock WebSocket service for demo purposes
 // In a real app, this would connect to a real WebSocket server
 
 type MessageHandler = (data: any) => void;
 type StatusUpdateHandler = (orderId: string, status: OrderStatus) => void;
+type RatingUpdateHandler = (menuItemId: string, rating: Rating) => void;
+type RatingStatsUpdateHandler = (menuItemId: string, stats: RatingStats) => void;
 type ConnectionHandler = () => void;
 
 export class WebSocketService {
@@ -13,6 +15,8 @@ export class WebSocketService {
   private connected: boolean = false;
   private messageHandlers: MessageHandler[] = [];
   private statusUpdateHandlers: StatusUpdateHandler[] = [];
+  private ratingUpdateHandlers: RatingUpdateHandler[] = [];
+  private ratingStatsUpdateHandlers: RatingStatsUpdateHandler[] = [];
   private connectionHandlers: ConnectionHandler[] = [];
   private disconnectionHandlers: ConnectionHandler[] = [];
   private reconnectInterval: number = 5000; // 5 seconds
@@ -90,6 +94,16 @@ export class WebSocketService {
     this.statusUpdateHandlers.push(handler);
   }
   
+  // Add rating update handler
+  public onRatingUpdate(handler: RatingUpdateHandler): void {
+    this.ratingUpdateHandlers.push(handler);
+  }
+  
+  // Add rating stats update handler
+  public onRatingStatsUpdate(handler: RatingStatsUpdateHandler): void {
+    this.ratingStatsUpdateHandlers.push(handler);
+  }
+  
   // Add connection handler
   public onConnect(handler: ConnectionHandler): void {
     this.connectionHandlers.push(handler);
@@ -108,6 +122,16 @@ export class WebSocketService {
   // Remove status update handler
   public removeStatusUpdateHandler(handler: StatusUpdateHandler): void {
     this.statusUpdateHandlers = this.statusUpdateHandlers.filter(h => h !== handler);
+  }
+  
+  // Remove rating update handler
+  public removeRatingUpdateHandler(handler: RatingUpdateHandler): void {
+    this.ratingUpdateHandlers = this.ratingUpdateHandlers.filter(h => h !== handler);
+  }
+  
+  // Remove rating stats update handler
+  public removeRatingStatsUpdateHandler(handler: RatingStatsUpdateHandler): void {
+    this.ratingStatsUpdateHandlers = this.ratingStatsUpdateHandlers.filter(h => h !== handler);
   }
   
   // Remove connection handler
@@ -152,22 +176,75 @@ export class WebSocketService {
       { id: 'order-' + Date.now(), tableNumber } // Now
     ];
     
-    // Simulate receiving status updates randomly
+    // Simulate receiving status updates and rating updates randomly
     this.mockSocket = setInterval(() => {
       // Skip sometimes to make it more realistic
       if (Math.random() > 0.3) return;
       
-      // Pick a random order and status
-      const randomOrder = fakeOrders[Math.floor(Math.random() * fakeOrders.length)];
-      const statuses: OrderStatus[] = ['preparing', 'ready', 'delivered', 'completed'];
-      const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+      const updateTypes = ['status_update', 'rating_update', 'rating_stats_update'];
+      const randomType = updateTypes[Math.floor(Math.random() * updateTypes.length)];
       
-      // Create update message
-      const updateMessage = {
-        type: 'status_update',
-        orderId: randomOrder.id,
-        status: randomStatus
-      };
+      let updateMessage: any;
+      
+      if (randomType === 'status_update') {
+        // Pick a random order and status
+        const randomOrder = fakeOrders[Math.floor(Math.random() * fakeOrders.length)];
+        const statuses: OrderStatus[] = ['preparing', 'ready', 'delivered', 'completed'];
+        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+        
+        updateMessage = {
+          type: 'status_update',
+          orderId: randomOrder.id,
+          status: randomStatus
+        };
+      } else if (randomType === 'rating_update') {
+        // Simulate new rating received
+        const mockRating: Rating = {
+          _id: 'rating-' + Date.now(),
+          userId: 'user-' + Math.random(),
+          menuItemId: 'item-' + Math.floor(Math.random() * 10),
+          restaurantId: 'restaurant-1',
+          rating: Math.floor(Math.random() * 5) + 1,
+          comment: 'Mock review comment',
+          isVerifiedPurchase: Math.random() > 0.5,
+          helpfulCount: Math.floor(Math.random() * 10),
+          unhelpfulCount: Math.floor(Math.random() * 3),
+          helpfulVotes: [],
+          unhelpfulVotes: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          user: {
+            _id: 'user-' + Math.random(),
+            firstName: 'Mock',
+            lastName: 'User'
+          }
+        };
+        
+        updateMessage = {
+          type: 'rating_update',
+          menuItemId: mockRating.menuItemId,
+          rating: mockRating
+        };
+      } else {
+        // Simulate rating stats update
+        const mockStats: RatingStats = {
+          averageRating: Math.random() * 4 + 1,
+          totalReviews: Math.floor(Math.random() * 100) + 1,
+          ratingDistribution: {
+            1: Math.floor(Math.random() * 10),
+            2: Math.floor(Math.random() * 10),
+            3: Math.floor(Math.random() * 15),
+            4: Math.floor(Math.random() * 20),
+            5: Math.floor(Math.random() * 25)
+          }
+        };
+        
+        updateMessage = {
+          type: 'rating_stats_update',
+          menuItemId: 'item-' + Math.floor(Math.random() * 10),
+          stats: mockStats
+        };
+      }
       
       console.log('Received WebSocket message:', updateMessage);
       
@@ -186,6 +263,23 @@ export class WebSocketService {
         } else if (updateMessage.status === 'delivered') {
           toast.success(`Order ${updateMessage.orderId.slice(-4)} has been delivered!`);
         }
+      }
+      
+      // Handle rating updates
+      if (updateMessage.type === 'rating_update') {
+        this.ratingUpdateHandlers.forEach(handler => 
+          handler(updateMessage.menuItemId, updateMessage.rating)
+        );
+        
+        // Show toast notification for new ratings
+        toast.success(`New rating received for ${updateMessage.rating.menuItemName || 'menu item'}!`);
+      }
+      
+      // Handle rating stats updates
+      if (updateMessage.type === 'rating_stats_update') {
+        this.ratingStatsUpdateHandlers.forEach(handler => 
+          handler(updateMessage.menuItemId, updateMessage.stats)
+        );
       }
     }, 10000); // Every 10 seconds, randomly update
   }

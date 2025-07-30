@@ -7,13 +7,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, LogOut, Gift, History, User, Award, Edit, RefreshCw } from 'lucide-react';
+import { ArrowLeft, LogOut, Gift, History, User, Award, Edit, RefreshCw, Star, MessageSquare } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useTableInfo } from '@/context/TableContext';
 import { AuthService } from '@/services/AuthService';
 import customerAuthService from '@/api/customerAuthService';
+import ratingService from '@/api/ratingService';
+import { Rating, PaginatedRatings } from '@/types';
 
 const Account: React.FC = () => {
   const { user, logout, addLoyaltyPoints, isAuthenticated, isLoading } = useAuth();
@@ -21,6 +23,10 @@ const Account: React.FC = () => {
   const { orders = [] } = useOrders();
   const [activeTab, setActiveTab] = useState("profile");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [userRatings, setUserRatings] = useState<Rating[]>([]);
+  const [loadingRatings, setLoadingRatings] = useState(false);
+  const [ratingsPage, setRatingsPage] = useState(1);
+  const [totalRatingsPages, setTotalRatingsPages] = useState(1);
   const navigate = useNavigate();
   const { tableId } = useTableInfo();
   
@@ -161,6 +167,41 @@ const Account: React.FC = () => {
     }
   };
   
+  // Function to fetch user ratings
+  const fetchUserRatings = async (page: number = 1) => {
+    if (!user?.id) return;
+    
+    setLoadingRatings(true);
+    try {
+      const result: PaginatedRatings = await ratingService.getUserRatings(user.id, {
+        page,
+        limit: 10,
+        sortBy: 'recent'
+      });
+      
+      if (page === 1) {
+        setUserRatings(result.ratings);
+      } else {
+        setUserRatings(prev => [...prev, ...result.ratings]);
+      }
+      
+      setRatingsPage(result.currentPage);
+      setTotalRatingsPages(result.totalPages);
+    } catch (error) {
+      console.error('Error fetching user ratings:', error);
+      toast.error('Failed to load your reviews');
+    } finally {
+      setLoadingRatings(false);
+    }
+  };
+
+  // Load user ratings when component mounts or user changes
+  useEffect(() => {
+    if (user?.id && activeTab === 'reviews') {
+      fetchUserRatings();
+    }
+  }, [user?.id, activeTab]);
+
   // Function to manually refresh orders without redirecting to login
   const handleRefreshOrders = async () => {
     setIsRefreshing(true);
@@ -392,7 +433,7 @@ const Account: React.FC = () => {
             <CardHeader className="pb-0 pt-0 px-0">
               <Tabs defaultValue="profile" value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <div className="bg-gray-50 dark:bg-gray-800 px-6 pt-6">
-                  <TabsList className="grid w-full grid-cols-2 mb-6 bg-white/80 dark:bg-gray-700/50 p-1 rounded-lg">
+                  <TabsList className="grid w-full grid-cols-3 mb-6 bg-white/80 dark:bg-gray-700/50 p-1 rounded-lg">
                     <TabsTrigger 
                       value="profile" 
                       className="flex items-center justify-center py-3 rounded-md data-[state=active]:bg-purple-600 data-[state=active]:text-white"
@@ -405,7 +446,14 @@ const Account: React.FC = () => {
                       className="flex items-center justify-center py-3 rounded-md data-[state=active]:bg-purple-600 data-[state=active]:text-white"
                     >
                       <History className="h-4 w-4 mr-2" />
-                      Order History
+                      Orders
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="reviews" 
+                      className="flex items-center justify-center py-3 rounded-md data-[state=active]:bg-purple-600 data-[state=active]:text-white"
+                    >
+                      <Star className="h-4 w-4 mr-2" />
+                      Reviews
                     </TabsTrigger>
                   </TabsList>
                 </div>
@@ -575,6 +623,153 @@ const Account: React.FC = () => {
                         </div>
                         <h3 className="text-xl font-bold mb-2">No orders yet</h3>
                         <p className="text-gray-500 dark:text-gray-400 text-base mb-6">You haven't placed any orders yet</p>
+                        <Button 
+                          onClick={() => navigate('/menu')} 
+                          className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full font-medium"
+                        >
+                          Browse Menu
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </TabsContent>
+
+                <TabsContent value="reviews">
+                  <div className="bg-gray-50 dark:bg-gray-800 px-6 pt-6">
+                    <div className="px-1">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                          <Star className="h-6 w-6 mr-3 text-purple-600" />
+                          <div>
+                            <CardTitle className="text-2xl font-bold">My Reviews</CardTitle>
+                            <CardDescription className="text-base">Your ratings and reviews</CardDescription>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fetchUserRatings(1)}
+                          disabled={loadingRatings}
+                          className="flex items-center gap-2 border-purple-200 text-purple-700 hover:bg-purple-50"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${loadingRatings ? 'animate-spin' : ''}`} />
+                          {loadingRatings ? 'Loading' : 'Refresh'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <CardContent className="p-6">
+                    {loadingRatings && userRatings.length === 0 ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="animate-pulse">
+                            <div className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                              <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                              <div className="flex-1 space-y-2">
+                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
+                                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : userRatings.length > 0 ? (
+                      <div className="space-y-4">
+                        {userRatings.map((rating) => (
+                          <Card key={rating._id} className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow">
+                            <div className="p-4">
+                              <div className="flex items-start gap-4">
+                                {/* Menu Item Image Placeholder */}
+                                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0">
+                                  <MessageSquare className="h-6 w-6 text-gray-500" />
+                                </div>
+                                
+                                <div className="flex-1 min-w-0">
+                                  {/* Rating Header */}
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                                      Menu Item #{rating.menuItemId.slice(-8)}
+                                    </h3>
+                                    <div className="flex items-center gap-1">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <Star
+                                          key={star}
+                                          className={`h-4 w-4 ${
+                                            star <= rating.rating
+                                              ? "fill-amber-400 text-amber-400"
+                                              : "text-gray-300 dark:text-gray-600"
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Rating Details */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                      <span>
+                                        {format(new Date(rating.createdAt), 'MMM dd, yyyy')}
+                                      </span>
+                                      {rating.isVerifiedPurchase && (
+                                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                          Verified Purchase
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    
+                                    {rating.comment && (
+                                      <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
+                                        "{rating.comment}"
+                                      </p>
+                                    )}
+                                    
+                                    {/* Helpful votes */}
+                                    {(rating.helpfulCount > 0 || rating.unhelpfulCount > 0) && (
+                                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                        {rating.helpfulCount > 0 && (
+                                          <span className="flex items-center gap-1">
+                                            <Star className="h-3 w-3" />
+                                            {rating.helpfulCount} found helpful
+                                          </span>
+                                        )}
+                                        {rating.unhelpfulCount > 0 && (
+                                          <span>{rating.unhelpfulCount} found unhelpful</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                        
+                        {/* Load More Button */}
+                        {ratingsPage < totalRatingsPages && (
+                          <div className="text-center pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => fetchUserRatings(ratingsPage + 1)}
+                              disabled={loadingRatings}
+                              className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                            >
+                              {loadingRatings ? 'Loading...' : 'Load More Reviews'}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                        <div className="bg-white dark:bg-gray-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
+                          <Star className="h-10 w-10 text-purple-500" />
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">No reviews yet</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-base mb-6">
+                          You haven't written any reviews yet. Order some items and share your experience!
+                        </p>
                         <Button 
                           onClick={() => navigate('/menu')} 
                           className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full font-medium"

@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Wallet, Bell, ClipboardList } from 'lucide-react';
+import { Menu, Wallet, Bell, ClipboardList, ShoppingCart } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useTableInfo } from '@/context/TableContext';
 
-export const BottomNav: React.FC = () => {
+interface BottomNavProps {
+  onCartOpen?: () => void;
+}
+
+export const BottomNav: React.FC<BottomNavProps> = ({ onCartOpen }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { cartItems } = useCart();
-  const { tableId } = useTableInfo();
+  const { tableId, restaurantId } = useTableInfo();
   
   // Special case for menu button to ensure we always pass the table ID
   const handleMenuClick = () => {
@@ -61,6 +65,17 @@ export const BottomNav: React.FC = () => {
       label: 'Call Waiter',
       onClick: () => navigate(getPathWithTableId('/call-waiter'))
     },
+    {
+      path: '/cart',
+      icon: <ShoppingCart className="h-6 w-6" />,
+      label: 'Cart',
+      onClick: () => {
+        console.log('BottomNav Cart clicked', { tableId, restaurantId });
+        if (onCartOpen) {
+          onCartOpen();
+        }
+      }
+    },
   ];
   
   const currentPath = location.pathname === '/' || location.pathname === '/menu' ? '/' : location.pathname;
@@ -106,6 +121,7 @@ export const BottomNav: React.FC = () => {
           );
         })}
       </div>
+
     </div>
   );
 };

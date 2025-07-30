@@ -94,7 +94,8 @@ const OrderCard: React.FC<{
   onCancelOrder: (orderId: string) => void;
   cancellingOrderId: string | null;
   processingPaymentOrderId: string | null;
-}> = ({ order, onPayOrder, onCancelOrder, cancellingOrderId, processingPaymentOrderId }) => {
+  restaurantServiceCharge: { enabled: boolean; percentage: number };
+}> = ({ order, onPayOrder, onCancelOrder, cancellingOrderId, processingPaymentOrderId, restaurantServiceCharge }) => {
   const navigate = useNavigate();
 
   return (
@@ -134,6 +135,28 @@ const OrderCard: React.FC<{
             +{order.items.length - 3} more items
           </p>
         )}
+        
+        {/* Order breakdown */}
+        <div className="space-y-1 mt-2 pt-2 border-t border-purple-500/10">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-gray-400">Subtotal</span>
+            <span className="text-gray-300">${(order.subtotal || 0).toFixed(2)}</span>
+          </div>
+          {order.service_charge > 0 && (
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-gray-400">
+                Service Charge {restaurantServiceCharge.enabled ? `(${restaurantServiceCharge.percentage}%)` : ''}
+              </span>
+              <span className="text-gray-300">${(order.service_charge || 0).toFixed(2)}</span>
+            </div>
+          )}
+          {order.tip > 0 && (
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-gray-400">Tip</span>
+              <span className="text-gray-300">${(order.tip || 0).toFixed(2)}</span>
+            </div>
+          )}
+        </div>
         
         {/* Payment status as text */}
         {order.paymentStatus && (
@@ -198,7 +221,7 @@ const OrderCard: React.FC<{
 const MyOrders: React.FC = () => {
   const { isAuthenticated, token, isLoading } = useAuth();
   const { tableId, restaurantName } = useTableInfo();
-  const { orders: contextOrders } = useOrders();
+  const { orders: contextOrders, refreshOrders: contextRefreshOrders } = useOrders();
   const navigate = useNavigate();
   
   const [orders, setOrders] = useState<any[]>([]);
@@ -207,6 +230,7 @@ const MyOrders: React.FC = () => {
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [processingPaymentOrderId, setProcessingPaymentOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('today');
+  const [restaurantServiceCharge, setRestaurantServiceCharge] = useState({ enabled: false, percentage: 0 });
   
   // Early authentication check - redirect to login if not authenticated
   useEffect(() => {
@@ -227,6 +251,72 @@ const MyOrders: React.FC = () => {
       }
     }
   }, [isAuthenticated, isLoading, token, navigate]);
+
+  // Listen for order-placed events and auto-refresh
+  useEffect(() => {
+    const handleOrderPlaced = async (event: CustomEvent) => {
+      console.log('Order placed event received, updating orders immediately...');
+      
+      // First, update orders from context immediately
+      setOrders(contextOrders);
+      
+      // Then refresh from API in the background to ensure synchronization
+      setTimeout(async () => {
+        try {
+          await contextRefreshOrders();
+          console.log('Orders refreshed successfully after new order placement');
+        } catch (error) {
+          console.error('Failed to refresh orders after order placement:', error);
+        }
+      }, 500);
+    };
+
+    const handleOrdersUpdated = async (event: CustomEvent) => {
+      console.log('Orders updated event received, syncing local state...');
+      // Immediately update local state with context orders
+      setOrders(contextOrders);
+    };
+
+    const handleOrdersRefreshed = async (event: CustomEvent) => {
+      console.log('Orders refreshed event received, updating local state...');
+      const refreshedOrders = event.detail?.orders || [];
+      setOrders(refreshedOrders);
+    };
+
+    // Add event listeners for order events
+    window.addEventListener('order-placed', handleOrderPlaced as EventListener);
+    window.addEventListener('orders-updated', handleOrdersUpdated as EventListener);
+    window.addEventListener('orders-refreshed', handleOrdersRefreshed as EventListener);
+
+    // Cleanup event listeners on component unmount
+    return () => {
+      window.removeEventListener('order-placed', handleOrderPlaced as EventListener);
+      window.removeEventListener('orders-updated', handleOrdersUpdated as EventListener);
+      window.removeEventListener('orders-refreshed', handleOrdersRefreshed as EventListener);
+    };
+  }, [contextRefreshOrders, contextOrders]);
+
+  // Fetch restaurant service charge settings
+  useEffect(() => {
+    const fetchRestaurantServiceCharge = async () => {
+      try {
+        const restaurantId = localStorage.getItem('restaurantId');
+        if (restaurantId) {
+          const response = await apiClient.get(`/api/restaurants/${restaurantId}/service-charge`);
+          if (response.data.service_charge) {
+            setRestaurantServiceCharge(response.data.service_charge);
+          }
+        }
+      } catch (error) {
+        console.log('Could not fetch restaurant service charge settings:', error);
+        // Keep default values (disabled)
+      }
+    };
+
+    if (isAuthenticated && !isLoading) {
+      fetchRestaurantServiceCharge();
+    }
+  }, [isAuthenticated, isLoading]);
 
   // Order card skeleton component
   const OrderCardSkeleton = () => (
@@ -302,7 +392,7 @@ const MyOrders: React.FC = () => {
     return cookieString.length > 50;
   };
 
-  // Fetch orders on component mount
+  // Fetch orders on component mount - prioritize context orders
   useEffect(() => {
     const loadOrders = async () => {
       try {
@@ -311,36 +401,46 @@ const MyOrders: React.FC = () => {
         
         console.log('Loading orders with table ID:', tableId);
         console.log('Restaurant name:', restaurantName);
-              
-        // Always try to fetch orders from API first
-        console.log('Fetching orders from API...');
+        console.log('Context orders available:', contextOrders.length);
+        
+        // If we have context orders, use them immediately
+        if (contextOrders.length > 0) {
+          console.log('Using orders from context immediately:', contextOrders.length);
+          setOrders(contextOrders);
+          setLoading(false);
+          
+          // Still refresh from API in background to ensure synchronization
+          try {
+            await contextRefreshOrders();
+          } catch (error) {
+            console.log('Background refresh failed, but continuing with context orders');
+          }
+          return;
+        }
+        
+        // If no context orders, fetch from API
+        console.log('No context orders available, fetching from API...');
         const response = await apiClient.get('/api/orders/my-orders');
         
-          if (response.data) {
-            const fetchedOrders = Array.isArray(response.data) ? response.data : [];
-            console.log('Fetched orders from API:', fetchedOrders.length);
-            setOrders(fetchedOrders);
+        if (response.data) {
+          const fetchedOrders = Array.isArray(response.data) ? response.data : [];
+          console.log('Fetched orders from API:', fetchedOrders.length);
+          setOrders(fetchedOrders);
         } else {
-          console.log('No data returned from API, checking context orders');
-          // Fall back to context orders if API returns no data
-          if (contextOrders && contextOrders.length > 0) {
-            console.log('Using orders from context:', contextOrders.length);
-            setOrders(contextOrders);
-          } else {
-            setOrders([]);
-        }
+          console.log('No data returned from API');
+          setOrders([]);
         }
         
       } catch (error: any) {
         console.error('Error in loadOrders:', error);
         
-        // If API call fails, try to use context orders
+        // If API call fails, try to use context orders as fallback
         if (contextOrders && contextOrders.length > 0) {
           console.log('Using context orders due to API error');
           setOrders(contextOrders);
         } else {
-        setError(`Failed to load orders: ${error.message || 'Unknown error'}`);
-        setOrders([]);
+          setError(`Failed to load orders: ${error.message || 'Unknown error'}`);
+          setOrders([]);
         }
       } finally {
         setLoading(false);
@@ -349,9 +449,17 @@ const MyOrders: React.FC = () => {
 
     // Only load if not already loading authentication
     if (!isLoading) {
-    loadOrders();
+      loadOrders();
     }
-  }, [tableId, restaurantName, isLoading]); // Removed contextOrders dependency to prevent loops
+  }, [tableId, restaurantName, isLoading]); // Keep contextOrders dependency minimal to prevent loops
+  
+  // Sync with context orders when they change
+  useEffect(() => {
+    if (contextOrders.length > 0 && !loading) {
+      console.log('Context orders changed, syncing local state:', contextOrders.length);
+      setOrders(contextOrders);
+    }
+  }, [contextOrders, loading]);
   
   // Handle post-login payment processing
   useEffect(() => {
@@ -440,6 +548,35 @@ const MyOrders: React.FC = () => {
             quantity: item.quantity
           };
         });
+        
+        
+        // Add service charge as a separate line item if present
+        if (orderToPay.service_charge > 0) {
+          lineItems.push({
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'Service Charge'
+              },
+              unit_amount: Math.round((orderToPay.service_charge || 0) * 100) // Convert to cents
+            },
+            quantity: 1
+          });
+        }
+        
+        // Add tip as a separate line item if present
+        if (orderToPay.tip > 0) {
+          lineItems.push({
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'Tip'
+              },
+              unit_amount: Math.round((orderToPay.tip || 0) * 100) // Convert to cents
+            },
+            quantity: 1
+          });
+        }
         
         console.log('Creating checkout session with:', {
           lineItems: lineItems.length,
@@ -574,7 +711,7 @@ const MyOrders: React.FC = () => {
   };
 
   // Refresh orders
-  const refreshOrders = async () => {
+  const refreshOrdersLocal = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -670,7 +807,7 @@ const MyOrders: React.FC = () => {
           <Button 
             variant="outline" 
             className="border-purple-600 text-purple-400 hover:bg-purple-600/10 hover:text-purple-300 transition-colors"
-            onClick={refreshOrders}
+            onClick={refreshOrdersLocal}
             disabled={loading}
           >
             <RefreshCw size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -733,7 +870,7 @@ const MyOrders: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {categorizeOrders(orders).today.map(order => (
-                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} />
+                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} restaurantServiceCharge={restaurantServiceCharge} />
                   ))}
                 </div>
               )}
@@ -753,7 +890,7 @@ const MyOrders: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {categorizeOrders(orders).past.map(order => (
-                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} />
+                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} restaurantServiceCharge={restaurantServiceCharge} />
             ))}
           </div>
               )}

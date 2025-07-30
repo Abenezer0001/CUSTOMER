@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Plus } from 'lucide-react';
+import { Clock, Plus, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SharedImage } from '@/components/shared/SharedImage';
 import { MenuItem } from '@/types/menu';
+import { RatingStats } from '@/types';
+import ratingService from '@/api/ratingService';
 import { cn } from '@/lib/utils';
 
 interface MenuItemCardProps {
@@ -12,14 +14,38 @@ interface MenuItemCardProps {
   onClick?: () => void;
   className?: string;
   showPlusButton?: boolean;
+  showRating?: boolean;
 }
 
 export const MenuItemCard: React.FC<MenuItemCardProps> = ({ 
   item, 
   onClick, 
   className,
-  showPlusButton = false 
+  showPlusButton = false,
+  showRating = true
 }) => {
+  const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
+  const [loadingRating, setLoadingRating] = useState(false);
+  
+  // Fetch rating stats
+  useEffect(() => {
+    if (showRating) {
+      const fetchRatingStats = async () => {
+        setLoadingRating(true);
+        try {
+          const stats = await ratingService.getMenuItemRatingStats(item._id || item.id);
+          setRatingStats(stats);
+        } catch (error) {
+          // Silently fail - no rating stats available
+          console.log('No rating stats available for item:', item.name);
+        } finally {
+          setLoadingRating(false);
+        }
+      };
+      
+      fetchRatingStats();
+    }
+  }, [item.id, item._id, showRating]);
   // Handle click with proper propagation control and debug logging
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -89,6 +115,21 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({
         <p className="text-xs text-gray-400 line-clamp-2 min-h-[2rem]">
           {item.description || 'No description available'}
         </p>
+        
+        {/* Rating Display */}
+        {showRating && ratingStats && ratingStats.totalReviews > 0 && (
+          <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1">
+              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+              <span className="text-xs font-medium text-gray-300">
+                {ratingStats.averageRating.toFixed(1)}
+              </span>
+            </div>
+            <span className="text-xs text-gray-500">
+              ({ratingStats.totalReviews})
+            </span>
+          </div>
+        )}
         
         {/* Tags and metadata */}
         <div className="flex flex-wrap items-center justify-between gap-1 pt-1">
