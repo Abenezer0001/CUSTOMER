@@ -15,7 +15,8 @@ type TableContextType = TableInfo & {
 const defaultTableInfo: TableInfo = {
   tableNumber: '',
   restaurantName: 'InSeat',
-  tableId: ''
+  tableId: '',
+  restaurantId: undefined
 };
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
@@ -84,7 +85,8 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const newTableInfo = { 
         tableNumber: ensureString(urlTableId), 
         restaurantName: 'InSeat', 
-        tableId: ensureString(urlTableId) 
+        tableId: ensureString(urlTableId),
+        restaurantId: undefined
       };
       localStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
       sessionStorage.setItem('tableInfo', JSON.stringify(newTableInfo));
@@ -103,7 +105,8 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return {
           tableNumber: ensureString(parsed.tableNumber),
           restaurantName: parsed.restaurantName || 'InSeat',
-          tableId: ensureString(parsed.tableId)
+          tableId: ensureString(parsed.tableId),
+          restaurantId: parsed.restaurantId || undefined
         };
       } catch (e) {
         console.error('Error parsing session stored table info:', e);
@@ -119,7 +122,8 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return {
           tableNumber: ensureString(parsed.tableNumber),
           restaurantName: parsed.restaurantName || 'InSeat',
-          tableId: ensureString(parsed.tableId)
+          tableId: ensureString(parsed.tableId),
+          restaurantId: parsed.restaurantId || undefined
         };
       } catch (e) {
         console.error('Error parsing local stored table info:', e);
@@ -131,7 +135,8 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return { 
       tableNumber: ensureString(tableId) || '', 
       restaurantName: 'InSeat', 
-      tableId: ensureString(tableId) || '' 
+      tableId: ensureString(tableId) || '',
+      restaurantId: undefined
     };
   });
 
@@ -155,11 +160,12 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       
       setTableVerified(result.exists);
       
-      if (result.exists && result.venue) {
-        // Update restaurant name if available
+      if (result.exists) {
+        // Update restaurant info if available
         setTableInfo(prev => ({
           ...prev,
-          restaurantName: result.venue?.name || prev.restaurantName
+          restaurantName: result.venue?.name || prev.restaurantName,
+          restaurantId: result.venue?.restaurantId || result.table?.restaurantId || prev.restaurantId
         }));
       }
       
@@ -213,7 +219,8 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updatedInfo = {
         ...tableInfo,
         tableId: effectiveTableId,
-        tableNumber: effectiveTableId
+        tableNumber: effectiveTableId,
+        restaurantId: tableInfo.restaurantId || undefined
       };
       
       // Set in context
@@ -262,7 +269,8 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         newTableInfo = {
           tableNumber: ensureString(rawNewTableInfo.tableNumber),
           restaurantName: rawNewTableInfo.restaurantName || 'InSeat',
-          tableId: ensureString(rawNewTableInfo.tableId)
+          tableId: ensureString(rawNewTableInfo.tableId),
+          restaurantId: rawNewTableInfo.restaurantId || undefined
         };
         
         // Only update if something changed
@@ -286,7 +294,8 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const sanitizedTableInfo = {
         tableNumber: ensureString(tableInfoOrFunction.tableNumber),
         restaurantName: tableInfoOrFunction.restaurantName || 'InSeat',
-        tableId: ensureString(tableInfoOrFunction.tableId)
+        tableId: ensureString(tableInfoOrFunction.tableId),
+        restaurantId: tableInfoOrFunction.restaurantId || undefined
       };
       
       // Only update if something changed

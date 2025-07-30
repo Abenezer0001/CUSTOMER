@@ -242,42 +242,29 @@ export class TableService {
     try {
       console.log('Fetching table details for tableId:', tableId);
       
-      // Since API_BASE_URL already includes /api, we should use the correct endpoints
-      // Let's try various endpoints that might exist on the backend
-      const possibleEndpoints = [
-        `${API_BASE_URL}/tables/${tableId}`,
-        `${API_BASE_URL}/restaurant-service/tables/${tableId}`,
-        `${API_BASE_URL}/restaurant/tables/${tableId}`,
-        `${API_BASE_URL.replace('/api', '')}/api/tables/${tableId}`,
-        `${API_BASE_URL.replace('/api', '')}/api/restaurant-service/tables/${tableId}`
-      ];
-
+      // Use the correct endpoint that we know works
+      const endpoint = `${API_BASE_URL}/restaurant-service/tables/${tableId}`;
+      console.log('Fetching table from endpoint:', endpoint);
+      
       let tableData = null;
-      let lastError = null;
 
-      for (const endpoint of possibleEndpoints) {
-        try {
-          console.log('Trying endpoint:', endpoint);
-          
-          const response = await fetch(endpoint, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            }
-          });
-
-          if (response.ok) {
-            tableData = await response.json();
-            console.log('Table data received from', endpoint, ':', tableData);
-            break;
-          } else {
-            console.log('Endpoint failed:', endpoint, response.status);
+      try {
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
           }
-        } catch (error) {
-          console.log('Error with endpoint:', endpoint, error);
-          lastError = error;
+        });
+
+        if (response.ok) {
+          tableData = await response.json();
+          console.log('Table data received:', tableData);
+        } else {
+          console.log('Failed to fetch table:', response.status, response.statusText);
         }
+      } catch (error) {
+        console.error('Error fetching table:', error);
       }
 
       if (!tableData) {

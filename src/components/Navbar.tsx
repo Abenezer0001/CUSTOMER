@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
+import { useGroupOrder } from '@/context/GroupOrderContext';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Heart, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -10,7 +11,12 @@ export const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { totalItems } = useCart();
+  const { getGroupCartItems } = useGroupOrder();
   const location = useLocation();
+  
+  // Calculate total items including group cart items
+  const groupCartItems = getGroupCartItems();
+  const totalCartItems = totalItems + groupCartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -72,9 +78,9 @@ export const Navbar: React.FC = () => {
           
           <Link to="/cart" className="btn-floating bg-primary text-primary-foreground hover:bg-primary/90 relative">
             <ShoppingCart size={18} />
-            {totalItems > 0 && (
+            {totalCartItems > 0 && (
               <span className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full text-xs w-5 h-5 flex items-center justify-center">
-                {totalItems}
+                {totalCartItems}
               </span>
             )}
           </Link>

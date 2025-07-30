@@ -131,7 +131,9 @@ export interface Order {
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   timestamp: Date;
+  createdAt?: string; // ISO string format from backend for filtering
   tableId: string; // Changed from tableNumber to match API
+  userId?: string; // User ID for filtering orders by user
   specialInstructions?: string;
 }
 
@@ -184,12 +186,102 @@ export interface OrdersContextType {
   getOrderById: (id: string) => Promise<Order | null>;
   updateOrder?: (id: string, updates: Partial<Order>) => void;
   clearOrders: () => void;
+  refreshOrders: () => Promise<void>;
 }
 
 export interface TableInfo {
   tableNumber?: string; // Make optional since we'll use tableId
   restaurantName: string;
   tableId: string; // Make required to match API
+  restaurantId?: string; // Added for group ordering functionality
+}
+
+// Rating and Review Types
+export interface Rating {
+  _id: string;
+  userId: string;
+  menuItemId: string;
+  restaurantId: string;
+  rating: number; // 1-5 stars
+  comment?: string;
+  isVerifiedPurchase: boolean;
+  helpfulCount: number;
+  unhelpfulCount: number;
+  helpfulVotes: string[]; // Array of user IDs who voted helpful
+  unhelpfulVotes: string[]; // Array of user IDs who voted unhelpful
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    avatar?: string;
+  };
+}
+
+export interface RatingStats {
+  averageRating: number;
+  totalReviews: number;
+  ratingDistribution: {
+    1: number;
+    2: number;
+    3: number;
+    4: number;
+    5: number;
+  };
+}
+
+export interface RatingFilters {
+  rating?: number; // Filter by specific star rating
+  sortBy?: 'recent' | 'helpful' | 'rating_high' | 'rating_low';
+  verifiedOnly?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export interface RatingSubmission {
+  menuItemId: string;
+  rating: number;
+  comment?: string;
+}
+
+export interface RatingUpdate {
+  rating?: number;
+  comment?: string;
+}
+
+export interface HelpfulVoteResponse {
+  helpful: boolean;
+  helpfulCount: number;
+  unhelpfulCount: number;
+}
+
+export interface PaginatedRatings {
+  ratings: Rating[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+export interface RatingAnalytics {
+  topRatedItems: Array<{
+    menuItemId: string;
+    menuItemName: string;
+    averageRating: number;
+    totalReviews: number;
+  }>;
+  recentTrends: Array<{
+    date: string;
+    averageRating: number;
+    totalReviews: number;
+  }>;
+  categoryRatings: Array<{
+    category: string;
+    averageRating: number;
+    totalReviews: number;
+  }>;
 }
 
 // Re-export all types

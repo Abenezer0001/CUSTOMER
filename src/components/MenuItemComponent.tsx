@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { MenuItem } from '@/types';
 import { Dialog, DialogContent, DialogTitle, DialogClose, DialogTrigger } from '@/components/ui/dialog';
 import * as SheetPrimitive from '@radix-ui/react-dialog';
-import { Plus, Clock, X, MinusCircle, PlusCircle, Heart } from 'lucide-react';
+import { Plus, Clock, X, MinusCircle, PlusCircle, Heart, Users } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
+import { useGroupOrder } from '@/context/GroupOrderContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -34,11 +35,33 @@ interface MenuItemComponentProps {
 
 export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) => {
   const { addItem } = useCart();
+  const { isInGroupOrder, addItemToGroupCart } = useGroupOrder();
   
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     addItem(item, 1);
-    toast.success(`Added ${item.name} to cart`);
+    toast.success(`Added ${item.name} to individual cart`);
+  };
+
+  const handleAddToGroupCart = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const cartItem = {
+        id: item._id || item.id, // Use the actual MongoDB _id for the menuItemId
+        name: item.name,
+        price: item.price,
+        quantity: 1,
+        specialInstructions: '',
+        modifiers: []
+      };
+      
+      console.log('Adding item to group cart:', cartItem);
+      await addItemToGroupCart(cartItem);
+      toast.success(`Added ${item.name} to group order`);
+    } catch (error) {
+      console.error('Failed to add item to group order:', error);
+      toast.error('Failed to add item to group order');
+    }
   };
   
   // Use stock images from Pexels instead of Unsplash
@@ -144,7 +167,8 @@ export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) =>
               </div>
             </div>
           </div>
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex justify-end gap-2">
+            {/* Always show individual cart button */}
             <Button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -153,9 +177,26 @@ export const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item }) =>
               size="sm"
               variant="ghost"
               className="h-8 w-8 p-0 rounded-full bg-[#7B61FF] hover:bg-[#8E79FF] text-white shadow-sm"
+              title="Add to individual cart"
             >
               <Plus className="h-4 w-4" />
             </Button>
+            
+            {/* Show group cart button when in a group order */}
+            {isInGroupOrder && (
+              <Button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddToGroupCart(e);
+                }}
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                title="Add to group order"
+              >
+                <Users className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </button>
@@ -179,6 +220,7 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
   const [totalPrice, setTotalPrice] = useState(item.price);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const { addItem } = useCart();
+  const { isInGroupOrder, addItemToGroupCart } = useGroupOrder();
   
   // Get modifiers for this item from API data
   const modifiers = item.modifierGroups || [];
@@ -433,53 +475,117 @@ const MenuItemDetail: React.FC<MenuItemDetailProps> = ({ item, onAddToCart }) =>
             <span className="text-sm text-muted-foreground">Total price</span>
             <div className="text-xl font-bold text-[#7B61FF]">${(totalPrice * quantity).toFixed(2)}</div>
           </div>
-          <Button 
-            onClick={(e) => {
-              // Format modifiers for cart
-              const cartModifiers = Object.entries(selectedModifiers).map(([groupId, selection]) => {
-                const modifier = modifiers.find(m => m._id === groupId);
-                if (Array.isArray(selection)) {
-                  return selection.map(optionId => {
-                    const option = modifier?.options.find(o => o._id === optionId);
+          <div className="flex gap-2">
+            {/* Individual cart button */}
+            <Button 
+              onClick={(e) => {
+                // Format modifiers for cart
+                const cartModifiers = Object.entries(selectedModifiers).map(([groupId, selection]) => {
+                  const modifier = modifiers.find(m => m._id === groupId);
+                  if (Array.isArray(selection)) {
+                    return selection.map(optionId => {
+                      const option = modifier?.options.find(o => o._id === optionId);
+                      return {
+                        id: option?.name || optionId,
+                        name: option?.name || '',
+                        price: option?.price || 0,
+                        groupId: groupId,
+                        optionId: optionId
+                      };
+                    });
+                  } else {
+                    const option = modifier?.options.find(o => o._id === selection);
                     return {
-                      id: option?.name || optionId,
+                      id: option?.name || selection,
                       name: option?.name || '',
                       price: option?.price || 0,
                       groupId: groupId,
-                      optionId: optionId
+                      optionId: selection
                     };
-                  });
-                } else {
-                  const option = modifier?.options.find(o => o._id === selection);
-                  return {
-                    id: option?.name || selection,
-                    name: option?.name || '',
-                    price: option?.price || 0,
-                    groupId: groupId,
-                    optionId: selection
-                  };
+                  }
+                }).flat();
+                
+                // Use the cart's addItem function
+                addItem(
+                  item,
+                  quantity,
+                  cartModifiers.length > 0 ? cartModifiers : undefined,
+                  undefined,
+                  specialInstructions
+                );
+                
+                toast.success(`Added ${item.name} to individual cart`);
+                
+                // Close modal if there's an onAddToCart callback
+                if (onAddToCart) {
+                  onAddToCart(e);
                 }
-              }).flat();
-              
-              // Use the cart's addItem function
-              addItem(
-                item,
-                quantity,
-                cartModifiers.length > 0 ? cartModifiers : undefined,
-                undefined,
-                specialInstructions
-              );
-              
-              // Close modal if there's an onAddToCart callback
-              if (onAddToCart) {
-                onAddToCart(e);
-              }
-            }}
-            className="rounded-full px-8 py-6 h-auto bg-[#7B61FF] hover:bg-[#7B61FF]/90 text-white"
-          >
-            <Plus size={18} className="mr-2" />
-            Add to Order
-          </Button>
+              }}
+              className="rounded-full px-6 py-6 h-auto bg-[#7B61FF] hover:bg-[#7B61FF]/90 text-white"
+            >
+              <Plus size={18} className="mr-2" />
+              Add to Cart
+            </Button>
+            
+            {/* Group cart button when in group order */}
+            {isInGroupOrder && (
+              <Button 
+                onClick={async (e) => {
+                  try {
+                    // Format modifiers for group cart
+                    const cartModifiers = Object.entries(selectedModifiers).map(([groupId, selection]) => {
+                      const modifier = modifiers.find(m => m._id === groupId);
+                      if (Array.isArray(selection)) {
+                        return selection.map(optionId => {
+                          const option = modifier?.options.find(o => o._id === optionId);
+                          return {
+                            id: option?.name || optionId,
+                            name: option?.name || '',
+                            price: option?.price || 0,
+                            groupId: groupId,
+                            optionId: optionId
+                          };
+                        });
+                      } else {
+                        const option = modifier?.options.find(o => o._id === selection);
+                        return {
+                          id: option?.name || selection,
+                          name: option?.name || '',
+                          price: option?.price || 0,
+                          groupId: groupId,
+                          optionId: selection
+                        };
+                      }
+                    }).flat();
+                    
+                    // Create cart item for group order
+                    const cartItem = {
+                      id: item._id || item.id, // Use the actual MongoDB _id for the menuItemId
+                      name: item.name,
+                      price: totalPrice,
+                      quantity: quantity,
+                      specialInstructions: specialInstructions,
+                      modifiers: cartModifiers.length > 0 ? cartModifiers : []
+                    };
+                    
+                    await addItemToGroupCart(cartItem);
+                    toast.success(`Added ${item.name} to group order`);
+                    
+                    // Close modal
+                    if (onAddToCart) {
+                      onAddToCart(e);
+                    }
+                  } catch (error) {
+                    toast.error('Failed to add item to group order');
+                  }
+                }}
+                className="rounded-full px-6 py-6 h-auto bg-green-600 hover:bg-green-700 text-white"
+              >
+                <Users size={18} className="mr-2" />
+                Add to Group
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

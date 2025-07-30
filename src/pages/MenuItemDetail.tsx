@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Heart, ArrowLeft, Plus, Minus, ShoppingCart, Clock, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import MenuItemRating from '@/components/MenuItemRating';
 
 const MenuItemDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -297,6 +298,15 @@ const MenuItemDetail: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Rating Component */}
+          <MenuItemRating
+            menuItemId={item.id}
+            menuItemName={item.name}
+            onRatingSubmitted={(rating, review) => {
+              console.log('Rating submitted:', rating, review);
+            }}
+          />
         </div>
       </div>
     </div>

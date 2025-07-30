@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { MenuGrid } from '@/components/menu/MenuGrid';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { TabsList, TabsTrigger, Tabs } from '@/components/ui/tabs';
-import { Search } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Search, Users } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
 import { useQuery } from '@tanstack/react-query';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { ItemDetailDrawer } from '@/components/ItemDetailDrawer';
 import { MenuItem } from '@/types/menu';
 import { MenuItemCardSkeleton } from '@/components/menu/MenuItemCardSkeleton';
+import { useTableInfo } from '@/context/TableContext';
 
 // Default categories if API fails
 const defaultCategories = [
@@ -22,6 +24,8 @@ const defaultCategories = [
 
 const Menu: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { tableId, restaurantId } = useTableInfo();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -63,6 +67,34 @@ const Menu: React.FC = () => {
       <div className="text-center mb-8 md:mb-12">
         <h1 className="text-3xl font-medium mb-4">Our Menu</h1>
         <p className="text-muted-foreground">Discover our exquisite selection of dishes</p>
+        
+        {/* Group Ordering Button - redirects to cart */}
+        <div className="mt-6">
+          <Button
+            onClick={() => {
+              console.log('Group Order button clicked - redirecting to cart', { tableId, restaurantId });
+              navigate('/cart');
+            }}
+            variant="outline"
+            className="rounded-full px-6 py-2 border-primary text-primary hover:bg-primary hover:text-white transition-colors"
+            disabled={!tableId}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Group Order
+          </Button>
+          {!tableId && (
+            <p className="text-xs text-red-500 mt-1">
+              Missing table info (tableId: {tableId || 'missing'})
+            </p>
+          )}
+        </div>
+        
+        {/* Debug info for development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-4 p-2 bg-gray-100 rounded text-xs">
+            Debug: tableId={tableId}, restaurantId={restaurantId}
+          </div>
+        )}
       </div>
       
       {/* Search and Categories */}
@@ -126,6 +158,7 @@ const Menu: React.FC = () => {
           )}
         </DrawerContent>
       </Drawer>
+
     </div>
   );
 };

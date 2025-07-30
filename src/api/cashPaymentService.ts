@@ -44,12 +44,28 @@ export const createCashPaymentRequest = async (
  * Get all cash payment requests by table ID
  */
 export const getCashPaymentRequestsByTable = async (
-  tableId: string
+  tableId: string,
+  userId?: string,
+  deviceId?: string
 ): Promise<CashPaymentResponse> => {
   try {
     console.log('Getting cash payment requests for table:', tableId);
     
-    const response = await apiClient.get(`/api/cash-payments/table/${tableId}`);
+    // Build query parameters - need either userId or deviceId for security
+    const queryParams = new URLSearchParams();
+    
+    if (userId) {
+      queryParams.append('userId', userId);
+    } else if (deviceId) {
+      queryParams.append('deviceId', deviceId);
+    } else {
+      // Generate a device ID if none provided (for guest users)
+      const generatedDeviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      queryParams.append('deviceId', generatedDeviceId);
+      console.log('Generated device ID for guest user:', generatedDeviceId);
+    }
+    
+    const response = await apiClient.get(`/api/cash-payments/table/${tableId}?${queryParams.toString()}`);
     
     console.log('Cash payment requests found:', response.data);
     return response.data;

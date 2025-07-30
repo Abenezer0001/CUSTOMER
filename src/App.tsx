@@ -9,6 +9,7 @@ import { FavoritesProvider } from "@/context/FavoritesContext";
 import { OrdersProvider } from "@/context/OrdersContext";
 import { TableProvider } from "@/context/TableContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { GroupOrderProvider } from "@/context/GroupOrderContext";
 import { ThemeProvider } from "next-themes";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
@@ -30,6 +31,7 @@ import CategoryDetail from "./pages/CategoryDetail";
 import ScanTable from "./pages/ScanTable";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
+import GroupOrderPage from "./pages/GroupOrderPage";
 
 // Create a new client with proper configuration
 const queryClient = new QueryClient({
@@ -49,10 +51,11 @@ const App = () => {
           <BrowserRouter>
             <AuthProvider>
               <TableProvider>
-                <CartProvider>
-                  <OrdersProvider>
-                    <FavoritesProvider>
-                      <TooltipProvider>
+                <GroupOrderProvider>
+                  <CartProvider>
+                    <OrdersProvider>
+                      <FavoritesProvider>
+                        <TooltipProvider>
                         <Toaster />
                         <Sonner position="top-right" closeButton />
                         <Routes>
@@ -85,6 +88,7 @@ const App = () => {
                             } />
                             <Route path="/payment/success" element={<PaymentSuccess />} />
                             <Route path="/payment/cancel" element={<PaymentCancel />} />
+                            <Route path="/group-order/:joinCode" element={<GroupOrderPage />} />
                             <Route path="/login" element={<Login />} />
                             <Route path="/login/success" element={<LoginSuccess />} />
                             <Route path="/signup" element={<Signup />} />
@@ -96,10 +100,11 @@ const App = () => {
                             <Route path="*" element={<NotFound />} />
                           </Route>
                         </Routes>
-                      </TooltipProvider>
-                    </FavoritesProvider>
-                  </OrdersProvider>
-                </CartProvider>
+                        </TooltipProvider>
+                      </FavoritesProvider>
+                    </OrdersProvider>
+                  </CartProvider>
+                </GroupOrderProvider>
               </TableProvider>
             </AuthProvider>
           </BrowserRouter>

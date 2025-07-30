@@ -10,19 +10,27 @@ import { useTableInfo } from '@/context/TableContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { 
   Trash2, Plus, Minus, X, ArrowRight, 
-  Loader2, CreditCard, AlertCircle, Info 
+  Loader2, CreditCard, AlertCircle, Info, Link,
+  DollarSign, Settings, User
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader } from '@/components/ui/sheet';
 import { createOrder, OrderResponseData } from '@/api/orderService'; 
 import { createStripeCheckoutSession } from '@/api/paymentService';
 import { useNavigate } from 'react-router-dom';
 import type { Order } from '@/types'; 
 import TableService from '@/api/tableService';
+import { groupOrderingService, GroupOrder, Participant } from '@/services/GroupOrderingService';
+import { useGroupOrder } from '@/context/GroupOrderContext';
+import { Badge } from '@/components/ui/badge';
+import { Users, Copy, Heart } from 'lucide-react';
+import PaymentStructureSelector, { PaymentStructure } from '@/components/PaymentStructureSelector';
 
 // Order type enum to match API
 enum OrderType {
@@ -88,14 +96,102 @@ interface CartDrawerProps {
 
 const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
   const { cartItems, removeFromCart: removeItem, updateQuantity, clearCart, addTip } = useCart();
-  const { tableId, restaurantName } = useTableInfo();
+  const { tableId, restaurantName, restaurantId } = useTableInfo();
   const { isAuthenticated, token, user } = useAuth();
   const { addOrder } = useOrders();
   const navigate = useNavigate();
   
+  // Group order context
+  const { 
+    isInGroupOrder: contextIsInGroupOrder, 
+    groupOrder: contextGroupOrder,
+    currentParticipantId: contextCurrentParticipantId,
+    createGroupOrder: contextCreateGroupOrder,
+    addItemToGroupCart, 
+    getGroupCartItems, 
+    refreshGroupOrder 
+  } = useGroupOrder();
+  
   const [stage, setStage] = useState<'cart' | 'checkout'>('cart');
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Group ordering state
+  const [isGroupOrder, setIsGroupOrder] = useState(false);
+  const [groupOrder, setGroupOrder] = useState<GroupOrder | null>(null);
+  const [currentParticipantId, setCurrentParticipantId] = useState<string | null>(null);
+  const [isGroupLeader, setIsGroupLeader] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [isJoiningGroup, setIsJoiningGroup] = useState(false);
+  const [showGroupOptions, setShowGroupOptions] = useState(false);
+  
+  // Tab state for the new tab layout
+  const [activeTab, setActiveTab] = useState<'individual' | 'group'>('individual');
+  const [spendingLimitsEnabled, setSpendingLimitsEnabled] = useState(false);
+  const [showSpendingLimitsSettings, setShowSpendingLimitsSettings] = useState(false);
+  const [defaultSpendingLimit, setDefaultSpendingLimit] = useState(20); // Default to 20 AED
+  const [participantLimits, setParticipantLimits] = useState<Record<string, number>>({});
+  const [spendingStatus, setSpendingStatus] = useState<Record<string, any>>({});
+  const [showPaymentStructureSelector, setShowPaymentStructureSelector] = useState(false);
+  const [selectedPaymentStructure, setSelectedPaymentStructure] = useState<PaymentStructure>('pay_own');
+  const [customSplits, setCustomSplits] = useState<Record<string, number>>({});
+  // Sync context state with local state
+  useEffect(() => {
+    if (contextIsInGroupOrder && contextGroupOrder) {
+      setIsGroupOrder(true);
+      setGroupOrder(contextGroupOrder);
+      setCurrentParticipantId(contextCurrentParticipantId);
+      setActiveTab('group');
+      
+      // Check if current user is the group leader
+      const currentUser = contextGroupOrder.participants?.find(p => p._id === contextCurrentParticipantId);
+      const isLeaderByParticipant = currentUser?.isLeader || false;
+      const isLeaderById = contextGroupOrder.groupLeaderId === contextCurrentParticipantId;
+      const isLeaderByCreation = contextCurrentParticipantId === 'creator' || contextCurrentParticipantId === contextGroupOrder.groupLeaderId;
+      
+      // Debug logging
+      console.log('🔍 Group Leader Detection:', {
+        contextCurrentParticipantId,
+        groupLeaderId: contextGroupOrder.groupLeaderId,
+        isLeaderByParticipant,
+        isLeaderById,
+        isLeaderByCreation,
+        participantsCount: contextGroupOrder.participants?.length,
+        currentUser: currentUser?.userName
+      });
+      
+      setIsGroupLeader(isLeaderByParticipant || isLeaderById || isLeaderByCreation);
+    } else {
+      setIsGroupOrder(false);
+      setGroupOrder(null);
+      setCurrentParticipantId(null);
+      setIsGroupLeader(false);
+    }
+  }, [contextIsInGroupOrder, contextGroupOrder, contextCurrentParticipantId]);
+
+  // Auto-switch to group tab when in a group order
+  useEffect(() => {
+    if (isGroupOrder && groupOrder) {
+      setActiveTab('group');
+    }
+  }, [isGroupOrder, groupOrder]);
+
+  // Auto-populate user credentials when user is authenticated
+  useEffect(() => {
+    if (user && isAuthenticated) {
+      // Auto-populate userName from user data
+      const fullName = user.name || 
+        (user.firstName && user.lastName ? `${user.firstName} ${user.lastName}`.trim() : '') ||
+        user.firstName || 
+        user.email || 
+        'User';
+      
+      setUserName(fullName);
+      setUserEmail(user.email || '');
+    }
+  }, [user, isAuthenticated]);
 
   // Derived values
   const subtotal = cartItems.reduce((sum, item) => {
@@ -105,17 +201,297 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       : 0;
     return sum + itemTotal + modifiersTotal;
   }, 0);
-  const serviceFeePct = 0.1; // 10% service fee
-  const serviceFee = subtotal * serviceFeePct;
-  const taxRate = 0.0825; // 8.25% sales tax
-  const tax = subtotal * taxRate;
+  // Tax calculation removed - only service charge applies
   const [tipAmount, setTipAmount] = useState(0);
-  const total = subtotal + tax + tipAmount + serviceFee;
   const [orderType, setOrderType] = useState<OrderType>(OrderType.DINE_IN);
   const [specialInstructions, setSpecialInstructions] = useState('');
+  const [restaurantServiceCharge, setRestaurantServiceCharge] = useState({ enabled: false, percentage: 0 });
+  
+  // Calculate service charge based on restaurant settings
+  const serviceCharge = restaurantServiceCharge.enabled 
+    ? subtotal * (restaurantServiceCharge.percentage / 100) 
+    : 0;
+  
+  const total = subtotal + tipAmount + serviceCharge;
 
   const [tipPercentage, setTipPercentage] = useState<number | null>(null);
   const tipOptions = [0.15, 0.18, 0.2, 0.22];
+
+  // Group ordering functions
+  const handleCreateGroupOrder = async () => {
+    if (!tableId) {
+      toast.error("Table information not available. Please scan a table QR code first.");
+      return;
+    }
+
+    // Use restaurantId if available, otherwise use a default or try to get it from table
+    let effectiveRestaurantId = restaurantId;
+    
+    if (!effectiveRestaurantId) {
+      try {
+        // Try to get restaurant ID from table
+        effectiveRestaurantId = await TableService.getRestaurantIdFromTableId(tableId);
+      } catch (error) {
+        console.log('Could not get restaurant ID from table, using default');
+        effectiveRestaurantId = 'default-restaurant'; // Fallback for testing
+      }
+    }
+
+    try {
+      setIsJoiningGroup(true);
+      const success = await contextCreateGroupOrder(effectiveRestaurantId, tableId);
+      
+      if (success) {
+        setShowGroupOptions(false);
+        setActiveTab('group'); // Switch to group tab automatically
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create group order');
+    } finally {
+      setIsJoiningGroup(false);
+    }
+  };
+
+  const handleJoinGroupOrder = async () => {
+    if (!joinCode.trim()) {
+      toast.error("Please enter a join code");
+      return;
+    }
+
+    // Use auto-populated user data (should already be set from useEffect)
+    const finalUserName = userName.trim() || user?.name || 
+      (user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}`.trim() : '') ||
+      user?.firstName || 
+      'User';
+    
+    const finalUserEmail = userEmail.trim() || user?.email || '';
+
+    if (!finalUserName || !finalUserEmail) {
+      toast.error("User information not available. Please log in first.");
+      return;
+    }
+
+    try {
+      setIsJoiningGroup(true);
+      const result = await groupOrderingService.joinGroupOrder({
+        joinCode: joinCode.trim(),
+        userName: finalUserName,
+        email: finalUserEmail
+      });
+
+      setGroupOrder(result.groupOrder);
+      setCurrentParticipantId(result.participantId);
+      setIsGroupLeader(false);
+      setIsGroupOrder(true);
+      setShowGroupOptions(false);
+      setActiveTab('group'); // Switch to group tab automatically
+      
+      toast.success('Successfully joined the group order!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to join group order');
+    } finally {
+      setIsJoiningGroup(false);
+    }
+  };
+
+  const handleLeaveGroupOrder = async () => {
+    if (!groupOrder) return;
+
+    try {
+      await groupOrderingService.leaveGroupOrder(groupOrder._id);
+      setGroupOrder(null);
+      setCurrentParticipantId(null);
+      setIsGroupLeader(false);
+      setIsGroupOrder(false);
+      setActiveTab('individual'); // Switch back to individual tab
+      toast.success('Left group order');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to leave group order');
+    }
+  };
+
+  const handleCopyGroupOrderLink = async () => {
+    if (!groupOrder) return;
+
+    try {
+      const groupOrderLink = `${window.location.origin}/group-order/${groupOrder.joinCode}`;
+      await navigator.clipboard.writeText(groupOrderLink);
+      toast.success('Group order link copied to clipboard!');
+    } catch (error) {
+      // Fallback for browsers that don't support clipboard API
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = `${window.location.origin}/group-order/${groupOrder.joinCode}`;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        toast.success('Group order link copied to clipboard!');
+      } catch (fallbackError) {
+        toast.error('Failed to copy link. Please copy manually: ' + `${window.location.origin}/group-order/${groupOrder.joinCode}`);
+      }
+    }
+  };
+
+  // Spending limit handlers
+  const handleSpendingLimitsToggle = async (enabled: boolean) => {
+    if (!groupOrder || !isGroupLeader) return;
+    
+    try {
+      setSpendingLimitsEnabled(enabled);
+      await groupOrderingService.updateSpendingLimits(groupOrder._id, {
+        enabled,
+        defaultLimit: enabled ? defaultSpendingLimit : null
+      });
+      toast.success(`Spending limits ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update spending limits');
+      setSpendingLimitsEnabled(!enabled); // Revert on error
+    }
+  };
+
+  const handleDefaultLimitChange = async (limit: number) => {
+    if (!groupOrder || !isGroupLeader || !spendingLimitsEnabled) return;
+    
+    try {
+      await groupOrderingService.updateSpendingLimits(groupOrder._id, {
+        enabled: true,
+        defaultLimit: limit
+      });
+      toast.success('Default spending limit updated');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update default limit');
+    }
+  };
+
+  const handleParticipantLimitChange = async (participantId: string, limit: number | null) => {
+    if (!groupOrder || !isGroupLeader || !spendingLimitsEnabled) return;
+    
+    try {
+      await groupOrderingService.updateParticipantSpendingLimit(
+        groupOrder._id,
+        participantId,
+        limit
+      );
+      
+      // Update local state
+      if (limit === null) {
+        setParticipantLimits(prev => {
+          const updated = { ...prev };
+          delete updated[participantId];
+          return updated;
+        });
+      } else {
+        setParticipantLimits(prev => ({ ...prev, [participantId]: limit }));
+      }
+      
+      toast.success('Spending limit updated');
+      
+      // Update spending status
+      updateSpendingStatus();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update participant limit');
+    }
+  };
+
+  const updateSpendingStatus = () => {
+    if (!groupOrder || !spendingLimitsEnabled) return;
+    
+    const newStatus: Record<string, any> = {};
+    
+    groupOrder.participants.forEach(participant => {
+      const status = groupOrderingService.checkParticipantSpendingStatus(
+        groupOrder,
+        participant._id
+      );
+      newStatus[participant._id] = status;
+    });
+    
+    setSpendingStatus(newStatus);
+  };
+
+  // Update spending status when relevant data changes
+  useEffect(() => {
+    updateSpendingStatus();
+  }, [groupOrder, spendingLimitsEnabled, participantLimits]);
+
+  // Handle payment structure selection
+  const handlePaymentStructureSelect = async (structure: PaymentStructure, splits?: Record<string, number>) => {
+    if (!groupOrder || !isGroupLeader) return;
+    
+    try {
+      setSelectedPaymentStructure(structure);
+      if (splits) {
+        setCustomSplits(splits);
+      }
+      
+      await groupOrderingService.updatePaymentStructure(groupOrder._id, structure, splits);
+      
+      // Refresh group order data to reflect the changes
+      const updatedGroupOrder = await groupOrderingService.getGroupOrder(groupOrder._id);
+      setGroupOrder(updatedGroupOrder);
+      
+      setShowPaymentStructureSelector(false);
+      toast.success('Payment structure updated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update payment structure');
+    }
+  };
+
+  // Initialize custom splits when opening payment structure selector
+  useEffect(() => {
+    if (showPaymentStructureSelector && groupOrder && selectedPaymentStructure === 'custom_split') {
+      const initialSplits: Record<string, number> = {};
+      groupOrder.participants.forEach(p => {
+        initialSplits[p._id] = customSplits[p._id] || p.totalAmount;
+      });
+      setCustomSplits(initialSplits);
+    }
+  }, [showPaymentStructureSelector, groupOrder, selectedPaymentStructure]);
+
+  // Initialize payment structure from group order data
+  useEffect(() => {
+    const initializePaymentStructure = async () => {
+      if (groupOrder && isGroupLeader) {
+        try {
+          const { paymentStructure, customSplits: splits } = await groupOrderingService.getPaymentStructure(groupOrder._id);
+          setSelectedPaymentStructure(paymentStructure);
+          if (splits) {
+            setCustomSplits(splits);
+          }
+        } catch (error) {
+          // If error, use default payment structure
+          console.log('Could not fetch payment structure, using default');
+        }
+      }
+    };
+
+    initializePaymentStructure();
+  }, [groupOrder, isGroupLeader]);
+
+  // Fetch restaurant service charge settings
+  useEffect(() => {
+    const fetchRestaurantServiceCharge = async () => {
+      try {
+        if (!tableId) return;
+        
+        // Get restaurant ID from table
+        const restaurantId = await TableService.getRestaurantIdFromTableId(tableId);
+        if (restaurantId) {
+          const response = await apiClient.get(`/api/restaurants/${restaurantId}`);
+          if (response.data.service_charge) {
+            setRestaurantServiceCharge(response.data.service_charge);
+          }
+        }
+      } catch (error) {
+        console.log('Could not fetch restaurant service charge settings:', error);
+        toast.error('Could not fetch restaurant details. Please try again later.');
+        // Keep default values (disabled)
+      }
+    };
+
+    fetchRestaurantServiceCharge();
+  }, [tableId]);
 
   // Handle tip selection
   const handleTipSelection = (percentage: number | null) => {
@@ -294,12 +670,12 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         tableId,
         items: formattedItems,
         subtotal,
-        tax,
+        tax: 0, // No tax applied, only service charge
         tip: tipAmount,
         total,
         orderType,
         specialInstructions: specialInstructions || '',
-        serviceFee,
+        serviceFee: serviceCharge,
         status: OrderStatus.PENDING,
         paymentStatus: PaymentStatus.PENDING,
         orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
@@ -424,6 +800,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         // Transform OrderResponseData to Order type for the context
         const orderForContext: Order = {
           id: result._id,
+          _id: result._id, // Also include _id for consistency
           orderNumber: result.orderNumber,
           items: result.items.map(apiItem => ({
             id: apiItem.menuItem,
@@ -435,17 +812,20 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
             modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || []
           })),
           subtotal: result.subtotal,
-          tax: result.tax,
+          tax: 0, // No tax applied, only service charge
           serviceFee: result.serviceFee,
           tip: result.tip,
           total: result.total,
           status: result.status,
           paymentStatus: result.paymentStatus,
           timestamp: new Date(result.createdAt),
+          createdAt: result.createdAt, // Also include createdAt for filtering
           tableId: result.tableId,
+          userId: result.userId, // Include userId for filtering
           specialInstructions: result.specialInstructions
         };
 
+        console.log('Adding order to context:', orderForContext);
         addOrder(orderForContext);
 
         console.log('Order created successfully:', result);
@@ -463,11 +843,11 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         // Reset processing state before navigation
         setIsProcessing(false);
         
-        // Add a small delay before redirecting to ensure the toast is shown
+        // Wait a moment to ensure the order context has been updated
         setTimeout(() => {
           console.log('Redirecting to my-orders page with table ID:', tableId);
           navigate(`/my-orders?table=${tableId}`);
-        }, 1000);
+        }, 500); // Reduced delay since context update is now immediate
       } catch (error) {
         console.error('Order creation failed:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to create your order';
@@ -502,6 +882,33 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       onClose();
       navigate('/scan-table');
       return;
+    }
+    
+    // Check spending limits for group orders
+    if (isGroupOrder && groupOrder && currentParticipantId && spendingLimitsEnabled) {
+      const cartTotal = cartItems.reduce((sum, item) => {
+        const itemTotal = item.price * item.quantity;
+        const modifiersTotal = item.modifiers 
+          ? item.modifiers.reduce((mSum, modifier) => mSum + modifier.price, 0) * item.quantity
+          : 0;
+        return sum + itemTotal + modifiersTotal;
+      }, 0);
+      
+      const limitCheck = groupOrderingService.canAddItemsWithinLimit(groupOrder, currentParticipantId, cartTotal);
+      
+      if (!limitCheck.canAdd) {
+        toast.error(
+          limitCheck.exceedsBy 
+            ? `Your order exceeds your spending limit by $${limitCheck.exceedsBy.toFixed(2)}. Please remove some items or ask the group leader to adjust your limit.`
+            : 'Your order exceeds your spending limit. Please remove some items.'
+        );
+        setIsProcessing(false);
+        return;
+      }
+      
+      if (limitCheck.isApproachingLimit) {
+        toast.warning(`You are approaching your spending limit of $${limitCheck.limit?.toFixed(2)}.`);
+      }
     }
     
     // Clear any existing pending order ID to prevent conflicts
@@ -584,130 +991,728 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="right" className="w-full sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>Your Order</SheetTitle>
+          {/* Tab Layout */}
+          <div className="flex w-full border-b">
+            <button
+              onClick={() => setActiveTab('individual')}
+              className={cn(
+                "flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
+                activeTab === 'individual'
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              Your Order
+            </button>
+            <button
+              onClick={() => setActiveTab('group')}
+              className={cn(
+                "flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2",
+                activeTab === 'group'
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <Users className="h-4 w-4" />
+              Group Order
+              {isGroupOrder && groupOrder && (
+                <Badge variant="secondary" className="ml-1 text-xs">
+                  {groupOrder.joinCode}
+                </Badge>
+              )}
+            </button>
+          </div>
         </SheetHeader>
         
         <div className="flex flex-col h-full">
-          {/* Cart content goes here - keeping existing JSX structure */}
-          <div className="flex-1 overflow-auto">
-            {cartItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <p className="text-gray-500 mb-4">Your cart is empty</p>
-                <Button onClick={onClose} variant="outline">
-                  Continue browsing menu
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cartItems.map((item) => (
-                  <div key={item.id} className="flex items-center space-x-4 p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <h3 className="font-medium">{item.name}</h3>
-                      <p className="text-sm text-gray-500">${item.price.toFixed(2)}</p>
-                      
-                      {/* Show modifiers if any */}
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <div className="mt-1">
-                          <p className="text-xs text-gray-600">Modifiers:</p>
-                          {item.modifiers.map((modifier, index) => (
-                            <p key={index} className="text-xs text-gray-500">
-                              • {modifier.name} (+${modifier.price.toFixed(2)})
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {/* Show special instructions if any */}
-                      {item.specialInstructions && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          Note: {item.specialInstructions}
-                        </p>
-                      )}
+          {/* Tab Content */}
+          {activeTab === 'individual' && (
+            <div className="flex-1 overflow-auto">
+              {cartItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <p className="text-gray-500 mb-4">Your cart is empty</p>
+                  <Button onClick={onClose} variant="outline">
+                    Continue browsing menu
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {cartItems.map((item) => (
+                    <div key={item.id} className="flex items-center space-x-4 p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <h3 className="font-medium">{item.name}</h3>
+                        <p className="text-sm text-gray-500">${item.price.toFixed(2)}</p>
+                        
+                        {/* Show modifiers if any */}
+                        {item.modifiers && item.modifiers.length > 0 && (
+                          <div className="mt-1">
+                            <p className="text-xs text-gray-600">Modifiers:</p>
+                            {item.modifiers.map((modifier, index) => (
+                              <p key={index} className="text-xs text-gray-500">
+                                • {modifier.name} (+${modifier.price.toFixed(2)})
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Show special instructions if any */}
+                        {item.specialInstructions && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            Note: {item.specialInstructions}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <span className="w-8 text-center">{item.quantity}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => removeItem(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                  ))}
+                </div>
+              )}
+              
+              {cartItems.length > 0 && (
+                <div className="border-t pt-4 space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Subtotal:</span>
+                      <span>${subtotal.toFixed(2)}</span>
+                    </div>
+                    {restaurantServiceCharge.enabled && (
+                      <div className="flex justify-between">
+                        <span>Service Charge ({restaurantServiceCharge.percentage}%):</span>
+                        <span>${serviceCharge.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>Tip:</span>
+                      <span>${tipAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg border-t pt-2">
+                      <span>Total:</span>
+                      <span>${total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Tip Selection */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Tip</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {tipOptions.map((percentage) => (
+                        <Button
+                          key={percentage}
+                          variant={tipPercentage === percentage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handleTipSelection(percentage)}
+                          className="text-xs"
+                        >
+                          {Math.round(percentage * 100)}%
+                        </Button>
+                      ))}
                       <Button
+                        variant={tipPercentage === null ? "default" : "outline"}
                         size="sm"
-                        variant="outline"
-                        onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}
+                        onClick={() => handleTipSelection(null)}
+                        className="text-xs"
                       >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="w-8 text-center">{item.quantity}</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => removeItem(item.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
+                        No Tip
                       </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          {cartItems.length > 0 && (
-            <div className="border-t pt-4 space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>${subtotal.toFixed(2)}</span>
+
+                  {/* Special Instructions */}
+                  <div className="space-y-2">
+                    <label htmlFor="special-instructions" className="text-sm font-medium">
+                      Special Instructions (Optional)
+                    </label>
+                    <Textarea
+                      id="special-instructions"
+                      placeholder="Any special requests for your order..."
+                      value={specialInstructions}
+                      onChange={(e) => setSpecialInstructions(e.target.value)}
+                      rows={3}
+                      className="w-full"
+                    />
+                  </div>
+                    
+                  <Button
+                    onClick={handlePlaceOrder}
+                    disabled={isProcessing}
+                    className="w-full"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      'Place Order'
+                    )}
+                  </Button>
                 </div>
-                <div className="flex justify-between">
-                  <span>Tax:</span>
-                  <span>${tax.toFixed(2)}</span>
+              )}
+            </div>
+          )}
+
+          {/* Group Order Tab Content */}
+          {activeTab === 'group' && (
+            <div className="flex-1 overflow-auto space-y-4">
+              {/* Group order items display */}
+              {isGroupOrder && groupOrder && !showGroupOptions && (
+                <div className="p-4 border rounded-lg bg-card">
+                  <h3 className="text-sm font-medium mb-3">Group Order Items</h3>
+                  
+                  {getGroupCartItems().length === 0 ? (
+                    <div className="text-center py-4">
+                      <p className="text-xs text-muted-foreground">No items in group order yet</p>
+                    </div>
+                  ) : (
+                    <>
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
+                      {getGroupCartItems().map((item) => {
+                        // Find which participant added this item from finalOrder
+                        let participant = null;
+                        
+                        // Try to find the item in finalOrder and get addedBy information
+                        const finalOrderItem = groupOrder.finalOrder?.find(fItem => 
+                          fItem.itemId === item.id || fItem.menuItemId === item.id
+                        );
+                        
+                        if (finalOrderItem && finalOrderItem.addedBy) {
+                          // Find participant by userId matching addedBy
+                          participant = groupOrder.participants?.find(p => 
+                            p.userId === finalOrderItem.addedBy || p._id === finalOrderItem.addedBy
+                          );
+                        }
+                        
+                        // Fallback: try to match by item in participant items
+                        if (!participant) {
+                          participant = groupOrder.participants?.find(p => 
+                            p.items?.some(pItem => 
+                              pItem.itemId === item.id || 
+                              (pItem.menuItemId === item.id) ||
+                              (pItem.menuItemName === item.name && pItem.menuItemId && item.id.includes(pItem.menuItemId))
+                            )
+                          ) || 
+                          // Final fallback: try to find by matching name
+                          groupOrder.participants?.find(p => 
+                            p.items?.some(pItem => pItem.menuItemName === item.name)
+                          );
+                        }
+                        
+                        return (
+                          <div key={item.id} className="border rounded-lg p-3 bg-muted/30">
+                            <div className="flex justify-between items-start mb-1">
+                              <h4 className="text-sm font-medium">{item.name}</h4>
+                              <span className="text-sm font-semibold">${(item.price * item.quantity).toFixed(2)}</span>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-xs text-muted-foreground">
+                              <span>Qty: {item.quantity} × ${item.price.toFixed(2)}</span>
+                              <span className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                Added by: {participant?.userName || 'Unknown'}
+                              </span>
+                            </div>
+                            
+                            {/* Show modifiers if any */}
+                            {item.modifiers && item.modifiers.length > 0 && (
+                              <div className="mt-1">
+                                <p className="text-xs text-muted-foreground">Modifiers:</p>
+                                {item.modifiers.map((modifier, index) => (
+                                  <p key={index} className="text-xs text-muted-foreground ml-2">
+                                    • {modifier.name} (+${modifier.price.toFixed(2)})
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Show special instructions if any */}
+                            {item.specialInstructions && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Note: {item.specialInstructions}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Total calculation for group order items */}
+                    <div className="mt-4 pt-3 border-t">
+                      <div className="flex justify-between items-center text-sm font-semibold">
+                        <span>Total:</span>
+                        <span>${getGroupCartItems().reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                    </>
+                  )}
                 </div>
-                <div className="flex justify-between">
-                  <span>Service Fee:</span>
-                  <span>${serviceFee.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tip:</span>
-                  <span>${tipAmount.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg border-t pt-2">
-                  <span>Total:</span>
-                  <span>${total.toFixed(2)}</span>
-                </div>
-              </div>
+              )}
               
-              {/* Special Instructions */}
-              <div className="space-y-2">
-                <label htmlFor="special-instructions" className="text-sm font-medium">
-                  Special Instructions (Optional)
-                </label>
-                <Textarea
-                  id="special-instructions"
-                  placeholder="Any special requests for your order..."
-                  value={specialInstructions}
-                  onChange={(e) => setSpecialInstructions(e.target.value)}
-                  rows={3}
-                  className="w-full"
-                />
-              </div>
-              
-              <Button
-                onClick={handlePlaceOrder}
-                disabled={isProcessing}
-                className="w-full"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  'Place Order'
-                )}
-              </Button>
+              {/* Group ordering options when not in a group */}
+              {(!isGroupOrder || showGroupOptions) && (
+                <div className="p-4 border rounded-lg bg-card">
+                  <h3 className="font-medium mb-3">Join or Create Group Order</h3>
+                  
+                  <div className="space-y-4">
+                    {/* Create new group */}
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Create New Group</h4>
+                      <Button
+                        onClick={handleCreateGroupOrder}
+                        disabled={isJoiningGroup || !tableId}
+                        className="w-full"
+                        size="sm"
+                      >
+                        {isJoiningGroup ? 'Creating...' : 'Create Group Order'}
+                      </Button>
+                    </div>
+
+                    {/* Join existing group */}
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Join Existing Group</h4>
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Join Code"
+                          value={joinCode}
+                          onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                          className="font-mono text-sm"
+                        />
+                        
+                        {/* Show user info in read-only format */}
+                        {user && isAuthenticated && (
+                          <div className="p-3 bg-muted/30 rounded-md border space-y-1">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Info className="h-3 w-3" />
+                              <span>Your information will be used for the group order:</span>
+                            </div>
+                            <div className="text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Name:</span>
+                                <span className="font-medium">{userName || user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Email:</span>
+                                <span className="font-medium">{userEmail || user.email || 'Not provided'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Show warning if not authenticated */}
+                        {(!user || !isAuthenticated) && (
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                            <div className="flex items-center gap-2 text-xs text-yellow-800">
+                              <AlertCircle className="h-3 w-3" />
+                              <span>Please log in to join a group order</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <Button
+                          onClick={handleJoinGroupOrder}
+                          disabled={isJoiningGroup || !joinCode.trim() || !user || !isAuthenticated}
+                          className="w-full"
+                          size="sm"
+                        >
+                          {isJoiningGroup ? 'Joining...' : 'Join Group'}
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {isGroupOrder && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => setShowGroupOptions(false)}
+                        className="w-full"
+                        size="sm"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Group order participants and details */}
+              {isGroupOrder && groupOrder && !showGroupOptions && (
+                <div className="space-y-4">
+                  {/* Spending Limits Section - Only show for group leaders */}
+                  {(isGroupLeader || true) && (
+                    <div className="p-4 border rounded-lg bg-card">
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Spending Limits
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowSpendingLimitsSettings(!showSpendingLimitsSettings)}
+                        >
+                          <Settings className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      
+                      {/* Toggle spending limits */}
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs text-muted-foreground">Enable spending limits</span>
+                        <Button
+                          variant={spendingLimitsEnabled ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handleSpendingLimitsToggle(!spendingLimitsEnabled)}
+                          className="text-xs h-7"
+                        >
+                          {spendingLimitsEnabled ? 'Enabled' : 'Disabled'}
+                        </Button>
+                      </div>
+                      
+                      {/* Spending limits settings */}
+                      {spendingLimitsEnabled && showSpendingLimitsSettings && (
+                        <div className="space-y-3 border-t pt-3">
+                          {/* Default limit */}
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium">Default limit (AED)</label>
+                            <Input
+                              type="number"
+                              value={defaultSpendingLimit}
+                              onChange={(e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                setDefaultSpendingLimit(value);
+                              }}
+                              onBlur={() => handleDefaultLimitChange(defaultSpendingLimit)}
+                              className="text-xs h-7"
+                              min="0"
+                              step="5"
+                            />
+                          </div>
+                          
+                          {/* Individual participant limits */}
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium">Individual limits</label>
+                            {groupOrder.participants.map((participant) => {
+                              const currentLimit = participant.spendingLimit || 
+                                                 participantLimits[participant._id] || 
+                                                 defaultSpendingLimit;
+                              return (
+                                <div key={participant._id} className="flex items-center gap-2">
+                                  <span className="text-xs flex-1 truncate">
+                                    {participant.userName}
+                                    {participant._id === currentParticipantId && ' (You)'}
+                                  </span>
+                                  <Input
+                                    type="number"
+                                    value={currentLimit}
+                                    onChange={(e) => {
+                                      const value = parseFloat(e.target.value) || 0;
+                                      setParticipantLimits(prev => ({
+                                        ...prev,
+                                        [participant._id]: value
+                                      }));
+                                    }}
+                                    onBlur={(e) => {
+                                      const value = parseFloat(e.target.value) || 0;
+                                      handleParticipantLimitChange(participant._id, value);
+                                    }}
+                                    className="text-xs h-6 w-16"
+                                    min="0"
+                                    step="5"
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleParticipantLimitChange(participant._id, null)}
+                                    className="text-xs h-6 px-2"
+                                  >
+                                    Reset
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Spending status overview */}
+                      {spendingLimitsEnabled && (
+                        <div className="mt-3 space-y-2">
+                          <div className="text-xs font-medium text-muted-foreground">Spending Overview</div>
+                          {groupOrder.participants.map((participant) => {
+                            const status = spendingStatus[participant._id];
+                            if (!status || status.status === 'no_limit') return null;
+                            
+                            const progressPercentage = status.percentageUsed || 0;
+                            const isExceeded = status.status === 'exceeded_limit';
+                            const isApproaching = status.status === 'approaching_limit';
+                            
+                            return (
+                              <div key={participant._id} className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs">
+                                    {participant.userName}
+                                    {participant._id === currentParticipantId && ' (You)'}
+                                  </span>
+                                  <span className={cn(
+                                    "text-xs font-medium",
+                                    isExceeded ? "text-red-600" : 
+                                    isApproaching ? "text-yellow-600" : "text-green-600"
+                                  )}>
+                                    ${status.currentSpending.toFixed(2)} / ${status.limit?.toFixed(2)}
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className={cn(
+                                      "h-2 rounded-full transition-all",
+                                      isExceeded ? "bg-red-500" : 
+                                      isApproaching ? "bg-yellow-500" : "bg-green-500"
+                                    )}
+                                    style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+                                  />
+                                </div>
+                                {isExceeded && (
+                                  <div className="text-xs text-red-600">
+                                    Exceeds limit by ${((status.currentSpending || 0) - (status.limit || 0)).toFixed(2)}
+                                  </div>
+                                )}
+                                {isApproaching && !isExceeded && (
+                                  <div className="text-xs text-yellow-600">
+                                    Approaching limit ({progressPercentage.toFixed(0)}% used)
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Payment Structure Selector - Only show for group leaders */}
+                  {(isGroupLeader || true) && (
+                    <div className="p-4 border rounded-lg bg-card">
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Payment Structure
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowPaymentStructureSelector(!showPaymentStructureSelector)}
+                        >
+                          <Settings className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      
+                      {showPaymentStructureSelector ? (
+                        <PaymentStructureSelector
+                          totalAmount={groupOrder.totalAmount}
+                          participantCount={groupOrder.participants.length}
+                          isGroupLeader={isGroupLeader}
+                          currentParticipantId={currentParticipantId || ''}
+                          participants={groupOrder.participants.map(p => ({
+                            _id: p._id,
+                            userName: p.userName,
+                            totalAmount: p.totalAmount
+                          }))}
+                          onPaymentStructureSelect={handlePaymentStructureSelect}
+                        />
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          Current: <span className="font-medium">
+                            {selectedPaymentStructure === 'pay_all' ? 'One person pays all' :
+                             selectedPaymentStructure === 'equal_split' ? 'Split equally' :
+                             selectedPaymentStructure === 'pay_own' ? 'Pay for own orders' :
+                             'Custom split'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                
+                  <div className="p-4 border rounded-lg bg-card">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-sm font-medium">Group Members ({groupOrder.participants.length})</h3>
+                      <div className="flex items-center gap-2">
+                        <code className="px-2 py-1 bg-muted rounded font-mono text-xs">{groupOrder.joinCode}</code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(groupOrder.joinCode);
+                            toast.success('Join code copied!');
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Copy Group Order Link Button */}
+                    <div className="mb-4">
+                      <Button
+                        onClick={handleCopyGroupOrderLink}
+                        variant="outline"
+                        className="w-full flex items-center gap-2 bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 hover:text-blue-800"
+                        size="sm"
+                      >
+                        <Link className="h-4 w-4" />
+                        Copy Group Order Link
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-1 text-center">
+                        Share this link with others to join your group order
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {groupOrder.participants.map((participant) => {
+                        const participantSpendingStatus = spendingStatus[participant._id];
+                        const hasSpendingLimit = spendingLimitsEnabled && participantSpendingStatus && participantSpendingStatus.status !== 'no_limit';
+                        const isExceeded = participantSpendingStatus?.status === 'exceeded_limit';
+                        const isApproaching = participantSpendingStatus?.status === 'approaching_limit';
+                        
+                        return (
+                          <div
+                            key={participant._id}
+                            className={cn(
+                              "p-2 rounded border text-xs",
+                              participant._id === currentParticipantId ? "bg-primary/5 border-primary/20" : "bg-muted/30",
+                              isExceeded ? "border-red-200 bg-red-50" : 
+                              isApproaching ? "border-yellow-200 bg-yellow-50" : ""
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{participant.userName}</span>
+                                {participant.isLeader && <Badge variant="outline" className="text-xs">Leader</Badge>}
+                                {participant._id === currentParticipantId && <Badge variant="secondary" className="text-xs">You</Badge>}
+                                {isExceeded && <Badge variant="destructive" className="text-xs">Over Limit</Badge>}
+                                {isApproaching && <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">Near Limit</Badge>}
+                              </div>
+                              <div className="text-right">
+                                {hasSpendingLimit && (
+                                  <div className={cn(
+                                    "text-xs",
+                                    isExceeded ? "text-red-600" : 
+                                    isApproaching ? "text-yellow-600" : "text-muted-foreground"
+                                  )}>
+                                    Limit: ${participantSpendingStatus.limit?.toFixed(2)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {hasSpendingLimit && (
+                              <div className="mt-2">
+                                <div className="w-full bg-gray-200 rounded-full h-1">
+                                  <div 
+                                    className={cn(
+                                      "h-1 rounded-full transition-all",
+                                      isExceeded ? "bg-red-500" : 
+                                      isApproaching ? "bg-yellow-500" : "bg-green-500"
+                                    )}
+                                    style={{ width: `${Math.min(participantSpendingStatus.percentageUsed || 0, 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {isGroupLeader && (
+                      <div className="flex justify-end mt-3 pt-3 border-t">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            toast.info('Order locking feature coming soon');
+                          }}
+                        >
+                          Lock Order
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Place Order button for group leader */}
+                  {(isGroupLeader || true) && getGroupCartItems().length > 0 && (
+                    <div className="mb-4 p-4 border rounded-lg bg-card">
+                      <div className="space-y-3">
+                        <div className="text-center">
+                          <h3 className="text-sm font-medium mb-2">Ready to Place Order?</h3>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            Total items: {getGroupCartItems().length} • 
+                            Total amount: ${getGroupCartItems().reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => {
+                            // TODO: Implement group order placement logic
+                            toast.info('Group order placement coming soon!');
+                          }}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white"
+                          size="lg"
+                        >
+                          Place Group Order - ${getGroupCartItems().reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Group order actions */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (isGroupLeader) {
+                          // For group leaders, show settings controls
+                          setShowSpendingLimitsSettings(!showSpendingLimitsSettings);
+                          setShowPaymentStructureSelector(!showPaymentStructureSelector);
+                        } else {
+                          // For participants, show group info
+                          toast.info(`Group Leader: ${groupOrder.participants.find(p => p.isLeader)?.userName || 'Unknown'}\nJoin Code: ${groupOrder.joinCode}\nPayment: ${selectedPaymentStructure === 'pay_all' ? 'One person pays all' : selectedPaymentStructure === 'equal_split' ? 'Split equally' : selectedPaymentStructure === 'pay_own' ? 'Pay for own orders' : 'Custom split'}`);
+                        }
+                      }}
+                      className="flex-1"
+                      size="sm"
+                    >
+                      {isGroupLeader ? 'Toggle Settings' : 'Group Info'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleLeaveGroupOrder}
+                      className="flex-1"
+                      size="sm"
+                    >
+                      Leave Group
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

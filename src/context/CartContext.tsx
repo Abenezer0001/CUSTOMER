@@ -265,7 +265,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addTip,
     itemCount,
     cartTotal,
-    tipAmount
+    tipAmount,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

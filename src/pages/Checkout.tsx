@@ -89,9 +89,10 @@ const Checkout: React.FC = () => {
         throw new Error('Failed to create order');
       }
       
-      // Add the order to local context
+      // Add the order to local context with all necessary fields
       addOrder({
         id: orderResponse._id,
+        _id: orderResponse._id, // Also include _id for consistency
         orderNumber: orderResponse.orderNumber || `ORD-${Date.now()}`,
         items: cartItems,
         subtotal,
@@ -102,7 +103,9 @@ const Checkout: React.FC = () => {
         status: OrderStatus.PENDING,
         paymentStatus: orderResponse.paymentStatus || PaymentStatus.PENDING,
         timestamp: new Date(orderResponse.createdAt),
-        tableId: tableId
+        createdAt: orderResponse.createdAt, // Include createdAt for filtering
+        tableId: tableId,
+        userId: orderResponse.userId // Include userId for filtering
       });
       
       // Create Stripe checkout session

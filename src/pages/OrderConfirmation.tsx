@@ -3,13 +3,16 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useOrders } from '@/context/OrdersContext';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Clock, Loader2, ShoppingBag, AlertTriangle, ChevronLeft } from 'lucide-react';
+import { CheckCircle, Clock, Loader2, ShoppingBag, AlertTriangle, ChevronLeft, Star } from 'lucide-react';
 import TableHeader from '@/components/TableHeader';
 import { useTableInfo } from '@/context/TableContext';
 import { getOrderById } from '@/api/orderService';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import apiClient from '@/api/apiClient';
+import RatingSubmissionModal from '@/components/RatingSubmissionModal';
+import { Rating } from '@/types';
 
 // Status badge component
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
@@ -57,6 +60,10 @@ const OrderConfirmation: React.FC = () => {
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [restaurantServiceCharge, setRestaurantServiceCharge] = useState({ enabled: false, percentage: 0 });
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [selectedItemForRating, setSelectedItemForRating] = useState<any>(null);
+  const [ratedItems, setRatedItems] = useState<Set<string>>(new Set());
   
   const orderId = location.state?.orderId;
   const [pollingActive, setPollingActive] = useState(true);
@@ -218,6 +225,26 @@ const OrderConfirmation: React.FC = () => {
       clearInterval(pollInterval);
     };
   }, [fetchOrder, orderId, pollingActive]);
+
+  // Fetch restaurant service charge settings
+  useEffect(() => {
+    const fetchRestaurantServiceCharge = async () => {
+      try {
+        const restaurantId = localStorage.getItem('restaurantId');
+        if (restaurantId) {
+          const response = await apiClient.get(`/api/restaurants/${restaurantId}/service-charge`);
+          if (response.data.service_charge) {
+            setRestaurantServiceCharge(response.data.service_charge);
+          }
+        }
+      } catch (error) {
+        console.log('Could not fetch restaurant service charge settings:', error);
+        // Keep default values (disabled)
+      }
+    };
+
+    fetchRestaurantServiceCharge();
+  }, []);
   
   // Helper functions for order display
   const getOrderStatusTitle = (status: string): string => {
@@ -401,6 +428,13 @@ const OrderConfirmation: React.FC = () => {
               <span className="text-white">${order.tax?.toFixed(2) || '0.00'}</span>
             </div>
             
+            {restaurantServiceCharge.enabled && order.service_charge && (
+              <div className="flex justify-between text-sm py-1">
+                <span className="text-purple-300/80">Service Charge ({restaurantServiceCharge.percentage}%)</span>
+                <span className="text-white">${order.service_charge?.toFixed(2) || '0.00'}</span>
+              </div>
+            )}
+            
             <div className="flex justify-between font-medium py-1">
               <span className="text-white">Total</span>
               <span className="text-white">${order.total?.toFixed(2) || '0.00'}</span>
@@ -412,6 +446,56 @@ const OrderConfirmation: React.FC = () => {
             <span>Estimated Preparation Time: 15-20 minutes</span>
           </div>
         </div>
+        
+        {/* Rating Section for Completed Orders */}
+        {(order.status?.toLowerCase() === 'completed' || order.status?.toLowerCase() === 'delivered') && isAuthenticated && (
+          <div className="bg-[#1F1D2B] border border-amber-500/20 rounded-xl p-5 shadow-lg mt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Star className="h-5 w-5 text-amber-500" />
+              <h3 className="text-lg font-semibold text-white">Rate Your Experience</h3>
+            </div>
+            
+            <p className="text-purple-300/80 text-sm mb-4">
+              Help other customers by sharing your experience with these items.
+            </p>
+            
+            <div className="space-y-3">
+              {order.items && order.items.map((item: any, index: number) => {
+                const itemKey = `${order._id}_${item._id || item.menuItem || index}`;
+                const isRated = ratedItems.has(itemKey);
+                
+                return (
+                  <div key={index} className="flex items-center justify-between p-3 bg-purple-600/10 rounded-lg">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-white">{item.name}</h4>
+                      <p className="text-sm text-purple-300/80">Quantity: {item.quantity}</p>
+                    </div>
+                    
+                    <Button
+                      variant={isRated ? "outline" : "default"}
+                      size="sm"
+                      onClick={() => {
+                        setSelectedItemForRating({
+                          ...item,
+                          orderItemKey: itemKey,
+                          restaurantId: order.restaurantId
+                        });
+                        setShowRatingModal(true);
+                      }}
+                      className={isRated 
+                        ? "border-amber-500 text-amber-500 hover:bg-amber-500/10" 
+                        : "bg-amber-500 hover:bg-amber-600 text-white"
+                      }
+                    >
+                      <Star className="h-4 w-4 mr-1" />
+                      {isRated ? 'Update Rating' : 'Rate Item'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
         <div className="flex justify-center w-full mt-6">
           <Button
@@ -432,6 +516,28 @@ const OrderConfirmation: React.FC = () => {
             Start New Order
           </Button>
         </div>
+        
+        {/* Rating Submission Modal */}
+        {selectedItemForRating && (
+          <RatingSubmissionModal
+            isOpen={showRatingModal}
+            onClose={() => {
+              setShowRatingModal(false);
+              setSelectedItemForRating(null);
+            }}
+            menuItemId={selectedItemForRating._id || selectedItemForRating.menuItem}
+            menuItemName={selectedItemForRating.name}
+            restaurantId={selectedItemForRating.restaurantId || order.restaurantId}
+            isVerifiedPurchase={true}
+            onRatingSubmitted={(rating: Rating) => {
+              // Mark item as rated
+              setRatedItems(prev => new Set([...prev, selectedItemForRating.orderItemKey]));
+              toast.success(`Thank you for rating ${selectedItemForRating.name}!`);
+              setShowRatingModal(false);
+              setSelectedItemForRating(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );

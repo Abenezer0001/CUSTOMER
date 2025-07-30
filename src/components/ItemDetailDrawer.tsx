@@ -3,11 +3,12 @@ import { MenuItem, CartItemModifier, MenuItemModifierGroup, ModifierOption } fro
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { DrawerClose } from './ui/drawer';
-import { Clock, X, Minus, Plus, ShoppingCart, Star, Tag, Check } from 'lucide-react';
+import { Clock, X, Minus, Plus, ShoppingCart, Star, Tag, Check, Users } from 'lucide-react';
 import { Checkbox } from './ui/checkbox';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Label } from './ui/label';
 import { useCart } from '@/context/CartContext';
+import { useGroupOrder } from '@/context/GroupOrderContext';
 import { Textarea } from './ui/textarea';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,7 @@ interface ItemDetailDrawerProps {
 
 export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClose }) => {
   const { addItem } = useCart();
+  const { isInGroupOrder, addItemToGroupCart } = useGroupOrder();
   // State to track selected modifiers: Key is group.name, Value is ModifierOption or ModifierOption[]
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, ModifierOption | ModifierOption[]>>({});
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -122,12 +124,12 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
     };
   }, []);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     setIsLoading(true);
     setSubmitError(null);
     
     // Simulate a small delay for better UX
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         // Validate required modifiers if needed
         const missingRequiredGroups = item.modifiers?.filter(group => {
@@ -175,16 +177,34 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
           }
         });
 
-        addItem(
-          item, // The base menu item
-          quantity,
-          cartModifiers.length > 0 ? cartModifiers : undefined,
-          undefined, // Cooking preference removed, handle via modifiers if needed
-          specialInstructions || undefined
-        );
-        
-        // Show success toast
-        toast.success(`${quantity} × ${item.name} added to cart`);
+        if (isInGroupOrder) {
+          // Create a cart item for group order
+          const cartItem = {
+            id: item._id || item.id,
+            name: item.name,
+            price: totalPrice / quantity, // Use calculated total price per item
+            quantity: quantity,
+            image: item.image,
+            description: item.description,
+            specialInstructions: specialInstructions || undefined,
+            modifiers: cartModifiers.length > 0 ? cartModifiers : undefined,
+            dateAdded: Date.now()
+          };
+          
+          // Add to group cart (async)
+          await addItemToGroupCart(cartItem);
+          toast.success(`${quantity} × ${item.name} added to group cart`);
+        } else {
+          // Add to individual cart
+          addItem(
+            item, // The base menu item
+            quantity,
+            cartModifiers.length > 0 ? cartModifiers : undefined,
+            undefined, // Cooking preference removed, handle via modifiers if needed
+            specialInstructions || undefined
+          );
+          toast.success(`${quantity} × ${item.name} added to cart`);
+        }
         
         // Close drawer after successful add (use onClose if provided)
         if (onClose) {
@@ -414,34 +434,162 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
       </div>
       </ScrollArea>
 
-      {/* Footer with Price and Add to Cart Button - outside ScrollArea for sticky positioning */}
+      {/* Footer with Price and Add to Cart Button(s) - outside ScrollArea for sticky positioning */}
       <div className="sticky bottom-0 bg-background py-4 px-4 mt-auto border-t"> 
-        <Button
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white text-lg py-6"
-          onClick={handleAddToCart}
-          // Disable if a required single-select group doesn't have a selection or is loading
-          disabled={
-            isLoading || 
-            item.modifiers?.some(g => {
-              const groupId = (g as any)._id || g.name;
-              return ((g as any).type === 'single-select' || g.selectionType === 'SINGLE') && 
-                     ((g as any).required || g.isRequired) && 
-                     !selectedModifiers[groupId];
-            })
-          }
-        >
-          {isLoading ? (
-            <div className="flex items-center justify-center">
-              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-              Adding to cart...
+        {isInGroupOrder ? (
+          <div className="space-y-3">
+            <div className="text-center text-sm text-muted-foreground">
+              Add {quantity} item(s) - ${totalPrice.toFixed(2)}
             </div>
-          ) : (
-            <>
-              <ShoppingCart className="mr-2 h-5 w-5" />
-              Add {quantity} to Cart - ${totalPrice.toFixed(2)}
-            </>
-          )}
-        </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="py-4"
+                onClick={async () => {
+                  setIsLoading(true);
+                  setSubmitError(null);
+                  
+                  try {
+                    // Validate required modifiers if needed
+                    const missingRequiredGroups = item.modifiers?.filter(group => {
+                      const groupId = group._id || group.name;
+                      return (group.isRequired || (group as any).required) && (!selectedModifiers[groupId] || 
+                        (Array.isArray(selectedModifiers[groupId]) && 
+                          (selectedModifiers[groupId] as ModifierOption[]).length === 0));
+                    });
+                    
+                    if (missingRequiredGroups && missingRequiredGroups.length > 0) {
+                      setSubmitError(`Please select options for: ${missingRequiredGroups.map(g => g.name).join(', ')}`);
+                      setIsLoading(false);
+                      return;
+                    }
+                    
+                    // Flatten selected modifiers into the CartItemModifier[] format
+                    const cartModifiers: CartItemModifier[] = [];
+                    
+                    Object.entries(selectedModifiers).forEach(([groupId, selection]) => {
+                      if (Array.isArray(selection)) {
+                        selection.forEach(option => {
+                          if (option && option.name) {
+                            cartModifiers.push({
+                              id: option.name,
+                              name: option.name,
+                              price: option.price || 0,
+                              groupId: groupId,
+                              optionId: (option as any)._id || option.name
+                            });
+                          }
+                        });
+                      } else if (selection && selection.name) {
+                        cartModifiers.push({
+                          id: selection.name,
+                          name: selection.name,
+                          price: selection.price || 0,
+                          groupId: groupId,
+                          optionId: (selection as any)._id || selection.name
+                        });
+                      }
+                    });
+
+                    // Create individual cart item
+                    addItem(
+                      item,
+                      quantity,
+                      cartModifiers.length > 0 ? cartModifiers : undefined,
+                      undefined,
+                      specialInstructions || undefined
+                    );
+                    toast.success(`${quantity} × ${item.name} added to your cart`);
+                    
+                    if (onClose) {
+                      setTimeout(() => {
+                        onClose();
+                      }, 300);
+                    }
+                  } catch (error) {
+                    console.error('Error adding to individual cart:', error);
+                    toast.error('Failed to add to cart');
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                disabled={
+                  isLoading || 
+                  item.modifiers?.some(g => {
+                    const groupId = (g as any)._id || g.name;
+                    return ((g as any).type === 'single-select' || g.selectionType === 'SINGLE') && 
+                           ((g as any).required || g.isRequired) && 
+                           !selectedModifiers[groupId];
+                  })
+                }
+              >
+                {isLoading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Adding...
+                  </div>
+                ) : (
+                  <>
+                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    My Cart
+                  </>
+                )}
+              </Button>
+              
+              <Button
+                className="bg-purple-600 hover:bg-purple-700 text-white py-4"
+                onClick={handleAddToCart}
+                disabled={
+                  isLoading || 
+                  item.modifiers?.some(g => {
+                    const groupId = (g as any)._id || g.name;
+                    return ((g as any).type === 'single-select' || g.selectionType === 'SINGLE') && 
+                           ((g as any).required || g.isRequired) && 
+                           !selectedModifiers[groupId];
+                  })
+                }
+              >
+                {isLoading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Adding...
+                  </div>
+                ) : (
+                  <>
+                    <Users className="mr-2 h-4 w-4" />
+                    Group Cart
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white text-lg py-6"
+            onClick={handleAddToCart}
+            disabled={
+              isLoading || 
+              item.modifiers?.some(g => {
+                const groupId = (g as any)._id || g.name;
+                return ((g as any).type === 'single-select' || g.selectionType === 'SINGLE') && 
+                       ((g as any).required || g.isRequired) && 
+                       !selectedModifiers[groupId];
+              })
+            }
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center">
+                <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Adding to cart...
+              </div>
+            ) : (
+              <>
+                <ShoppingCart className="mr-2 h-5 w-5" />
+                Add {quantity} to Cart - ${totalPrice.toFixed(2)}
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );
