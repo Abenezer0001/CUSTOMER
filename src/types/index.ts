@@ -116,6 +116,8 @@ export interface CartItemModifier {
   id: string;
   name: string;
   price: number;
+  groupId?: string;    // Optional group identifier for categorization
+  optionId?: string;   // Optional specific option identifier
 }
 
 export interface Order {
@@ -240,9 +242,10 @@ export interface RatingFilters {
 }
 
 export interface RatingSubmission {
+  orderId: string;      // Required by backend for verification
   menuItemId: string;
   rating: number;
-  comment?: string;
+  comment: string;      // Required by backend
 }
 
 export interface RatingUpdate {

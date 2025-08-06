@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { API_BASE_URL } from '@/constants';
 import { useCart } from '@/context/CartContext';
 import { useOrders } from '@/context/OrdersContext';
@@ -109,7 +109,8 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
     createGroupOrder: contextCreateGroupOrder,
     addItemToGroupCart, 
     getGroupCartItems, 
-    refreshGroupOrder 
+    refreshGroupOrder,
+    leaveGroupOrder: contextLeaveGroupOrder
   } = useGroupOrder();
   
   const [stage, setStage] = useState<'cart' | 'checkout'>('cart');
@@ -151,16 +152,6 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       const isLeaderById = contextGroupOrder.groupLeaderId === contextCurrentParticipantId;
       const isLeaderByCreation = contextCurrentParticipantId === 'creator' || contextCurrentParticipantId === contextGroupOrder.groupLeaderId;
       
-      // Debug logging
-      console.log('🔍 Group Leader Detection:', {
-        contextCurrentParticipantId,
-        groupLeaderId: contextGroupOrder.groupLeaderId,
-        isLeaderByParticipant,
-        isLeaderById,
-        isLeaderByCreation,
-        participantsCount: contextGroupOrder.participants?.length,
-        currentUser: currentUser?.userName
-      });
       
       setIsGroupLeader(isLeaderByParticipant || isLeaderById || isLeaderByCreation);
     } else {
@@ -193,26 +184,58 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
     }
   }, [user, isAuthenticated]);
 
-  // Derived values
-  const subtotal = cartItems.reduce((sum, item) => {
-    const itemTotal = item.price * item.quantity;
-    const modifiersTotal = item.modifiers 
-      ? item.modifiers.reduce((mSum, modifier) => mSum + modifier.price, 0) * item.quantity
+  // Derived values - Calculate subtotal including modifiers with proper precision
+  const subtotal = Number((cartItems || []).reduce((sum, item) => {
+    const itemTotal = (item?.price || 0) * (item?.quantity || 0);
+    const modifiersTotal = item?.modifiers 
+      ? item.modifiers.reduce((mSum, modifier) => {
+          const modPrice = typeof modifier?.price === 'number' ? modifier.price : 0;
+          return mSum + modPrice;
+        }, 0) * (item?.quantity || 0)
       : 0;
     return sum + itemTotal + modifiersTotal;
-  }, 0);
+  }, 0).toFixed(2));
   // Tax calculation removed - only service charge applies
   const [tipAmount, setTipAmount] = useState(0);
   const [orderType, setOrderType] = useState<OrderType>(OrderType.DINE_IN);
   const [specialInstructions, setSpecialInstructions] = useState('');
-  const [restaurantServiceCharge, setRestaurantServiceCharge] = useState({ enabled: false, percentage: 0 });
+  const [venueServiceCharge, setVenueServiceCharge] = useState({ 
+    enabled: false, 
+    type: 'percentage', 
+    value: 0,
+    minAmount: undefined,
+    maxAmount: undefined
+  });
   
-  // Calculate service charge based on restaurant settings
-  const serviceCharge = restaurantServiceCharge.enabled 
-    ? subtotal * (restaurantServiceCharge.percentage / 100) 
-    : 0;
+  // Calculate service charge based on venue settings
+  const serviceCharge = useMemo(() => {
+    console.log('💵 Calculating service charge:', { venueServiceCharge, subtotal });
+    if (!venueServiceCharge.enabled) {
+      console.log('❌ Service charge disabled');
+      return 0;
+    }
+
+    if (venueServiceCharge.type === 'percentage') {
+      const charge = Number((subtotal * (venueServiceCharge.value / 100)).toFixed(2));
+      console.log(`✅ Percentage charge: ${subtotal} * ${venueServiceCharge.value}% = ${charge}`);
+      return charge;
+    } else if (venueServiceCharge.type === 'flat') {
+      // Check if order amount is within the specified range for flat rate
+      const withinMinAmount = venueServiceCharge.minAmount === undefined || subtotal >= venueServiceCharge.minAmount;
+      const withinMaxAmount = venueServiceCharge.maxAmount === undefined || subtotal <= venueServiceCharge.maxAmount;
+      
+      if (withinMinAmount && withinMaxAmount) {
+        const flatCharge = Number(venueServiceCharge.value.toFixed(2));
+        console.log(`✅ Flat charge applied: ${flatCharge}`);
+        return flatCharge;
+      }
+    }
+    
+    console.log('❌ No service charge applied');
+    return 0;
+  }, [venueServiceCharge, subtotal]);
   
-  const total = subtotal + tipAmount + serviceCharge;
+  const total = Number(((subtotal || 0) + (tipAmount || 0) + (serviceCharge || 0)).toFixed(2));
 
   const [tipPercentage, setTipPercentage] = useState<number | null>(null);
   const tipOptions = [0.15, 0.18, 0.2, 0.22];
@@ -307,6 +330,203 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       toast.success('Left group order');
     } catch (error: any) {
       toast.error(error.message || 'Failed to leave group order');
+    }
+  };
+
+  const handlePlaceGroupOrder = async () => {
+    if (!groupOrder) {
+      toast.error('No group order found');
+      return;
+    }
+
+    if (getGroupCartItems().length === 0) {
+      toast.error('Group order is empty');
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      console.log('🚀 Placing group order:', groupOrder._id);
+
+      // Call the group ordering service to place the final order
+      const result = await groupOrderingService.placeFinalOrder(groupOrder._id);
+
+      if (result.success) {
+        toast.success('Group order placed successfully!');
+        
+        // Create individual order entries for each participant based on payment structure
+        const groupCartItems = getGroupCartItems();
+        const totalAmount = groupCartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const participantCount = groupOrder.participants.length;
+        
+        // Create the base group order structure
+        const baseGroupOrder = {
+          id: result.orderId,
+          _id: result.orderId,
+          orderNumber: `GROUP-${groupOrder.joinCode}`,
+          items: groupCartItems.map(item => ({
+            id: item.id,
+            menuItemId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            specialInstructions: item.specialInstructions || '',
+            modifiers: item.modifiers || []
+          })),
+          subtotal: totalAmount,
+          tax: 0,
+          serviceFee: 0,
+          tip: 0,
+          status: 'PENDING',
+          paymentStatus: 'PENDING',
+          timestamp: new Date(),
+          createdAt: new Date().toISOString(),
+          tableId: tableId || '',
+          specialInstructions: 'Group Order',
+          isGroupOrder: true,
+          groupOrderId: result.orderId,
+          groupOrderData: {
+            joinCode: groupOrder.joinCode,
+            participants: groupOrder.participants.map(p => ({
+              _id: p._id,
+              userName: p.userName,
+              userId: p.userId,
+              email: p.email,
+              totalAmount: p.totalAmount || 0
+            })),
+            paymentStructure: selectedPaymentStructure,
+            totalParticipants: participantCount,
+            participantUserIds: groupOrder.participants.map(p => p.userId).filter(Boolean)
+          }
+        };
+        
+        // Calculate payment amounts based on payment structure for current user
+        let currentUserOrder = null;
+        
+        switch (selectedPaymentStructure) {
+          case 'pay_all':
+            // One person pays for everything - the current user (group leader) pays the full amount
+            currentUserOrder = {
+              ...baseGroupOrder,
+              total: totalAmount,
+              userId: user?.id || user?._id || 'group-order-user',
+              specialInstructions: `Group Order - Paying for all ${participantCount} participants`
+            };
+            break;
+            
+          case 'equal_split':
+            // Split equally among all participants
+            const amountPerPerson = totalAmount / participantCount;
+            currentUserOrder = {
+              ...baseGroupOrder,
+              total: amountPerPerson,
+              userId: user?.id || user?._id || 'group-order-user',
+              specialInstructions: `Group Order - Your share (split equally among ${participantCount} participants)`
+            };
+            break;
+            
+          case 'pay_own':
+            // Each participant pays for their own items
+            const currentParticipant = groupOrder.participants.find(p => 
+              p.userId === (user?.id || user?._id) || p._id === currentParticipantId
+            );
+            const currentUserAmount = currentParticipant?.totalAmount || 0;
+            currentUserOrder = {
+              ...baseGroupOrder,
+              total: currentUserAmount,
+              userId: user?.id || user?._id || 'group-order-user',
+              specialInstructions: `Group Order - Your items only ($${currentUserAmount.toFixed(2)})`
+            };
+            break;
+            
+          case 'custom_split':
+            // Custom split amounts (to be implemented later)
+            const customAmount = groupOrder.customSplits?.[currentParticipantId || ''] || (totalAmount / participantCount);
+            currentUserOrder = {
+              ...baseGroupOrder,
+              total: customAmount,
+              userId: user?.id || user?._id || 'group-order-user',
+              specialInstructions: `Group Order - Custom split amount`
+            };
+            break;
+            
+          default:
+            // Default to pay_own
+            const defaultParticipant = groupOrder.participants.find(p => 
+              p.userId === (user?.id || user?._id) || p._id === currentParticipantId
+            );
+            const defaultAmount = defaultParticipant?.totalAmount || 0;
+            currentUserOrder = {
+              ...baseGroupOrder,
+              total: defaultAmount,
+              userId: user?.id || user?._id || 'group-order-user',
+              specialInstructions: `Group Order - Your items only`
+            };
+        }
+        
+        // Add the current user's order to the context
+        if (currentUserOrder) {
+          addOrder(currentUserOrder);
+        }
+        
+        // Store group order information for other participants to access when they visit My Orders
+        const participantOrdersData = {
+          groupOrderId: result.orderId,
+          joinCode: groupOrder.joinCode,
+          paymentStructure: selectedPaymentStructure,
+          totalAmount: totalAmount,
+          participantCount: participantCount,
+          items: groupCartItems,
+          participants: groupOrder.participants.map(p => ({
+            _id: p._id,
+            userName: p.userName,
+            userId: p.userId,
+            email: p.email,
+            totalAmount: p.totalAmount || 0
+          })),
+          placedAt: new Date().toISOString(),
+          tableId: tableId,
+          orderNumber: `GROUP-${groupOrder.joinCode}`,
+          status: 'PENDING',
+          paymentStatus: 'PENDING'
+        };
+        
+        // Store this data so other participants can see their orders when they visit My Orders
+        localStorage.setItem(`groupOrder_${result.orderId}`, JSON.stringify(participantOrdersData));
+        
+        // Clear any individual cart items
+        clearCart();
+        
+        // Don't try to leave the group via API after successful placement
+        // The group order has been submitted and converted to a regular order
+        console.log('Group order placed successfully, clearing local state only');
+        
+        // Reset local group order state immediately
+        setGroupOrder(null);
+        setCurrentParticipantId(null);
+        setIsGroupLeader(false);
+        setIsGroupOrder(false);
+        setActiveTab('individual');
+        
+        // Force clear session storage
+        sessionStorage.removeItem('currentGroupOrder');
+        sessionStorage.removeItem('currentParticipantId');
+        
+        // Close the drawer before navigation
+        onClose();
+        
+        // Small delay to ensure state is cleared before navigation
+        setTimeout(() => {
+          navigate(`/my-orders?table=${tableId}&groupOrder=${result.orderId}`);
+        }, 100);
+      } else {
+        toast.error('Failed to place group order');
+      }
+    } catch (error: any) {
+      console.error('Failed to place group order:', error);
+      toast.error(error.message || 'Failed to place group order');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -469,28 +689,59 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
     initializePaymentStructure();
   }, [groupOrder, isGroupLeader]);
 
-  // Fetch restaurant service charge settings
+  // Fetch venue service charge settings when component loads or table changes
   useEffect(() => {
-    const fetchRestaurantServiceCharge = async () => {
+    const fetchVenueServiceCharge = async () => {
       try {
+        console.log('🔍 Fetching service charge for tableId:', tableId);
         if (!tableId) return;
         
-        // Get restaurant ID from table
-        const restaurantId = await TableService.getRestaurantIdFromTableId(tableId);
-        if (restaurantId) {
-          const response = await apiClient.get(`/api/restaurants/${restaurantId}`);
-          if (response.data.service_charge) {
-            setRestaurantServiceCharge(response.data.service_charge);
+        // First get table data to find venueId
+        const tableResponse = await apiClient.get(`/api/restaurant-service/tables/${tableId}`);
+        console.log('📋 Table data:', tableResponse.data);
+        
+        // Extract venueId - handle both string ID and populated object
+        const venueId = typeof tableResponse.data.venueId === 'string' 
+          ? tableResponse.data.venueId 
+          : tableResponse.data.venueId?._id;
+        console.log('📍 Found venueId:', venueId);
+        
+        // If venue data is already populated, use it directly
+        if (typeof tableResponse.data.venueId === 'object' && tableResponse.data.venueId?.serviceCharge) {
+          console.log('🏢 Venue data already available from table response');
+          console.log('💰 Service charge settings:', tableResponse.data.venueId.serviceCharge);
+          setVenueServiceCharge(tableResponse.data.venueId.serviceCharge);
+          return;
+        }
+        
+        if (venueId) {
+          // Use direct backend URL to avoid frontend routing issues
+          const response = await fetch(`http://localhost:3001/api/venues/${venueId}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+          
+          if (response.ok) {
+            const venueData = await response.json();
+            console.log('🏢 Venue data:', venueData);
+            
+            if (venueData.serviceCharge) {
+              console.log('💰 Service charge settings:', venueData.serviceCharge);
+              setVenueServiceCharge(venueData.serviceCharge);
+            }
+          } else {
+            console.log('❌ Failed to fetch venue:', response.status, response.statusText);
           }
         }
       } catch (error) {
-        console.log('Could not fetch restaurant service charge settings:', error);
-        toast.error('Could not fetch restaurant details. Please try again later.');
-        // Keep default values (disabled)
+        console.log('Could not fetch venue service charge settings:', error);
+        // Keep default values (disabled) - don't show error to user as it's optional
       }
     };
 
-    fetchRestaurantServiceCharge();
+    fetchVenueServiceCharge();
   }, [tableId]);
 
   // Handle tip selection
@@ -501,7 +752,10 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       setTipAmount(0);
       addTip(0);
     } else {
-      const newTipAmount = subtotal * percentage;
+      // Calculate tip based on subtotal + service charge for consistency
+      const baseAmountForTip = Number(subtotal) + (serviceCharge || 0);
+      const newTipAmount = Number((baseAmountForTip * percentage).toFixed(2));
+      console.log(`Calculating tip: ${percentage * 100}% of ($${subtotal} + $${serviceCharge}) = $${newTipAmount}`);
       setTipAmount(newTipAmount);
       addTip(newTipAmount);
     }
@@ -594,9 +848,14 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       try {
         restaurantId = await TableService.getRestaurantIdFromTableId(tableId);
         console.log('Successfully got restaurant ID from table:', restaurantId);
+        
+        // Validate restaurant ID
+        if (!restaurantId || restaurantId === 'undefined' || restaurantId === 'null') {
+          throw new Error('Invalid restaurant ID returned from table service');
+        }
       } catch (tableError) {
         console.error('Failed to get restaurant ID from table:', tableError);
-        throw new Error('Unable to determine restaurant for this table. Please try again or contact support.');
+        throw new Error('Unable to determine restaurant for this table. Please scan the QR code again or contact support.');
       }
       
       // Format items according to API schema
@@ -618,11 +877,11 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         // Ensure menuItem is always a string
         const menuItem = String(menuItemId || '');
         
-        // Calculate subtotal including modifiers
+        // Calculate subtotal including modifiers with proper precision
         const modifiersTotal = item.modifiers 
           ? item.modifiers.reduce((mSum, modifier) => mSum + modifier.price, 0) * item.quantity
           : 0;
-        const itemSubtotal = (item.price * item.quantity) + modifiersTotal;
+        const itemSubtotal = Number(((item.price * item.quantity) + modifiersTotal).toFixed(2));
 
         // Format modifiers according to backend API schema
         const formattedModifiers: any[] = [];
@@ -664,22 +923,40 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         };
       });
       
-      // Format order data according to API schema
+      // Format order data according to API schema with proper precision
       const constructedOrderData: OrderData = {
         restaurantId, // Use restaurant ID from table service
         tableId,
         items: formattedItems,
-        subtotal,
+        subtotal: Number((subtotal || 0).toFixed(2)),
         tax: 0, // No tax applied, only service charge
-        tip: tipAmount,
-        total,
+        tip: Number((tipAmount || 0).toFixed(2)),
+        total: Number((total || 0).toFixed(2)),
         orderType,
         specialInstructions: specialInstructions || '',
-        serviceFee: serviceCharge,
+        serviceFee: Number((serviceCharge || 0).toFixed(2)),
         status: OrderStatus.PENDING,
         paymentStatus: PaymentStatus.PENDING,
         orderNumber: `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
       };
+
+      console.log('💰 CartDrawer serviceCharge calculation debug:', {
+        serviceCharge,
+        venueServiceCharge,
+        subtotal,
+        tipAmount,
+        total
+      });
+      
+      console.log('💰 Order pricing breakdown:', {
+        subtotal: Number((subtotal || 0).toFixed(2)),
+        serviceCharge: Number((serviceCharge || 0).toFixed(2)),
+        tipAmount: Number((tipAmount || 0).toFixed(2)),
+        total: Number((total || 0).toFixed(2)),
+        calculatedTotal: Number((subtotal || 0).toFixed(2)) + Number((serviceCharge || 0).toFixed(2)) + Number((tipAmount || 0).toFixed(2))
+      });
+
+      console.log('🚀 CRITICAL: serviceFee being sent to backend:', constructedOrderData.serviceFee);
 
       console.log('Placing order...');
       console.log('Order data for service:', JSON.stringify(constructedOrderData));
@@ -717,7 +994,9 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
       console.log('Token status:', {
         hasLocalStorageToken: !!token,
         hasHttpOnlyCookies,
-        tokenLength: token ? token.length : 0
+        tokenLength: token ? token.length : 0,
+        user: user ? { id: user.id, email: user.email, role: user.role } : 'No user',
+        isAuthenticated
       });
       
       try {
@@ -744,7 +1023,8 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
           xhr.onload = async function() {
             console.log('XHR response received:', {
               status: xhr.status,
-              responseText: xhr.responseText
+              statusText: xhr.statusText,
+              responseText: xhr.responseText.substring(0, 500) + (xhr.responseText.length > 500 ? '...' : '')
             });
             
             if (xhr.status >= 200 && xhr.status < 300) {
@@ -755,6 +1035,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                 // Check if response has success property (API v1 format)
                 if (parsedResponse.success !== undefined) {
                   if (parsedResponse.success) {
+                    console.log('Order creation successful via API v1 format');
                     resolve(parsedResponse.data);
                   } else {
                     console.error('Order creation failed despite 200 status:', parsedResponse.error);
@@ -763,25 +1044,26 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                 } 
                 // If no success property but has _id, it's a direct order object (API v2 format)
                 else if (parsedResponse._id) {
-                  console.log('Direct order object returned:', parsedResponse);
+                  console.log('Order creation successful via API v2 format (direct order object)');
                   resolve(parsedResponse);
                 } 
                 // Unknown response format
                 else {
                   console.error('Unknown response format:', parsedResponse);
-                  reject(new Error('Unknown response format'));
+                  reject(new Error('Unexpected response format from server'));
                 }
               } catch (e) {
-                console.error('Failed to parse response:', e);
-                reject(new Error('Failed to parse response'));
+                console.error('Failed to parse JSON response:', e, 'Response text:', xhr.responseText);
+                reject(new Error('Invalid response format from server'));
               }
             } else {
-              console.error(`Order creation failed with status: ${xhr.status}`, xhr.responseText);
+              console.error(`Order creation failed with status: ${xhr.status} ${xhr.statusText}`, xhr.responseText);
               try {
                 const errorData = JSON.parse(xhr.responseText);
-                reject(new Error(errorData.error || `Order creation failed with status: ${xhr.status}`));
+                const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Server error: ${xhr.status}`;
+                reject(new Error(errorMessage));
               } catch (e) {
-                reject(new Error(`Order creation failed with status: ${xhr.status}`));
+                reject(new Error(`Server error: ${xhr.status} ${xhr.statusText}`));
               }
             }
           };
@@ -797,7 +1079,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
         console.log('Order placed successfully:', result);
         toast.success('Order placed successfully!');
       
-        // Transform OrderResponseData to Order type for the context
+        // Transform OrderResponseData to Order type for the context with proper precision
         const orderForContext: Order = {
           id: result._id,
           _id: result._id, // Also include _id for consistency
@@ -811,11 +1093,12 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
             specialInstructions: apiItem.specialInstructions,
             modifiers: apiItem.modifiers?.map(mod => ({ id: mod.name, name: mod.name, price: mod.price })) || []
           })),
-          subtotal: result.subtotal,
+          subtotal: Number((result.subtotal || 0).toFixed(2)),
           tax: 0, // No tax applied, only service charge
-          serviceFee: result.serviceFee,
-          tip: result.tip,
-          total: result.total,
+          serviceFee: Number((result.serviceFee || result.service_charge || 0).toFixed(2)),
+          service_charge: Number((result.serviceFee || result.service_charge || 0).toFixed(2)), // Include both field names for compatibility
+          tip: Number((result.tip || 0).toFixed(2)),
+          total: Number((result.total || 0).toFixed(2)),
           status: result.status,
           paymentStatus: result.paymentStatus,
           timestamp: new Date(result.createdAt),
@@ -823,7 +1106,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
           tableId: result.tableId,
           userId: result.userId, // Include userId for filtering
           specialInstructions: result.specialInstructions
-        };
+        } as any;
 
         console.log('Adding order to context:', orderForContext);
         addOrder(orderForContext);
@@ -1098,9 +1381,14 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                       <span>Subtotal:</span>
                       <span>${subtotal.toFixed(2)}</span>
                     </div>
-                    {restaurantServiceCharge.enabled && (
+                    {venueServiceCharge.enabled && serviceCharge > 0 && (
                       <div className="flex justify-between">
-                        <span>Service Charge ({restaurantServiceCharge.percentage}%):</span>
+                        <span>
+                          Service Charge {venueServiceCharge.type === 'percentage' 
+                            ? `(${venueServiceCharge.value}%)` 
+                            : '(Flat Rate)'
+                          }:
+                        </span>
                         <span>${serviceCharge.toFixed(2)}</span>
                       </div>
                     )}
@@ -1359,7 +1647,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
               {isGroupOrder && groupOrder && !showGroupOptions && (
                 <div className="space-y-4">
                   {/* Spending Limits Section - Only show for group leaders */}
-                  {(isGroupLeader || true) && (
+                  {isGroupLeader && (
                     <div className="p-4 border rounded-lg bg-card">
                       <div className="flex justify-between items-center mb-3">
                         <h3 className="text-sm font-medium flex items-center gap-2">
@@ -1510,7 +1798,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                   )}
 
                   {/* Payment Structure Selector - Only show for group leaders */}
-                  {(isGroupLeader || true) && (
+                  {isGroupLeader && (
                     <div className="p-4 border rounded-lg bg-card">
                       <div className="flex justify-between items-center mb-3">
                         <h3 className="text-sm font-medium flex items-center gap-2">
@@ -1528,15 +1816,26 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                       
                       {showPaymentStructureSelector ? (
                         <PaymentStructureSelector
-                          totalAmount={groupOrder.totalAmount}
+                          totalAmount={getGroupCartItems().reduce((sum, item) => sum + (item.price * item.quantity), 0)}
                           participantCount={groupOrder.participants.length}
                           isGroupLeader={isGroupLeader}
                           currentParticipantId={currentParticipantId || ''}
-                          participants={groupOrder.participants.map(p => ({
-                            _id: p._id,
-                            userName: p.userName,
-                            totalAmount: p.totalAmount
-                          }))}
+                          participants={groupOrder.participants.map(p => {
+                            // Calculate actual participant amount from their items
+                            const participantItems = getGroupCartItems().filter(item => {
+                              const finalOrderItem = groupOrder.finalOrder?.find(fItem => 
+                                fItem.itemId === item.id || fItem.menuItemId === item.id
+                              );
+                              return finalOrderItem && finalOrderItem.addedBy === p._id;
+                            });
+                            const participantTotal = participantItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                            
+                            return {
+                              _id: p._id,
+                              userName: p.userName,
+                              totalAmount: participantTotal
+                            };
+                          })}
                           onPaymentStructureSelect={handlePaymentStructureSelect}
                         />
                       ) : (
@@ -1659,7 +1958,7 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                   </div>
 
                   {/* Place Order button for group leader */}
-                  {(isGroupLeader || true) && getGroupCartItems().length > 0 && (
+                  {isGroupLeader && getGroupCartItems().length > 0 && (
                     <div className="mb-4 p-4 border rounded-lg bg-card">
                       <div className="space-y-3">
                         <div className="text-center">
@@ -1670,14 +1969,19 @@ const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                           </p>
                         </div>
                         <Button
-                          onClick={() => {
-                            // TODO: Implement group order placement logic
-                            toast.info('Group order placement coming soon!');
-                          }}
+                          onClick={handlePlaceGroupOrder}
+                          disabled={isProcessing}
                           className="w-full bg-green-600 hover:bg-green-700 text-white"
                           size="lg"
                         >
-                          Place Group Order - ${getGroupCartItems().reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+                          {isProcessing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            `Place Group Order - $${getGroupCartItems().reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}`
+                          )}
                         </Button>
                       </div>
                     </div>

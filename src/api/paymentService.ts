@@ -33,20 +33,104 @@ interface PaymentStatusResponse {
 export const createStripeCheckoutSession = async (
   cartItems: CartItem[],
   tableId: string,
-  restaurantId: string
+  restaurantId: string,
+  orderId?: string
 ): Promise<StripeSessionResponse> => {
   try {
-    console.log('createStripeCheckoutSession called for tableId:', tableId, 'restaurantId:', restaurantId);
-    console.log('Relying on HttpOnly cookies for authentication.');
+    console.log('createStripeCheckoutSession called for tableId:', tableId, 'restaurantId:', restaurantId, 'orderId:', orderId);
+    console.log('Processing cart items for Stripe:', cartItems.length, 'items');
+    
+    // Validate inputs
+    if (!Array.isArray(cartItems) || cartItems.length === 0) {
+      throw new Error('Cart items are required and cannot be empty');
+    }
+    
+    if (!tableId) {
+      throw new Error('Table ID is required');
+    }
+    
+    if (!restaurantId) {
+      throw new Error('Restaurant ID is required');
+    }
     
     // Format cart items for the Stripe session
-    const lineItems = cartItems.map(item => {
-      // Calculate the total price including modifiers
-      const modifierPrice = item.modifiers 
-        ? item.modifiers.reduce((sum, mod) => sum + mod.price, 0) 
-        : 0;
+    const lineItems = cartItems.map((item, index) => {
+      console.log(`Processing item ${index + 1}:`, { name: item.name, price: item.price, quantity: item.quantity, modifiers: item.modifiers?.length || 0 });
       
-      const totalItemPrice = (item.price + modifierPrice) * 100; // Convert to cents for Stripe
+      // Validate and sanitize item data
+      if (!item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number') {
+        console.error('Invalid item data:', item);
+        throw new Error(`Invalid item data for item: ${item.name || 'Unknown'}`);
+      }
+      
+      // Sanitize numeric values to prevent NaN or Infinity
+      const sanitizedPrice = Number.isFinite(item.price) ? item.price : 0;
+      const sanitizedQuantity = Number.isFinite(item.quantity) && item.quantity > 0 ? Math.floor(item.quantity) : 1;
+      
+      if (sanitizedPrice < 0 || sanitizedQuantity <= 0) {
+        throw new Error(`Invalid price ($${sanitizedPrice}) or quantity (${sanitizedQuantity}) for item: ${item.name}`);
+      }
+      
+      // Use sanitized values for calculations
+      const itemPrice = sanitizedPrice;
+      const itemQuantity = sanitizedQuantity;
+      
+      // Calculate the total price including modifiers
+      let modifierPrice = 0;
+      if (item.modifiers && Array.isArray(item.modifiers)) {
+        modifierPrice = item.modifiers.reduce((sum, mod) => {
+          const price = typeof mod.price === 'number' ? mod.price : 0;
+          if (price < 0) {
+            console.warn(`Negative modifier price detected for ${mod.name}: ${price}`);
+            return sum; // Skip negative modifiers
+          }
+          return sum + price;
+        }, 0);
+      }
+      
+      // Apply proper precision handling to avoid floating point errors
+      const baseItemPrice = Number((itemPrice + modifierPrice).toFixed(2));
+      const totalItemPrice = Math.round(baseItemPrice * 100); // Convert to cents for Stripe
+      
+      console.log(`Item calculation: base=${item.price}, modifiers=${modifierPrice}, total=${baseItemPrice}, cents=${totalItemPrice}`);
+      
+      // Enhanced validation with detailed logging
+      const isValidInteger = Number.isInteger(totalItemPrice);
+      const isPositive = totalItemPrice > 0;
+      const isNotNaN = !isNaN(totalItemPrice);
+      const isFinite = Number.isFinite(totalItemPrice);
+      const isReasonableAmount = totalItemPrice <= 1000000; // Max $10,000 per item
+      
+      console.log('Price validation details:', {
+        item: item.name,
+        originalPrice: item.price,
+        sanitizedPrice: itemPrice,
+        modifierPrice,
+        baseItemPrice,
+        totalItemPrice,
+        isValidInteger,
+        isPositive,
+        isNotNaN,
+        isFinite,
+        isReasonableAmount
+      });
+      
+      // Validate final price - ensure it's a positive integer
+      if (!isValidInteger || !isPositive || !isNotNaN || !isFinite || !isReasonableAmount) {
+        console.error('Invalid totalItemPrice:', { 
+          baseItemPrice, 
+          totalItemPrice, 
+          item: { name: item.name, price: item.price, modifiers: item.modifiers?.length || 0 },
+          validation: {
+            isValidInteger,
+            isPositive,
+            isNotNaN,
+            isFinite,
+            isReasonableAmount
+          }
+        });
+        throw new Error(`Invalid calculated price for item: ${item.name}. Price: $${item.price}, Modifiers: $${modifierPrice}, Total: $${baseItemPrice.toFixed(2)} (${totalItemPrice} cents)`);
+      }
       
       // Format description including modifiers
       let description = item.name;
@@ -58,7 +142,7 @@ export const createStripeCheckoutSession = async (
         description += `. Note: ${item.specialInstructions}`;
       }
       
-      return {
+      const lineItem = {
         price_data: {
           currency: 'usd',
           product_data: {
@@ -68,10 +152,41 @@ export const createStripeCheckoutSession = async (
           },
           unit_amount: totalItemPrice // Amount in cents
         },
-        quantity: item.quantity
+        quantity: itemQuantity
       };
+      
+      console.log(`Created line item for ${item.name}:`, { unit_amount: totalItemPrice, quantity: item.quantity });
+      return lineItem;
     });
 
+    console.log('Total line items created:', lineItems.length);
+    
+    // Validate that we have line items
+    if (lineItems.length === 0) {
+      throw new Error('No valid line items could be created from cart items');
+    }
+    
+    // Calculate and validate total amount
+    const calculatedTotalCents = lineItems.reduce((sum, item) => sum + (item.price_data.unit_amount * item.quantity), 0);
+    const calculatedTotalDollars = calculatedTotalCents / 100;
+    
+    console.log('Payment Service Validation:', {
+      calculatedTotalCents,
+      calculatedTotalDollars,
+      lineItemsCount: lineItems.length,
+      cartItemsCount: cartItems.length
+    });
+    
+    // Validate reasonable amount (not zero or negative)
+    if (calculatedTotalCents <= 0) {
+      throw new Error(`Invalid payment amount: $${calculatedTotalDollars.toFixed(2)}. Please check your order items.`);
+    }
+    
+    // Validate not unreasonably high (over $1000)
+    if (calculatedTotalCents > 100000) {
+      throw new Error(`Payment amount seems too high: $${calculatedTotalDollars.toFixed(2)}. Please verify your order.`);
+    }
+    
     // Request body for the API
     // Make sure tableId and restaurantId are strings for Stripe metadata
     const tableIdStr = typeof tableId === 'object' ? 
@@ -86,8 +201,20 @@ export const createStripeCheckoutSession = async (
        String(restaurantId)) : 
       String(restaurantId || '');
     
-    console.log('Processing tableId for Stripe:', { original: tableId, processed: tableIdStr });
-    console.log('Processing restaurantId for Stripe:', { original: restaurantId, processed: restaurantIdStr });
+    console.log('Processing IDs for Stripe:', { 
+      tableId: { original: tableId, processed: tableIdStr }, 
+      restaurantId: { original: restaurantId, processed: restaurantIdStr },
+      orderId: orderId || 'Not provided'
+    });
+    
+    // Validate processed IDs
+    if (!tableIdStr || tableIdStr === 'undefined' || tableIdStr === 'null') {
+      throw new Error('Invalid table ID provided');
+    }
+    
+    if (!restaurantIdStr || restaurantIdStr === 'undefined' || restaurantIdStr === 'null') {
+      throw new Error('Invalid restaurant ID provided');
+    }
     
     const requestBody = {
       tableId: tableIdStr,
@@ -95,7 +222,8 @@ export const createStripeCheckoutSession = async (
       lineItems,
       metadata: {
         tableId: tableIdStr,
-        restaurantId: restaurantIdStr
+        restaurantId: restaurantIdStr,
+        ...(orderId && { orderId: String(orderId) })
       }
     };
 
@@ -104,7 +232,17 @@ export const createStripeCheckoutSession = async (
     const cancelUrl = `${window.location.origin}/payment/cancel`;
     
     // Call API to create Stripe session using apiClient
-    console.log(`Making API request to create checkout session`);
+    console.log('Making API request to create checkout session with body:', {
+      ...requestBody,
+      lineItems: lineItems.map(item => ({
+        ...item,
+        price_data: {
+          ...item.price_data,
+          unit_amount: item.price_data.unit_amount
+        }
+      }))
+    });
+    
     // Use apiClient which handles auth headers automatically
     const response = await apiClient.post('/api/payments/create-checkout-session', {
       ...requestBody,
@@ -112,23 +250,52 @@ export const createStripeCheckoutSession = async (
       cancelUrl
     });
     
-    console.log('Payment API response status:', response.status);
+    console.log('Payment API response:', { status: response.status, data: response.data });
+
+    if (!response.data) {
+      throw new Error('No response data received from payment service');
+    }
 
     if (!response.data.success) {
-      throw new Error(response.data.error?.message || 'Failed to create payment session');
+      const errorMessage = response.data.error?.message || 'Failed to create payment session';
+      console.error('Payment session creation failed:', response.data);
+      throw new Error(errorMessage);
+    }
+    
+    // Validate response data
+    if (!response.data.url || !response.data.sessionId) {
+      console.error('Invalid response data from payment service:', response.data);
+      throw new Error('Invalid response from payment service - missing URL or session ID');
     }
     
     // Store the Stripe session ID in localStorage for later reference
-    // This is helpful if the redirect URL contains a different ID format
-    if (response.data.sessionId) {
-      console.log('Storing Stripe session ID in localStorage:', response.data.sessionId);
-      localStorage.setItem('stripeSessionId', response.data.sessionId);
+    console.log('Storing Stripe session ID in localStorage:', response.data.sessionId);
+    localStorage.setItem('stripeSessionId', response.data.sessionId);
+    
+    // Also store order ID if provided for tracking
+    if (orderId) {
+      localStorage.setItem('pending_order_id', orderId);
     }
 
     return response.data;
   } catch (error) {
     console.error('Error creating payment session:', error);
-    throw error;
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      // Check for specific error types
+      if (error.message.includes('Invalid calculated price')) {
+        throw new Error('One or more items in your cart have invalid pricing. Please refresh and try again.');
+      } else if (error.message.includes('Invalid table ID') || error.message.includes('Invalid restaurant ID')) {
+        throw new Error('Session information is invalid. Please scan the table QR code again.');
+      } else if (error.message.includes('Cart items are required')) {
+        throw new Error('Your cart is empty. Please add items before checking out.');
+      } else {
+        throw error;
+      }
+    } else {
+      throw new Error('An unexpected error occurred while setting up payment. Please try again.');
+    }
   }
 }
 

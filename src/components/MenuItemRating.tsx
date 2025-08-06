@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { useOrders } from '@/context/OrderContext';
+import { useOrders } from '@/context/OrdersContext';
 import ratingService from '@/api/ratingService';
 import { Rating, RatingStats, RatingSubmission, RatingUpdate } from '@/types';
 
@@ -28,8 +28,8 @@ const MenuItemRating: React.FC<MenuItemRatingProps> = ({
   onRatingSubmitted,
   onStatsUpdate
 }) => {
-  const { user } = useAuth();
-  const { orderHistory } = useOrders();
+  const { user, isAuthenticated } = useAuth();
+  const { orders: orderHistory, refreshOrders } = useOrders();
   const [rating, setRating] = useState<number>(0);
   const [hoveredRating, setHoveredRating] = useState<number>(0);
   const [review, setReview] = useState<string>('');
@@ -40,6 +40,21 @@ const MenuItemRating: React.FC<MenuItemRatingProps> = ({
   const [hasOrderedItem, setHasOrderedItem] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Listen for order-related events to detect when orders are available
+  useEffect(() => {
+    const handleOrdersAvailable = (event: any) => {
+      console.log('🔄 Rating: Received orders-available event:', event.detail);
+      // Force re-check hasOrdered state
+      if (event.detail?.hasOrders) {
+        console.log('🔄 Rating: Orders detected via event, allowing rating');
+        setHasOrderedItem(true);
+      }
+    };
+
+    window.addEventListener('orders-available', handleOrdersAvailable);
+    return () => window.removeEventListener('orders-available', handleOrdersAvailable);
+  }, []);
+
   // Initialize component data
   useEffect(() => {
     const initializeRatingData = async () => {
@@ -48,26 +63,136 @@ const MenuItemRating: React.FC<MenuItemRatingProps> = ({
       
       try {
         // Check if user has ordered this item
-        if (user && orderHistory.length > 0) {
-          const hasOrdered = orderHistory.some(order => 
-            order.items.some(item => 
-              item.id === menuItemId || item.menuItemId === menuItemId
-            )
-          );
+        if (user) {
+          console.log('🔍 Checking if user has ordered item:', menuItemId);
+          console.log('🔍 User authenticated:', !!user);
+          console.log('🔍 Order history length:', orderHistory.length);
+          console.log('🔍 Available order history:', orderHistory.map(o => ({
+            id: o.id || o._id,
+            orderNumber: o.orderNumber,
+            items: o.items?.map(item => ({
+              id: item.id || item._id,
+              menuItemId: item.menuItemId,
+              name: item.name
+            }))
+          })));
+          
+          // If no order history, try to fetch directly from localStorage or check if orders are still loading
+          let hasOrdered = false;
+          
+          if (orderHistory.length > 0) {
+            hasOrdered = orderHistory.some(order => {
+              if (!order.items || !Array.isArray(order.items)) {
+                console.log('🔍 Order has no items array:', order.id || order._id);
+                return false;
+              }
+              
+              return order.items.some(item => {
+                const itemId = item.id || item._id;
+                const itemMenuItemId = item.menuItemId;
+                const itemName = item.name;
+                
+                console.log('🔍 Checking item for hasOrdered:', {
+                  itemId,
+                  itemMenuItemId,
+                  itemName,
+                  targetMenuItemId: menuItemId,
+                  idMatches: itemId === menuItemId || itemMenuItemId === menuItemId,
+                  nameMatches: itemName && itemName.toLowerCase().includes('margherita')
+                });
+                
+                // Check multiple ways to match:
+                // 1. Direct ID matches
+                if (itemId === menuItemId || itemMenuItemId === menuItemId) {
+                  return true;
+                }
+                
+                // 2. Name-based matching as fallback (for cases where IDs don't align)
+                if (itemName && menuItemName) {
+                  const normalizedItemName = itemName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const normalizedMenuName = menuItemName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  
+                  console.log('🔍 Name comparison:', {
+                    normalizedItemName,
+                    normalizedMenuName,
+                    menuItemNameProp: menuItemName
+                  });
+                  
+                  if (normalizedItemName.includes(normalizedMenuName.substring(0, 10)) || 
+                      normalizedMenuName.includes(normalizedItemName.substring(0, 10))) {
+                    console.log('🔍 Found match by name similarity');
+                    return true;
+                  }
+                }
+                
+                return false;
+              });
+            });
+          } else {
+            // Fallback: Check if we can find any recent orders in localStorage
+            try {
+              const storedOrders = localStorage.getItem('recent_orders');
+              if (storedOrders) {
+                const recentOrders = JSON.parse(storedOrders);
+                hasOrdered = recentOrders.some((order: any) => 
+                  order.items?.some((item: any) => 
+                    item.id === menuItemId || item.menuItemId === menuItemId
+                  )
+                );
+                console.log('🔍 Checked localStorage for recent orders, found:', hasOrdered);
+              }
+            } catch (e) {
+              console.log('🔍 No recent orders in localStorage');
+            }
+            
+            // Try to refresh orders if user is authenticated but no order history found
+            if (!hasOrdered && user && user.id && isAuthenticated) {
+              console.log('🔍 User is authenticated but no order history found, trying to refresh orders...');
+              try {
+                if (refreshOrders && typeof refreshOrders === 'function') {
+                  await refreshOrders();
+                  console.log('🔍 Orders refreshed, will recheck on next render cycle');
+                }
+              } catch (refreshError) {
+                console.log('🔍 Failed to refresh orders:', refreshError);
+              }
+              
+              // Temporary debug: Check if we should allow rating based on recent activity
+              const recentOrderTime = localStorage.getItem('last_order_time');
+              const now = Date.now();
+              const fiveMinutesAgo = now - (5 * 60 * 1000);
+              
+              if (recentOrderTime && parseInt(recentOrderTime) > fiveMinutesAgo) {
+                console.log('🔍 Recent order detected, allowing rating as fallback');
+                hasOrdered = true;
+              } else {
+                console.log('🔍 No verified order found and no recent activity, user cannot rate this item');
+              }
+            }
+          }
+          
+          console.log('🔍 hasOrderedItem result:', hasOrdered);
           setHasOrderedItem(hasOrdered);
 
-          // If user has ordered, check for existing rating
+          // If user has ordered, check for existing rating using the correct endpoint
           if (hasOrdered) {
             try {
               const userRating = await ratingService.getUserRatingForItem(menuItemId);
               if (userRating) {
+                console.log('Found existing rating for user:', userRating);
                 setExistingRating(userRating);
                 setRating(userRating.rating);
                 setReview(userRating.comment || '');
+              } else {
+                console.log('No existing rating found - user can submit new rating');
               }
-            } catch (error) {
-              // No existing rating found - this is normal
-              console.log('No existing rating found for user');
+            } catch (error: any) {
+              // Handle specific error cases
+              if (error.message?.includes('log in')) {
+                console.log('Authentication required to check existing rating');
+              } else {
+                console.log('No existing rating found for user');
+              }
             }
           }
         }
@@ -78,8 +203,14 @@ const MenuItemRating: React.FC<MenuItemRatingProps> = ({
             const stats = await ratingService.getMenuItemRatingStats(menuItemId);
             setRatingStats(stats);
             onStatsUpdate?.(stats);
-          } catch (error) {
-            console.error('Failed to fetch rating stats:', error);
+          } catch (error: any) {
+            // Handle authentication errors gracefully
+            if (error.message?.includes('log in')) {
+              console.log('Authentication required for rating stats, using empty stats');
+            } else {
+              console.error('Failed to fetch rating stats:', error);
+            }
+            
             // Initialize empty stats if fetch fails
             setRatingStats({
               averageRating: 0,
@@ -97,7 +228,7 @@ const MenuItemRating: React.FC<MenuItemRatingProps> = ({
     };
 
     initializeRatingData();
-  }, [user, orderHistory, menuItemId, showFullStats, onStatsUpdate]);
+  }, [user, orderHistory, menuItemId, showFullStats, onStatsUpdate, isAuthenticated, refreshOrders]);
 
   // Show loading skeleton while initializing
   if (isLoading) {
@@ -170,12 +301,54 @@ const MenuItemRating: React.FC<MenuItemRatingProps> = ({
         result = await ratingService.updateRating(existingRating._id, updateData);
         toast.success('Rating updated successfully!');
       } else {
-        // Submit new rating
+        // Submit new rating - need to find orderId from order history
+        console.log('🔍 Looking for order with menuItemId:', menuItemId);
+        console.log('🔍 Available orders:', orderHistory.map(o => ({
+          id: o.id || o._id,
+          orderNumber: o.orderNumber,
+          items: o.items?.map(item => ({
+            id: item.id || item._id,
+            menuItemId: item.menuItemId,
+            name: item.name
+          }))
+        })));
+        
+        const orderWithItem = orderHistory.find(order => {
+          if (!order.items || !Array.isArray(order.items)) {
+            console.log('🔍 Order has no items array:', order.id || order._id);
+            return false;
+          }
+          
+          return order.items.some(item => {
+            const itemId = item.id || item._id;
+            const itemMenuItemId = item.menuItemId;
+            
+            console.log('🔍 Checking item:', {
+              itemId,
+              itemMenuItemId,
+              targetMenuItemId: menuItemId,
+              matches: itemId === menuItemId || itemMenuItemId === menuItemId
+            });
+            
+            // Check both item.id and item.menuItemId
+            return itemId === menuItemId || itemMenuItemId === menuItemId;
+          });
+        });
+        
+        console.log('🔍 Found order with item:', orderWithItem?.id || orderWithItem?._id);
+        
+        if (!orderWithItem) {
+          throw new Error('Order not found for this menu item. You can only rate items you have ordered.');
+        }
+        
         const submissionData: RatingSubmission = {
+          orderId: orderWithItem.id || orderWithItem._id,
           menuItemId,
           rating,
-          comment: review.trim() || undefined
+          comment: review.trim() || 'No comment provided'  // Backend requires comment, so provide default
         };
+        
+        console.log('🔍 Rating submission data:', submissionData);
         
         result = await ratingService.submitRating(submissionData);
         toast.success('Rating submitted successfully!');

@@ -64,7 +64,12 @@ const CategoryGrid: React.FC<CategoryGridProps> = ({ categories, isLoading = fal
   const queryParams = new URLSearchParams(location.search);
   const tableId = queryParams.get('table');
   
-  const handleCategoryClick = (categoryId: string) => {
+  const handleCategoryClick = (categoryId: string, isActive: boolean = true) => {
+    // Don't navigate if category is inactive
+    if (isActive === false) {
+      return;
+    }
+    
     // Add table ID to the URL if it exists
     const url = tableId 
       ? `/category/${categoryId}?table=${tableId}` 
@@ -78,10 +83,12 @@ const CategoryGrid: React.FC<CategoryGridProps> = ({ categories, isLoading = fal
       {categories.map((category) => (
         <div 
           key={category.id}
-          className={`relative group overflow-hidden rounded-xl cursor-pointer transition-all duration-300 transform hover:scale-[1.02] ${
-            category.isActive === false ? 'opacity-60' : ''
+          className={`relative group overflow-hidden rounded-xl transition-all duration-300 ${
+            category.isActive === false 
+              ? 'opacity-60 cursor-not-allowed' 
+              : 'cursor-pointer transform hover:scale-[1.02]'
           }`}
-          onClick={() => handleCategoryClick(category.id)}
+          onClick={() => handleCategoryClick(category.id, category.isActive)}
         >
           {/* Background Image */}
           <div className="relative h-48 w-full overflow-hidden">

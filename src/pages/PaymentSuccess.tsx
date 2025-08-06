@@ -53,6 +53,26 @@ const PaymentSuccess = () => {
   const [attempts, setAttempts] = useState(0);
   const maxAttempts = 3;
 
+  // Restore authentication if returning from Stripe
+  useEffect(() => {
+    const isReturningFromStripe = searchParams.get('return_from_stripe') === 'true';
+    if (isReturningFromStripe) {
+      console.log('User returning from Stripe, ensuring authentication is preserved');
+      
+      // Check if we have stored auth data that needs to be restored
+      const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+      const storedUser = localStorage.getItem('user');
+      
+      if (storedToken && storedUser) {
+        console.log('Found stored auth data, user should remain authenticated');
+        // Dispatch a custom event to notify auth context to refresh
+        window.dispatchEvent(new CustomEvent('auth-restore', { 
+          detail: { source: 'stripe-return' }
+        }));
+      }
+    }
+  }, [searchParams]);
+
   // Process and sanitize the table parameter
   useEffect(() => {
     if (tableParam) {
@@ -192,10 +212,8 @@ const PaymentSuccess = () => {
         // SUCCESS PATH: Handle successful payment verification
         if (result && (result.status === 'paid' || result.paymentProviderStatus === 'paid')) {
           console.log('Payment verified as paid! Stopping verification process.');
-          toast({
-            title: "Payment Successful",
-            description: "Your payment has been successfully processed."
-          });
+          // Remove duplicate payment success toast as the page already shows success
+          // toast removed to avoid duplicate notifications
           
           setPaymentData(result);
           clearCart();
@@ -204,7 +222,54 @@ const PaymentSuccess = () => {
           const orderIdToUse = result.orderId || effectiveOrderId;
           if (orderIdToUse) {
             console.log('Adding order to context:', orderIdToUse);
-            addOrder({ _id: orderIdToUse } as any);
+            const orderToAdd = { _id: orderIdToUse } as any;
+            
+            // Check if this was a group order payment
+            const storedGroupOrderData = localStorage.getItem('currentGroupOrderPayment');
+            if (storedGroupOrderData) {
+              try {
+                const groupOrderInfo = JSON.parse(storedGroupOrderData);
+                console.log('Group order payment completed:', groupOrderInfo);
+                
+                // Mark the order as paid and include group order metadata
+                orderToAdd.paymentStatus = 'PAID';
+                orderToAdd.isGroupOrder = true;
+                orderToAdd.groupOrderData = groupOrderInfo;
+                
+                // For "one person pays all" structure, this payment covers everyone
+                if (groupOrderInfo.paymentStructure === 'pay_all') {
+                  console.log('One person paid for entire group order - all participants covered');
+                  orderToAdd.specialInstructions = 'Group Order - Paid in full by group member';
+                  
+                  // Update the stored group order data to reflect payment completion
+                  const groupOrderKey = `groupOrder_${groupOrderInfo.groupOrderId}`;
+                  const existingGroupOrderData = localStorage.getItem(groupOrderKey);
+                  if (existingGroupOrderData) {
+                    try {
+                      const groupOrderData = JSON.parse(existingGroupOrderData);
+                      groupOrderData.paymentStatus = 'PAID';
+                      groupOrderData.paidBy = orderToAdd.userId || 'group-member';
+                      groupOrderData.paidAt = new Date().toISOString();
+                      localStorage.setItem(groupOrderKey, JSON.stringify(groupOrderData));
+                      console.log('Updated group order payment status for all participants');
+                    } catch (error) {
+                      console.error('Failed to update group order payment status:', error);
+                    }
+                  }
+                }
+                
+                // Clean up the stored payment info
+                localStorage.removeItem('currentGroupOrderPayment');
+                
+                // TODO: Call backend API to notify other participants about payment completion
+                // This would typically be: await notifyGroupOrderPaymentComplete(groupOrderInfo.groupOrderId, orderIdToUse);
+                
+              } catch (error) {
+                console.error('Failed to parse group order payment data:', error);
+              }
+            }
+            
+            addOrder(orderToAdd);
           }
           
           // Force stop loading state

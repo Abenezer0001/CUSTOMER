@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Service Charge</title>
+</head>
+<body>
+    <h1>Service Charge Test</h1>
+    <div id="output"></div>
+    
+    <script>
+        // Set environment variable for testing
+        window.VITE_API_BASE_URL = 'http://localhost:3001';
+        
+        // Test function to simulate the venue service charge fetching
+        async function testServiceCharge() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<p>Testing service charge...</p>';
+            
+            try {
+                // Use a known venue ID that has service charge enabled
+                const venueId = '686180d953aed6bbdb9159f1'; // Test Dining Room with 40% service charge
+                
+                const response = await fetch(`http://localhost:3001/api/venues/${venueId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (response.ok) {
+                    const venueData = await response.json();
+                    output.innerHTML += `<p><strong>Venue:</strong> ${venueData.name}</p>`;
+                    output.innerHTML += `<p><strong>Service Charge:</strong> ${JSON.stringify(venueData.serviceCharge, null, 2)}</p>`;
+                    
+                    // Test service charge calculation
+                    const subtotal = 45.98; // From your screenshot
+                    let serviceCharge = 0;
+                    
+                    if (venueData.serviceCharge && venueData.serviceCharge.enabled) {
+                        if (venueData.serviceCharge.type === 'percentage') {
+                            serviceCharge = subtotal * (venueData.serviceCharge.value / 100);
+                            output.innerHTML += `<p><strong>Calculated Service Charge:</strong> ${subtotal} * ${venueData.serviceCharge.value}% = $${serviceCharge.toFixed(2)}</p>`;
+                        } else if (venueData.serviceCharge.type === 'flat') {
+                            const withinMinAmount = venueData.serviceCharge.minAmount === undefined || subtotal >= venueData.serviceCharge.minAmount;
+                            const withinMaxAmount = venueData.serviceCharge.maxAmount === undefined || subtotal <= venueData.serviceCharge.maxAmount;
+                            
+                            if (withinMinAmount && withinMaxAmount) {
+                                serviceCharge = venueData.serviceCharge.value;
+                                output.innerHTML += `<p><strong>Calculated Service Charge:</strong> Flat rate $${serviceCharge.toFixed(2)}</p>`;
+                            } else {
+                                output.innerHTML += `<p><strong>Service Charge:</strong> $0.00 (order not within range)</p>`;
+                            }
+                        }
+                        
+                        const total = subtotal + serviceCharge;
+                        output.innerHTML += `<p><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</p>`;
+                        output.innerHTML += `<p><strong>Service Charge:</strong> $${serviceCharge.toFixed(2)}</p>`;
+                        output.innerHTML += `<p><strong>Total:</strong> $${total.toFixed(2)}</p>`;
+                    } else {
+                        output.innerHTML += `<p><strong>Service Charge:</strong> Disabled or not configured</p>`;
+                    }
+                } else {
+                    output.innerHTML += `<p><strong>Error:</strong> ${response.status} ${response.statusText}</p>`;
+                    const errorText = await response.text();
+                    output.innerHTML += `<p><strong>Response:</strong> ${errorText}</p>`;
+                }
+            } catch (error) {
+                output.innerHTML += `<p><strong>Error:</strong> ${error.message}</p>`;
+            }
+        }
+        
+        // Run test when page loads
+        testServiceCharge();
+    </script>
+</body>
+</html>

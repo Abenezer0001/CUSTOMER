@@ -586,7 +586,9 @@ export const createOrder = async (
     let formattedOrderData: OrderData;
 
     if (customOrderData) {
+      // Use the provided order data (includes tip and service charge from CartDrawer)
       formattedOrderData = customOrderData;
+      console.log('Using custom order data with tip:', customOrderData.tip, 'and service fee:', customOrderData.serviceFee);
     } else {
       const subtotal = cartItems.reduce((total, item) => {
         if (item.getItemTotal) {
@@ -756,48 +758,63 @@ export const createOrder = async (
  */
 export const fetchUserOrders = async (): Promise<OrdersResponse['data']> => {
   try {
-    console.log('Fetching user orders with credentials included');
+    console.log('Fetching user orders using apiClient');
     
-    const response = await fetch(`${API_BASE_URL}/api/orders/my-orders`, {
-      method: 'GET',
-      headers: getAuthHeaders(),
-      credentials: 'include' // Send cookies
-    });
+    // Use apiClient which has better token handling and error management
+    const response = await apiClient.get('/api/orders/my-orders');
     
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('Authentication required');
-      }
-      throw new Error(`Failed to fetch orders: ${response.status}`);
-    }
-    
-    const data = await response.json();
+    console.log('Raw orders response:', response.data);
     
     // Handle different response formats
-    if (Array.isArray(data)) {
+    if (Array.isArray(response.data)) {
       return {
-        orders: data,
+        orders: response.data,
         pagination: {
-          total: data.length,
-          limit: data.length,
+          total: response.data.length,
+          limit: response.data.length,
           page: 1,
           pages: 1
         }
       };
-    } else if (data.success) {
-      return data.data;
-    } else if (data.orders) {
-      return data;
+    } else if (response.data.success) {
+      return response.data.data;
+    } else if (response.data.orders) {
+      return response.data;
+    } else if (response.data.data && Array.isArray(response.data.data)) {
+      // Handle case where orders are nested in data.data
+      return {
+        orders: response.data.data,
+        pagination: {
+          total: response.data.data.length,
+          limit: response.data.data.length,
+          page: 1,
+          pages: 1
+        }
+      };
     }
     
+    console.log('No orders found or unexpected response format');
     return {
       orders: [],
       pagination: { total: 0, limit: 10, page: 1, pages: 0 }
     };
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching user orders:', error);
-    throw error instanceof Error ? error : new Error('Failed to fetch orders');
+    
+    // Handle specific error cases
+    if (error.response?.status === 401) {
+      console.log('Authentication required for fetching orders');
+      throw new Error('Authentication required');
+    }
+    
+    // Return empty orders instead of throwing for other errors
+    // This prevents the entire component from failing
+    console.log('Returning empty orders due to error');
+    return {
+      orders: [],
+      pagination: { total: 0, limit: 10, page: 1, pages: 0 }
+    };
   }
 };
 
@@ -828,6 +845,60 @@ export const cancelOrder = async (orderId: string): Promise<void> => {
 };
 
 /**
+ * Converts a group order from the API format to the frontend Order format
+ * 
+ * @param groupOrderData - Group order data from the API
+ * @returns Converted order data for frontend use
+ */
+const convertGroupOrderToFrontend = (groupOrderData: any): Order => {
+  console.log('Converting group order to frontend format:', groupOrderData);
+  
+  // Extract items from finalOrder or items array
+  const items = (groupOrderData.finalOrder || groupOrderData.items || []).map((item: any) => ({
+    id: item.itemId || item.menuItemId || item._id,
+    menuItemId: item.menuItemId || item.itemId,
+    name: item.name || item.menuItemName || 'Unknown Item',
+    price: item.price || 0,
+    quantity: item.quantity || 1,
+    specialInstructions: item.specialRequests || item.specialInstructions || '',
+    modifiers: item.customizations ? item.customizations.map((mod: string) => ({
+      id: mod,
+      name: mod,
+      price: 0
+    })) : []
+  }));
+  
+  // Calculate totals
+  const subtotal = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+  
+  return {
+    id: groupOrderData._id,
+    _id: groupOrderData._id,
+    orderNumber: `GROUP-${groupOrderData.inviteCode || groupOrderData.joinCode}`,
+    items: items,
+    subtotal: subtotal,
+    tax: 0,
+    serviceFee: 0,
+    tip: 0,
+    total: subtotal,
+    status: 'PENDING',
+    paymentStatus: 'PENDING',
+    timestamp: new Date(groupOrderData.createdAt),
+    createdAt: groupOrderData.createdAt,
+    tableId: groupOrderData.tableId || '',
+    userId: groupOrderData.groupLeaderId || '',
+    specialInstructions: 'Group Order',
+    isGroupOrder: true,
+    groupOrderData: {
+      joinCode: groupOrderData.inviteCode || groupOrderData.joinCode,
+      participants: groupOrderData.participants || [],
+      paymentStructure: groupOrderData.paymentStructure || 'pay_own',
+      totalParticipants: (groupOrderData.participants || []).length
+    }
+  };
+};
+
+/**
  * Retrieves an order by its ID
  * 
  * @param orderId - ID of the order to retrieve
@@ -836,26 +907,50 @@ export const cancelOrder = async (orderId: string): Promise<void> => {
  */
 export const getOrderById = async (orderId: string): Promise<Order> => {
   try {
+    // First try regular orders endpoint
     const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
       method: 'GET',
       headers: getAuthHeaders(),
       credentials: 'include'
     });
     
-    if (!response.ok) {
-      throw new Error(`Failed to fetch order: ${response.status}`);
+    if (response.ok) {
+      const data = await response.json();
+      
+      // Handle different response formats
+      if (data.success) {
+        return convertApiOrderToFrontend(data.data);
+      } else if (data._id) {
+        return convertApiOrderToFrontend(data);
+      }
+      
+      throw new Error('Invalid order data received');
     }
     
-    const data = await response.json();
-    
-    // Handle different response formats
-    if (data.success) {
-      return convertApiOrderToFrontend(data.data);
-    } else if (data._id) {
-      return convertApiOrderToFrontend(data);
+    // If regular orders endpoint fails, try group orders endpoint
+    if (response.status === 404) {
+      console.log('Order not found in regular orders, trying group orders endpoint...');
+      
+      const groupResponse = await fetch(`${API_BASE_URL}/api/group-orders/${orderId}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+      
+      if (groupResponse.ok) {
+        const groupData = await groupResponse.json();
+        console.log('Found order in group orders endpoint:', groupData);
+        
+        // Convert group order to regular order format
+        if (groupData.success && groupData.data) {
+          return convertGroupOrderToFrontend(groupData.data);
+        } else if (groupData._id) {
+          return convertGroupOrderToFrontend(groupData);
+        }
+      }
     }
     
-    throw new Error('Invalid order data received');
+    throw new Error(`Failed to fetch order: ${response.status}`);
     
   } catch (error) {
     console.error('Error fetching order:', error);

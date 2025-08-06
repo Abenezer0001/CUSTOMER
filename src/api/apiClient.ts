@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Get API URL directly from environment variables with fallback
-const envApiUrl = import.meta.env.VITE_API_BASE_URL;
+const envApiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 let processedApiUrl = envApiUrl;
 
 // Ensure API_BASE_URL is the true root
@@ -44,6 +44,22 @@ const getEffectiveToken = (): string | null => {
     }
   }
   
+  // Try to get token from URL hash (for OAuth returns)
+  const hashParams = new URLSearchParams(window.location.hash.substring(1));
+  const hashToken = hashParams.get('access_token');
+  if (hashToken) {
+    console.log('Found token in URL hash');
+    localStorage.setItem('auth_token', hashToken);
+    return hashToken;
+  }
+  
+  // If no token found but we have substantial cookies, we might be using HttpOnly auth
+  const cookieString = document.cookie;
+  if (cookieString && cookieString.length > 50) {
+    console.log('No accessible token but substantial cookies detected - likely HttpOnly authentication');
+    return 'http-only-auth-detected';
+  }
+  
   console.log('No authentication token found');
   return null;
 };
@@ -81,11 +97,38 @@ apiClient.interceptors.request.use(
     console.log(`🔷 Making ${config.method?.toUpperCase()} request to ${config.url}`);
     
     const token = getEffectiveToken();
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-      console.log('✅ Added token to request headers');
+    if (token && token !== 'http-only-auth-detected') {
+      // Validate token format (basic JWT check)
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) {
+        console.warn('⚠️ Invalid token format (not JWT):', token.substring(0, 20) + '...');
+        // Clear invalid token
+        localStorage.removeItem('auth_token');
+      } else {
+        try {
+          // Check if token is expired
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const now = Math.floor(Date.now() / 1000);
+          
+          if (payload.exp && payload.exp < now) {
+            console.warn('⚠️ Token is expired, clearing from storage');
+            localStorage.removeItem('auth_token');
+            // Don't add expired token to headers
+          } else {
+            config.headers['Authorization'] = `Bearer ${token}`;
+            console.log('✅ Added valid token to request headers for:', config.url);
+          }
+        } catch (err) {
+          console.warn('⚠️ Could not decode token payload, using as-is:', err);
+          config.headers['Authorization'] = `Bearer ${token}`;
+          console.log('✅ Added token to request headers for:', config.url);
+        }
+      }
+    } else if (token === 'http-only-auth-detected') {
+      console.log('✅ Using HttpOnly cookie authentication for:', config.url);
+      // Don't add Authorization header, rely on withCredentials: true
     } else {
-      console.log('⚠️ No token available for request, relying on HttpOnly cookies');
+      console.log('⚠️ No token available for request to:', config.url, 'relying on HttpOnly cookies');
     }
     
     // Log request info for debugging
@@ -124,13 +167,14 @@ const onRefreshFailure = (error: any) => {
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user');
   
-  // Redirect to login if needed
-  if (window.location.pathname !== '/login' && 
-      window.location.pathname !== '/signup' && 
-      !window.location.pathname.includes('/table/')) {
-    console.log('Redirecting to login page due to authentication failure');
-    window.location.href = '/login';
-  }
+  // Dispatch custom event instead of forcing redirect
+  console.log('Authentication failed - dispatching auth-failed event');
+  window.dispatchEvent(new CustomEvent('auth-failed', { 
+    detail: { error, timestamp: Date.now() } 
+  }));
+  
+  // Only redirect for critical auth failures, not for rating API calls
+  // Let individual components handle their own auth errors gracefully
 };
 
 // Function to refresh the token
@@ -225,10 +269,12 @@ apiClient.interceptors.response.use(
       if (error.response.status === 401) {
         console.error('🔑 Authentication failed - invalid or expired token');
         
-        // Check if token refresh is needed based on response
-        const needsRefresh = error.response.data?.needsRefresh === true;
+        // Check if token refresh is needed based on response or if we have a refresh mechanism
+        const needsRefresh = error.response.data?.needsRefresh === true || 
+                            error.response.data?.message?.includes('expired') ||
+                            error.response.data?.message?.includes('invalid');
         
-        if (needsRefresh && error.config && !error.config._retry) {
+        if (error.config && !error.config._retry) {
           if (isRefreshing) {
             // If already refreshing, wait for the new token
             try {

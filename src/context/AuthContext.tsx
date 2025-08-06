@@ -72,10 +72,42 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
+  // Initialize state with immediate check for stored auth data to prevent login redirects on refresh
+  const getInitialAuthState = () => {
+    try {
+      const storedToken = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+      const storedUser = localStorage.getItem('user');
+      
+      if (storedToken && storedUser) {
+        const userData = JSON.parse(storedUser);
+        if (userData && userData.id && userData.email) {
+          console.log('AuthContext: Found valid stored auth data on initialization');
+          return {
+            isAuthenticated: true,
+            user: userData,
+            token: storedToken,
+            loading: false
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error checking stored auth data on init:', error);
+    }
+    
+    console.log('AuthContext: No valid stored auth data found on initialization');
+    return {
+      isAuthenticated: false,
+      user: null,
+      token: null,
+      loading: true
+    };
+  };
+
+  const initialState = getInitialAuthState();
+  const [user, setUser] = useState<AuthUser | null>(initialState.user);
+  const [loading, setLoading] = useState(initialState.loading);
+  const [isAuthenticated, setIsAuthenticated] = useState(initialState.isAuthenticated);
+  const [token, setToken] = useState<string | null>(initialState.token);
   const navigate = useNavigate();
 
   // Helper function to handle post-login redirection
@@ -102,8 +134,8 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (effectiveTableId) {
         // Store the table ID to ensure consistency
         localStorage.setItem('currentTableId', effectiveTableId);
-        console.log(`Table ID found: ${effectiveTableId}, redirecting to menu`);
-        navigate(`/menu?table=${effectiveTableId}`, { replace: true });
+        console.log(`Table ID found: ${effectiveTableId}, redirecting to home with table parameter`);
+        window.location.href = `http://localhost:8080/?table=${effectiveTableId}`;
       } else {
         console.log('No table ID found, redirecting to scan page');
         navigate('/scan', { replace: true });
@@ -204,9 +236,27 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else {
           console.log('No accessible token found during initialization');
           
-          // Check if we might have HTTP-only auth cookies
-          if (hasHttpOnlyAuth()) {
+          // Check if we might have HTTP-only auth cookies or stored user data
+          const hasHttpAuth = hasHttpOnlyAuth();
+          const hasStoredUser = localStorage.getItem('user');
+          
+          if (hasHttpAuth) {
             console.log('HTTP-only authentication cookies detected, attempting to verify');
+          } else if (hasStoredUser) {
+            console.log('Found stored user data, attempting to restore session');
+            // Try to restore from stored user data
+            try {
+              const userData = JSON.parse(hasStoredUser);
+              if (userData && userData.id && userData.email) {
+                console.log('Restoring session from stored user data');
+                setUser(userData);
+                setIsAuthenticated(true);
+                setLoading(false);
+                return;
+              }
+            } catch (error) {
+              console.error('Error parsing stored user data:', error);
+            }
           } else {
             console.log('No authentication detected, user should login');
             setLoading(false);
@@ -436,9 +486,79 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       }
     };
+
+    // Handle auth restore requests (e.g., from Stripe return)
+    const handleAuthRestore = (event: any) => {
+      console.log('Received auth restore request:', event.detail);
+      
+      // Use token and userData from event if provided (from ProtectedRoute)
+      const eventToken = event.detail?.token;
+      const eventUserData = event.detail?.userData;
+      
+      let effectiveToken = eventToken;
+      let effectiveUserData = eventUserData;
+      
+      // Fallback to stored data if not provided in event
+      if (!effectiveToken) {
+        effectiveToken = localStorage.getItem('auth_token') || 
+                        localStorage.getItem('access_token') ||
+                        sessionStorage.getItem('auth_token') ||
+                        sessionStorage.getItem('access_token');
+      }
+      
+      if (!effectiveUserData) {
+        effectiveUserData = localStorage.getItem('user') || sessionStorage.getItem('user');
+      }
+      
+      console.log('Auth restore data sources:', {
+        eventToken: !!eventToken,
+        eventUserData: !!eventUserData,
+        effectiveToken: !!effectiveToken,
+        effectiveUserData: !!effectiveUserData,
+        source: event.detail?.source
+      });
+      
+      if (effectiveToken && effectiveUserData) {
+        try {
+          const userData = typeof effectiveUserData === 'string' 
+            ? JSON.parse(effectiveUserData) 
+            : effectiveUserData;
+            
+          if (userData && userData.id && userData.email) {
+            console.log('Successfully restoring auth state with data');
+            
+            // Force immediate state update
+            setToken(effectiveToken);
+            setUser(userData);
+            setIsAuthenticated(true);
+            setLoading(false);
+            
+            // Ensure data is stored in localStorage
+            localStorage.setItem('auth_token', effectiveToken);
+            localStorage.setItem('user', JSON.stringify(userData));
+            
+            // Trigger additional event to confirm restoration
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('auth-restored', { 
+                detail: { success: true, source: event.detail?.source }
+              }));
+            }, 100);
+            
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing user data during restore:', error);
+        }
+      }
+      
+      // If stored data is invalid, try to re-check auth
+      console.log('No valid auth data for restore, re-checking authentication');
+      checkAuth();
+    };
     
     window.addEventListener('auth-state-changed', handleAuthStateChange);
     window.addEventListener('token-updated', handleTokenUpdate);
+    window.addEventListener('auth-restore', handleAuthRestore);
     
     // Initialize authentication check
     checkAuth();
@@ -446,6 +566,7 @@ const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       window.removeEventListener('auth-state-changed', handleAuthStateChange);
       window.removeEventListener('token-updated', handleTokenUpdate);
+      window.removeEventListener('auth-restore', handleAuthRestore);
     };
   }, []); // Run only once on mount
 

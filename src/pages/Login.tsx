@@ -65,9 +65,9 @@ const Login: React.FC = () => {
           console.log(`Redirecting to return URL: ${returnUrl}`);
           navigate(returnUrl);
         } else if (effectiveTableId) {
-          // If we have a table ID, redirect to the menu page
-          console.log(`Redirecting to menu page with ID: ${effectiveTableId}`);
-          navigate(`/menu?table=${effectiveTableId}`);
+          // If we have a table ID, redirect to the home page with table parameter
+          console.log(`Redirecting to home page with table ID: ${effectiveTableId}`);
+          window.location.href = `http://localhost:8080/?table=${effectiveTableId}`;
         } else {
           // No table ID found, redirect to scan page
           console.log('No table ID found, redirecting to scan page');
@@ -87,7 +87,7 @@ const Login: React.FC = () => {
         if (returnUrl && returnUrl !== '/login') {
           navigate(returnUrl);
         } else if (effectiveTableId) {
-          navigate(`/menu?table=${effectiveTableId}`);
+          window.location.href = `http://localhost:8080/?table=${effectiveTableId}`;
         } else {
           navigate('/scan');
         }
@@ -112,7 +112,16 @@ const Login: React.FC = () => {
       
       if (success) {
         toast.success('Continuing as guest');
-        navigate('/');
+        // Check if we have a table ID to redirect properly
+        const currentTableId = localStorage.getItem('currentTableId') || 
+                              localStorage.getItem('tableId') || 
+                              tableId;
+        
+        if (currentTableId) {
+          window.location.href = `http://localhost:8080/?table=${currentTableId}`;
+        } else {
+          navigate('/');
+        }
       } else {
         toast.error('Failed to create guest session');
       }

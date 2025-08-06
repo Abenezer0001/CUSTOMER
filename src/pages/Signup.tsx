@@ -90,9 +90,9 @@ const Signup: React.FC = () => {
           console.log(`Redirecting to return URL: ${returnUrl}`);
           navigate(returnUrl);
         } else if (effectiveTableId) {
-          // If we have a table ID, redirect to the table page
-          console.log(`Redirecting to table page with ID: ${effectiveTableId}`);
-          navigate(`/?table=${effectiveTableId}`, { replace: true });
+          // If we have a table ID, redirect to the localhost:8080 with table parameter
+          console.log(`Redirecting to localhost:8080 with table ID: ${effectiveTableId}`);
+          window.location.href = `http://localhost:8080/?table=${effectiveTableId}`;
         } else {
           // Default home page
           navigate('/', { replace: true });
@@ -113,7 +113,7 @@ const Signup: React.FC = () => {
         if (returnUrl && returnUrl !== '/signup' && returnUrl !== '/login') {
           navigate(returnUrl);
         } else if (effectiveTableId) {
-          navigate(`/?table=${effectiveTableId}`, { replace: true });
+          window.location.href = `http://localhost:8080/?table=${effectiveTableId}`;
         } else {
           navigate('/', { replace: true });
         }

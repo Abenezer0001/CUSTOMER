@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useOrders } from '@/context/OrdersContext';
 import { Button } from '@/components/ui/button';
 import { CreditCard, Banknote, Check } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,7 +13,6 @@ import apiClient from '@/api/apiClient';
 import * as cashPaymentService from '@/api/cashPaymentService';
 
 const Bill: React.FC = () => {
-  const { orders, clearOrders } = useOrders();
   const { tableNumber, restaurantName } = useTableInfo();
   const { isAuthenticated, isLoading, token, user } = useAuth();
   const navigate = useNavigate();
@@ -28,6 +26,52 @@ const Bill: React.FC = () => {
   const [isCheckingCashRequest, setIsCheckingCashRequest] = useState(true);
   const [forceBillView, setForceBillView] = useState(false);
   const [restaurantServiceCharge, setRestaurantServiceCharge] = useState({ enabled: false, percentage: 0 });
+  
+  // Add orders state and loading - fetch directly from API like MyOrders
+  const [orders, setOrders] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  
+  // Function to fetch orders directly from API
+  const fetchOrders = async () => {
+    try {
+      setOrdersLoading(true);
+      console.log('🔍 Bill: Fetching orders from API...');
+      
+      const response = await apiClient.get('/api/orders/my-orders');
+      
+      if (response.data) {
+        const fetchedOrders = Array.isArray(response.data) ? response.data : [];
+        console.log('🔍 Bill: Fetched orders from API:', fetchedOrders.length);
+        
+        // Debug order data structure for payment issues
+        fetchedOrders.forEach((order, index) => {
+          console.log(`🔍 Bill Order ${index + 1} debugging:`, {
+            id: order.id || order._id,
+            orderNumber: order.orderNumber,
+            total: order.total,
+            subtotal: order.subtotal,
+            service_charge: order.service_charge,
+            serviceFee: order.serviceFee,
+            tip: order.tip,
+            paymentStatus: order.paymentStatus,
+            status: order.status,
+            hasServiceCharge: !!(order.service_charge || order.serviceFee),
+            hasTip: !!order.tip
+          });
+        });
+        
+        setOrders(fetchedOrders);
+      } else {
+        console.log('🔍 Bill: No data returned from API');
+        setOrders([]);
+      }
+    } catch (error) {
+      console.error('🔍 Bill: Error fetching orders:', error);
+      setOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
   
   // Early authentication check - redirect to login if not authenticated
   useEffect(() => {
@@ -49,6 +93,13 @@ const Bill: React.FC = () => {
     }
   }, [isAuthenticated, isLoading, token, navigate]);
 
+  // Fetch orders when component loads and user is authenticated
+  useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      fetchOrders();
+    }
+  }, [isAuthenticated, isLoading]);
+
   // Check for existing cash payment requests on component load
   useEffect(() => {
     const checkExistingCashRequest = async () => {
@@ -64,20 +115,46 @@ const Bill: React.FC = () => {
         if (tableId) {
           console.log('Checking for existing cash payment request for table:', tableId);
           
-          // Get user identification for security
-          const userId = user?.id || localStorage.getItem('userId');
-          const deviceId = localStorage.getItem('deviceId') || `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          // Get user identification for security - Use SAME logic as when creating requests
+          const storedUserId = localStorage.getItem('userId');
+          const storedDeviceId = localStorage.getItem('deviceId');
+          
+          // Use consistent identifier priority: localStorage first (matches creation logic)
+          const userId = storedUserId || user?.id;
+          const deviceId = storedDeviceId || `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
           // Store device ID for future use
-          if (!localStorage.getItem('deviceId')) {
+          if (!storedDeviceId) {
             localStorage.setItem('deviceId', deviceId);
           }
+          
+          console.log('🔍 Cash Payment Retrieval IDs:', {
+            storedUserId,
+            storedDeviceId,
+            authenticatedUserId: user?.id,
+            finalUserId: userId,
+            finalDeviceId: deviceId
+          });
           
           const response = await cashPaymentService.getCashPaymentRequestsByTable(tableId, userId, deviceId);
           
           if (response.success && response.data) {
-            console.log('Found existing cash payment requests:', response.data);
-            setExistingCashRequests(Array.isArray(response.data) ? response.data : [response.data]);
+            console.log('🔍 CRITICAL DEBUG - Found existing cash payment requests:', response.data);
+            const requestsArray = Array.isArray(response.data) ? response.data : [response.data];
+            
+            // Debug cash payment request structure
+            requestsArray.forEach((req, index) => {
+              console.log(`🔍 CRITICAL DEBUG - Cash Request ${index}:`, {
+                id: req._id || req.id,
+                orderIds: req.orderIds,
+                orderIdsTypes: req.orderIds?.map(id => ({ id, type: typeof id })),
+                totalAmount: req.totalAmount,
+                status: req.status,
+                fullRequest: req
+              });
+            });
+            
+            setExistingCashRequests(requestsArray);
             
             // Don't automatically show pending screen here - let the filtering logic decide
             // The pending screen will be shown later if there are no new orders
@@ -117,8 +194,8 @@ const Bill: React.FC = () => {
     }
   }, [isAuthenticated, isLoading]);
 
-  // Show loading state while checking authentication or cash requests
-  if (isLoading || isCheckingCashRequest) {
+  // Show loading state while checking authentication, cash requests, or orders
+  if (isLoading || isCheckingCashRequest || ordersLoading) {
     return (
       <div className="min-h-screen bg-[#16141F] text-white">
         <TableHeader 
@@ -139,18 +216,31 @@ const Bill: React.FC = () => {
     return null;
   }
   
-  // TEMPORARILY SHOW ALL ORDERS FOR DEBUGGING - Remove filtering entirely
-  console.log('🔍 DEBUGGING: Total orders from context:', orders.length);
-  console.log('🔍 DEBUGGING: All orders:', orders.map(o => ({
-    id: o.id,
-    paymentStatus: o.paymentStatus,
-    status: o.status,
-    createdAt: (o as any).createdAt || o.timestamp,
-    tableId: o.tableId || (o as any).table
-  })));
+  // Filter orders properly for current user and table context
+  console.log('🔍 Filtering orders for current session');
+  console.log('🔍 Total orders from context:', orders.length);
   
-  // For debugging: Show ALL orders that aren't explicitly marked as PAID
+  // Get current session identifiers
+  const currentTableId = searchParams.get('table') || localStorage.getItem('currentTableId');
+  const currentUserId = user?.id || user?._id;
+  const currentDeviceId = localStorage.getItem('deviceId') || localStorage.getItem('device_id');
+  
+  console.log('🔍 Session context:', {
+    currentTableId,
+    currentUserId,
+    currentDeviceId,
+    isAuthenticated
+  });
+  
   const newOrders = orders.filter(order => {
+    console.log('🔍 Processing order for filtering:', {
+      orderId: order.id || order._id,
+      orderNumber: order.orderNumber,
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      orderData: order
+    });
+
     // Only filter out orders that are definitely paid
     const isPaid = order.paymentStatus === 'PAID' || 
                    order.paymentStatus === 'paid' || 
@@ -162,12 +252,93 @@ const Bill: React.FC = () => {
       return false;
     }
     
-    console.log('🔍 Order included:', { 
-      orderId: order.id, 
+    console.log('🔍 Order is not paid, checking inclusion criteria...', {
+      orderId: order.id || order._id,
       paymentStatus: order.paymentStatus,
-      status: order.status 
+      status: order.status
     });
-    return true; // Include all non-paid orders
+
+    // CRITICAL FIX: Include ALL unpaid orders - both new orders and those with existing cash payment requests
+    // This ensures that when a user places a new order, their previous orders still appear
+    
+    // EMERGENCY FIX: Be more permissive in order matching - the filtering is too strict
+    
+    // Primary inclusion criteria - authenticated user gets all their unpaid orders
+    if (isAuthenticated) {
+      // Try multiple ways to match user ID
+      const orderUserId = (order as any).userId || order.user?.id || order.user?._id || (order as any).customer?.id;
+      const userMatches = orderUserId === currentUserId || 
+                         orderUserId === user?.id || 
+                         orderUserId === user?._id ||
+                         // Fallback: if no user ID on order but user is authenticated, include it
+                         (!orderUserId && isAuthenticated);
+      
+      if (userMatches) {
+        console.log('🔍 ✅ CRITICAL: Including unpaid order for authenticated user:', {
+          orderId: order.id || order._id,
+          orderNumber: order.orderNumber,
+          paymentStatus: order.paymentStatus,
+          currentUserId,
+          orderUserId,
+          userMatches,
+          reason: 'authenticated_user_unpaid_order'
+        });
+        return true;
+      }
+    }
+    
+    // Secondary inclusion criteria - same table context (more permissive)
+    const orderTableId = order.tableId || (order as any).table || order.table?.id || (order as any).table_id;
+    
+    if (currentTableId && (orderTableId === currentTableId || orderTableId === parseInt(currentTableId))) {
+      console.log('🔍 Order included - table match:', {
+        orderId: order.id,
+        orderTableId,
+        currentTableId,
+        paymentStatus: order.paymentStatus
+      });
+      return true;
+    }
+    
+    // Tertiary inclusion criteria - same device (for guests)
+    const orderDeviceId = (order as any).deviceId || order.device?.id || (order as any).device_id;
+    
+    if (currentDeviceId && orderDeviceId === currentDeviceId) {
+      console.log('🔍 Order included - device match:', {
+        orderId: order.id,
+        orderDeviceId,
+        currentDeviceId
+      });
+      return true;
+    }
+    
+    // EMERGENCY FALLBACK: If authenticated and we have orders but none match, include recent orders
+    if (isAuthenticated && orders.length > 0) {
+      const orderAge = new Date().getTime() - new Date((order as any).createdAt || order.timestamp || Date.now()).getTime();
+      const isRecentOrder = orderAge < (30 * 60 * 1000); // Last 30 minutes
+      
+      if (isRecentOrder) {
+        console.log('🔍 ✅ EMERGENCY: Including recent order for authenticated user (fallback):', {
+          orderId: order.id || order._id,
+          orderNumber: order.orderNumber,
+          ageMinutes: Math.round(orderAge / (1000 * 60)),
+          reason: 'emergency_fallback_recent_order'
+        });
+        return true;
+      }
+    }
+    
+    console.log('🔍 Order filtered out - no match:', { 
+      orderId: order.id, 
+      orderUserId: (order as any).userId,
+      currentUserId,
+      orderDeviceId: (order as any).deviceId,
+      currentDeviceId,
+      orderTableId,
+      currentTableId,
+      paymentStatus: order.paymentStatus
+    });
+    return false;
   });
   console.log('🔍 DEBUGGING: Filtered orders count:', newOrders.length);
 
@@ -200,22 +371,138 @@ const Bill: React.FC = () => {
     }))
   });
 
-  // Calculate total from new orders only
-  const subtotal = newOrders.reduce((sum, order) => sum + order.subtotal, 0);
-  const serviceChargeFromOrders = newOrders.reduce((sum, order) => sum + ((order as any).service_charge || 0), 0);
+  // CRITICAL FIX: Only show orders that DON'T have existing cash payment requests for payment
+  // Show existing cash payment requests as informational, but don't allow re-payment
+  const allExistingOrderIds = existingCashRequests.flatMap(req => req.orderIds || []);
+  const newOrderIds = newOrders.map(order => order.id || order._id);
+  
+  // Filter out orders that already have cash payment requests - ENHANCED MATCHING
+  const ordersWithoutCashRequest = newOrders.filter(order => {
+    const orderId = order.id || order._id;
+    const orderNumber = order.orderNumber;
+    
+    // Try multiple matching strategies
+    const directIdMatch = allExistingOrderIds.includes(orderId);
+    const stringIdMatch = allExistingOrderIds.includes(String(orderId));
+    const numberMatch = orderNumber && existingCashRequests.some(req => 
+      req.orderIds && req.orderIds.some(id => 
+        String(id).includes(orderNumber.replace('#', '').replace('Order ', ''))
+      )
+    );
+    
+    // Check if any cash request has this order's amount
+    const amountMatch = existingCashRequests.some(req => 
+      Math.abs(req.totalAmount - (order.total || 0)) < 0.01
+    );
+    
+    const hasExistingRequest = directIdMatch || stringIdMatch || numberMatch || amountMatch;
+    
+    console.log(`🔍 CRITICAL DEBUG - ENHANCED Order ${orderId}:`, {
+      orderId,
+      orderNumber,
+      orderTotal: order.total,
+      allExistingOrderIds: allExistingOrderIds,
+      matchResults: {
+        directIdMatch,
+        stringIdMatch, 
+        numberMatch,
+        amountMatch,
+        finalResult: hasExistingRequest
+      },
+      cashRequestTotals: existingCashRequests.map(req => req.totalAmount)
+    });
+    
+    return !hasExistingRequest;
+  });
+  
+  // Orders that already have cash payment requests (for display only)
+  const ordersWithCashRequest = newOrders.filter(order => {
+    const orderId = order.id || order._id;
+    return allExistingOrderIds.includes(orderId);
+  });
+
+  // Calculate total from orders WITHOUT existing cash payment requests only
+  const subtotal = Number(ordersWithoutCashRequest.reduce((sum, order) => sum + order.subtotal, 0).toFixed(2));
+  
+  // Get service charges from orders without existing cash requests
+  const serviceChargeFromOrders = Number(ordersWithoutCashRequest.reduce((sum, order) => {
+    // Check multiple possible fields for service charge
+    const orderServiceCharge = (order as any).service_charge || 
+                              (order as any).serviceFee || 
+                              (order as any).serviceCharge || 0;
+    return sum + orderServiceCharge;
+  }, 0).toFixed(2));
+  
+  // Get tips from orders without existing cash requests
+  const tipFromOrders = Number(ordersWithoutCashRequest.reduce((sum, order) => {
+    const orderTip = (order as any).tip || 0;
+    return sum + orderTip;
+  }, 0).toFixed(2));
+  
   // Fallback to restaurant percentage if orders don't have service charge
   const serviceCharge = serviceChargeFromOrders > 0 
     ? serviceChargeFromOrders
-    : (restaurantServiceCharge.enabled ? subtotal * (restaurantServiceCharge.percentage / 100) : 0);
-  const total = subtotal + serviceCharge;
+    : (restaurantServiceCharge.enabled ? Number((subtotal * (restaurantServiceCharge.percentage / 100)).toFixed(2)) : 0);
+  
+  // Calculate total with proper precision
+  const total = Number((subtotal + serviceCharge + tipFromOrders).toFixed(2));
   
   // Get the most recent pending cash payment request
   const mostRecentPendingRequest = existingCashRequests
     .filter(req => req.status === 'PENDING')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
-  // Show pending screen if there are no new orders and there's a pending request (unless forced to show bill)
-  if (newOrders.length === 0 && mostRecentPendingRequest && !forceBillView) {
+  console.log('🔍 Bill display logic:', {
+    newOrdersCount: newOrders.length,
+    newOrderIds: newOrders.map(o => o.id || o._id),
+    hasPendingRequest: !!mostRecentPendingRequest,
+    pendingRequestAmount: mostRecentPendingRequest?.totalAmount,
+    forceBillView,
+    willShowPendingScreen: newOrders.length === 0 && mostRecentPendingRequest && !forceBillView,
+    willShowPaymentOptions: newOrders.length > 0,
+    calculatedTotal: total,
+    subtotal,
+    serviceCharge,
+    tipFromOrders
+  });
+  
+  console.log('🔍 Cash payment request analysis:', {
+    newOrdersCount: newOrders.length,
+    newOrderIds: newOrderIds,
+    allExistingOrderIds: allExistingOrderIds,
+    ordersWithoutCashRequest: ordersWithoutCashRequest.length,
+    ordersWithoutCashRequestIds: ordersWithoutCashRequest.map(o => o.id || o._id),
+    ordersWithCashRequest: ordersWithCashRequest.length,
+    ordersWithCashRequestIds: ordersWithCashRequest.map(o => o.id || o._id),
+    note: 'CORRECTED: Only showing payment options for orders WITHOUT existing cash payment requests'
+  });
+
+  // Decision: Show pending screen if NO new orders without cash requests
+  const shouldShowPendingScreen = (
+    ordersWithoutCashRequest.length === 0 && 
+    mostRecentPendingRequest && 
+    !forceBillView
+  );
+  
+  // Show main bill UI only if there are orders that need payment (no existing cash requests)
+  const shouldShowMainBillUI = ordersWithoutCashRequest.length > 0;
+  
+  console.log('🔍 ✅ CRITICAL: Bill display decision:', {
+    shouldShowPendingScreen,
+    shouldShowMainBillUI,
+    newOrdersCount: newOrders.length,
+    ordersWithoutCashRequestCount: ordersWithoutCashRequest.length,
+    hasPendingRequest: !!mostRecentPendingRequest,
+    forceBillView,
+    total: total,
+    logic: shouldShowPendingScreen ? 'SHOW_PENDING_SCREEN' : (shouldShowMainBillUI ? 'SHOW_MAIN_BILL_UI' : 'SHOW_NO_ORDERS')
+  });
+  // Show pending screen if:
+  // 1. No new orders at all AND there's a pending request, OR
+  // 2. All orders have cash payment requests (no orders without cash requests) AND there's a pending request
+  // (unless forced to show bill)
+  if (shouldShowPendingScreen) {
+    console.log('🔍 Showing pending screen - no orders but pending cash request');
     return (
       <div className="min-h-screen bg-[#16141F] text-white">
         <TableHeader 
@@ -248,16 +535,6 @@ const Bill: React.FC = () => {
               >
                 View My Orders
               </Button>
-              <Button
-                variant="outline"
-                className="w-full border-gray-600 text-gray-300 hover:bg-gray-800"
-                onClick={() => {
-                  // Force showing the bill view with all cash payment requests
-                  setForceBillView(true);
-                }}
-              >
-                Back to Bill
-              </Button>
             </div>
           </div>
         </div>
@@ -265,9 +542,28 @@ const Bill: React.FC = () => {
     );
   }
   
+  // TEMPORARY DEBUG: Show all order data if filtering fails
+  if (newOrders.length === 0 && orders.length > 0) {
+    console.log('🚨 CRITICAL DEBUG: No orders after filtering but we have orders from API:', {
+      originalOrdersCount: orders.length,
+      filteredOrdersCount: newOrders.length,
+      firstOrderData: orders[0],
+      sessionContext: { currentTableId, currentUserId, isAuthenticated },
+      allOrderData: orders.map(o => ({
+        id: o.id || o._id,
+        orderNumber: o.orderNumber,
+        paymentStatus: o.paymentStatus,
+        status: o.status,
+        tableId: o.tableId,
+        userId: (o as any).userId
+      }))
+    });
+  }
+
   // Show "no orders" screen if there are no new orders and no pending requests (all collected) and not forced to show bill
   const hasActivePendingRequests = existingCashRequests.some(req => req.status === 'PENDING');
   if (newOrders.length === 0 && !hasActivePendingRequests && !forceBillView) {
+    console.log('🔍 Showing no orders screen - truly no orders or pending requests');
     return (
       <div className="min-h-screen bg-[#16141F] text-white">
         {/* Use the same TableHeader as the menu page */}
@@ -326,24 +622,44 @@ const Bill: React.FC = () => {
             throw new Error('Table ID not found in URL or localStorage. Please scan QR code again.');
           }
 
-          // Get order IDs for the payment request (only new orders, not already requested)
-          const orderIds = newOrders.map(order => order.id || (order as any)._id).filter(id => id);
+          // Get order IDs for the payment request (only orders without existing cash requests)
+          const orderIds = ordersWithoutCashRequest.map(order => order.id || (order as any)._id).filter(id => id);
           
           if (orderIds.length === 0) {
-            throw new Error('No new orders to request payment for.');
+            throw new Error('No new orders to request payment for - all orders already have cash payment requests.');
           }
 
-          // Create cash payment request
+          // Create cash payment request - Use consistent ID logic
+          const storedUserId = localStorage.getItem('userId');
+          const storedDeviceId = localStorage.getItem('deviceId');
+          
+          // Use same priority as retrieval logic
+          const userId = storedUserId || user?.id;
+          const deviceId = storedDeviceId || `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          // Store device ID if not already stored
+          if (!storedDeviceId) {
+            localStorage.setItem('deviceId', deviceId);
+          }
+          
           const requestData = {
             tableId,
             totalAmount: total,
             orderIds,
             additionalInfo: `Table ${tableNumber} - Cash payment request`,
-            userId: localStorage.getItem('userId') || undefined,
-            deviceId: localStorage.getItem('deviceId') || undefined,
+            userId: userId,
+            deviceId: deviceId,
             isGuest: !isAuthenticated
           };
 
+          console.log('🔍 Cash Payment Creation IDs:', {
+            storedUserId,
+            storedDeviceId,
+            authenticatedUserId: user?.id,
+            finalUserId: userId,
+            finalDeviceId: deviceId
+          });
+          
           console.log('Creating cash payment request:', requestData);
 
           const response = await cashPaymentService.createCashPaymentRequest(requestData);
@@ -375,9 +691,9 @@ const Bill: React.FC = () => {
         const restaurantId = localStorage.getItem('restaurantId') || 
                              localStorage.getItem('restaurant_id');
         
-        // Get the items from new orders only for Stripe checkout
+        // Get the items from orders without existing cash requests only for Stripe checkout
         const allItems = [];
-        newOrders.forEach(order => {
+        ordersWithoutCashRequest.forEach(order => {
           if (order.items) {
             order.items.forEach(item => {
               allItems.push({
@@ -426,20 +742,50 @@ const Bill: React.FC = () => {
         });
 
         
-        // Add service charge as a separate line item
-        if (restaurantServiceCharge.enabled && serviceCharge > 0) {
-          lineItems.push({
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: `Service Charge (${restaurantServiceCharge.percentage}%)`,
-                description: 'Service charge applied to order',
-                images: []
+        // Add service charge as a separate line item with proper validation
+        if (serviceCharge > 0) {
+          const serviceChargeAmount = Math.round(serviceCharge * 100); // Convert to cents
+          
+          // Validate service charge amount
+          if (Number.isInteger(serviceChargeAmount) && serviceChargeAmount > 0) {
+            lineItems.push({
+              price_data: {
+                currency: 'usd',
+                product_data: {
+                  name: serviceChargeFromOrders > 0 ? 'Service Charge' : `Service Charge (${restaurantServiceCharge.percentage}%)`,
+                  description: 'Service charge applied to order',
+                  images: []
+                },
+                unit_amount: serviceChargeAmount
               },
-              unit_amount: Math.round(serviceCharge * 100) // Convert to cents
-            },
-            quantity: 1
-          });
+              quantity: 1
+            });
+          } else {
+            console.warn('Invalid service charge amount for Stripe:', serviceCharge, 'cents:', serviceChargeAmount);
+          }
+        }
+
+        // Add tips as a separate line item if present
+        if (tipFromOrders > 0) {
+          const tipAmount = Math.round(tipFromOrders * 100); // Convert to cents
+          
+          // Validate tip amount
+          if (Number.isInteger(tipAmount) && tipAmount > 0) {
+            lineItems.push({
+              price_data: {
+                currency: 'usd',
+                product_data: {
+                  name: 'Tips',
+                  description: 'Tips included in order',
+                  images: []
+                },
+                unit_amount: tipAmount
+              },
+              quantity: 1
+            });
+          } else {
+            console.warn('Invalid tip amount for Stripe:', tipFromOrders, 'cents:', tipAmount);
+          }
         }
 
         console.log('Creating checkout session with:', {
@@ -454,7 +800,7 @@ const Bill: React.FC = () => {
           tableId: tableId || '',
           restaurantId: restaurantId || '',
           successUrl: `${window.location.origin}/payment/success`,
-          cancelUrl: `${window.location.origin}/payment/cancel`
+          cancelUrl: `${window.location.origin}/payment/cancel?table=${tableId || ''}&return_from_stripe=true`
         });
 
         if (!response.data.success) {
@@ -513,18 +859,6 @@ const Bill: React.FC = () => {
               View My Orders
             </Button>
             
-            <Button
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-700"
-              onClick={() => {
-                setShowCashPending(false);
-                setCashPaymentRequest(null);
-                setPaymentMethod(null);
-                setIsPaying(false);
-              }}
-            >
-              Back to Bill
-            </Button>
           </div>
         </div>
       </div>
@@ -562,6 +896,38 @@ const Bill: React.FC = () => {
     );
   }
 
+  // MAIN BILL UI - Only show when there are orders without cash payment requests
+  if (!shouldShowMainBillUI) {
+    console.log('🔍 ⚠️ CRITICAL: Not showing main bill UI - all orders have cash payment requests or no orders');
+    // This shouldn't happen if our logic is correct, but just in case
+    return (
+      <div className="min-h-screen bg-[#16141F] text-white">
+        <TableHeader 
+          venueName={restaurantName || 'Restaurant'}
+          className="bg-[#16141F] text-white"
+        />
+        <div className="px-4 py-8 mt-16 text-center">
+          <p className="text-gray-400">No orders available for payment.</p>
+          <Button
+            className="mt-4 bg-purple-600 hover:bg-purple-700 text-white"
+            onClick={() => window.location.href = '/'}
+          >
+            Browse Menu
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  
+  console.log('🔍 ✅ RENDERING MAIN BILL UI with payment options:', {
+    newOrdersCount: newOrders.length,
+    ordersWithoutCashRequestCount: ordersWithoutCashRequest.length,
+    total: total,
+    serviceCharge: serviceCharge,
+    tipFromOrders: tipFromOrders,
+    existingCashRequestsCount: existingCashRequests.length
+  });
+
   return (
     <div className="min-h-screen bg-[#16141F] text-white">
       {/* Use the same TableHeader as the menu page */}
@@ -573,47 +939,57 @@ const Bill: React.FC = () => {
       <div className="px-4 py-4 mt-16">
         <h1 className="text-2xl font-semibold mb-6">Your Bill</h1>
       
-        <div className="bg-[#262837] border border-[#2D303E] rounded-lg p-4 mb-6">
-          <div className="text-center mb-4">
-            <h2 className="font-bold text-xl">{restaurantName || 'Screen 3'}</h2>
-            <p className="text-sm text-gray-400">Table {tableNumber}</p>
-            <p className="text-sm text-gray-400">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
-          </div>
-          
-          <div className="border-t border-b border-[#2D303E] py-4 my-4">
-            {newOrders.map((order, index) => (
-              <div key={index} className="mb-4">
-                <h3 className="font-medium text-sm mb-2">Order #{order.id && order.id.includes('-') ? order.id.split('-')[1] : (order.orderNumber || order.id?.substring(0,6) || 'New')}</h3>
-                
-                {order.items.map((item, itemIndex) => (
-                  <div key={itemIndex} className="flex justify-between text-sm py-1">
-                    <span>{item.quantity} x {item.name}</span>
-                    <span>${(item.price * item.quantity).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-          
-          <div className="space-y-2 mb-4">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
+        {/* Show consolidated order details - single bill format */}
+        {ordersWithoutCashRequest.length > 0 && (
+          <div className="bg-[#262837] border border-[#2D303E] rounded-lg p-4 mb-6">
+            <div className="text-center mb-4">
+              <h2 className="font-bold text-xl">{restaurantName || 'Screen 3'}</h2>
+              <p className="text-sm text-gray-400">Table {tableNumber}</p>
+              <p className="text-sm text-gray-400">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
             </div>
             
-            {(serviceCharge > 0 || restaurantServiceCharge.enabled) && (
+            <div className="border-t border-b border-[#2D303E] py-4 my-4">
+              {ordersWithoutCashRequest.map((order, orderIndex) => (
+                <div key={orderIndex} className="mb-4 last:mb-0">
+                  <h3 className="font-medium text-sm mb-2">Order #{order.id && order.id.includes('-') ? order.id.split('-')[1] : (order.orderNumber || order.id?.substring(0,6) || 'New')}</h3>
+                  
+                  {order.items.map((item, itemIndex) => (
+                    <div key={itemIndex} className="flex justify-between text-sm py-1">
+                      <span>{item.quantity} x {item.name}</span>
+                      <span>${(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            
+            <div className="space-y-2">
               <div className="flex justify-between">
-                <span>Service Charge {restaurantServiceCharge.enabled ? `(${restaurantServiceCharge.percentage}%)` : ''}</span>
-                <span>${serviceCharge.toFixed(2)}</span>
+                <span>Subtotal</span>
+                <span>${subtotal.toFixed(2)}</span>
               </div>
-            )}
-            
-            <div className="flex justify-between font-bold text-lg pt-2 border-t border-[#2D303E]">
-              <span>Total</span>
-              <span>${total.toFixed(2)}</span>
+              
+              {serviceCharge > 0 && (
+                <div className="flex justify-between">
+                  <span>Service Charge {restaurantServiceCharge.enabled ? `(${restaurantServiceCharge.percentage}%)` : ''}</span>
+                  <span>${serviceCharge.toFixed(2)}</span>
+                </div>
+              )}
+              
+              {tipFromOrders > 0 && (
+                <div className="flex justify-between">
+                  <span>Tips</span>
+                  <span>${tipFromOrders.toFixed(2)}</span>
+                </div>
+              )}
+              
+              <div className="flex justify-between font-bold text-lg pt-2 border-t border-[#2D303E]">
+                <span>Total</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
         
         {/* Show all existing cash payment requests */}
         {existingCashRequests.length > 0 && existingCashRequests.some(req => req.status !== 'COLLECTED') && (
@@ -667,47 +1043,48 @@ const Bill: React.FC = () => {
           </div>
         )}
         
-        <div className="mb-8">
-          <h2 className="font-medium mb-4">Select Payment Method{existingCashRequests.length > 0 ? ' for Current Session Orders' : ''}</h2>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              variant={paymentMethod === 'card' ? 'default' : 'outline'}
-              className={`h-20 flex flex-col ${
-                paymentMethod === 'card' ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'border-[#2D303E] text-white'
-              }`}
-              onClick={() => setPaymentMethod('card')}
-            >
-              <CreditCard className="h-6 w-6 mb-2" />
-              <span>Card</span>
-            </Button>
+        {/* Payment method selection - only show if there are orders to pay for */}
+        {ordersWithoutCashRequest.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="font-medium">Select Payment Method</h3>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant={paymentMethod === 'card' ? 'default' : 'outline'}
+                className={`flex items-center justify-center h-16 ${
+                  paymentMethod === 'card' 
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-600' 
+                    : 'bg-transparent hover:bg-[#2D303E] text-gray-300 border-[#2D303E]'
+                }`}
+                onClick={() => setPaymentMethod('card')}
+              >
+                <CreditCard className="h-6 w-6 mr-2" />
+                Card
+              </Button>
+              
+              <Button
+                variant={paymentMethod === 'cash' ? 'default' : 'outline'}
+                className={`flex items-center justify-center h-16 ${
+                  paymentMethod === 'cash' 
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-600' 
+                    : 'bg-transparent hover:bg-[#2D303E] text-gray-300 border-[#2D303E]'
+                }`}
+                onClick={() => setPaymentMethod('cash')}
+              >
+                <Banknote className="h-6 w-6 mr-2" />
+                Cash
+              </Button>
+            </div>
             
             <Button
-              variant={paymentMethod === 'cash' ? 'default' : 'outline'}
-              className={`h-20 flex flex-col ${
-                paymentMethod === 'cash' ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'border-[#2D303E] text-white'
-              }`}
-              onClick={() => setPaymentMethod('cash')}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50"
+              onClick={handlePayment}
+              disabled={!paymentMethod || isPaying}
             >
-              <Banknote className="h-6 w-6 mb-2" />
-              <span>Cash</span>
+              {isPaying ? 'Processing...' : `Pay $${total.toFixed(2)}`}
             </Button>
           </div>
-        </div>
-        
-        <Button
-          className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white"
-          onClick={handlePayment}
-          disabled={isPaying}
-        >
-          {isPaying ? (
-            <>
-              <span className="animate-spin mr-2">⭕</span> Processing...
-            </>
-          ) : (
-            <>{paymentMethod === 'cash' ? 'Get Bill' : `Pay $${total.toFixed(2)}`}</>
-          )}
-        </Button>
+        )}
       </div>
     </div>
   );

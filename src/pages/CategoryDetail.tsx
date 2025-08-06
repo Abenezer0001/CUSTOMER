@@ -253,6 +253,62 @@ const CategoryDetail: React.FC = () => {
     );
   }
 
+  // Check if category is currently unavailable due to schedule
+  if (category.isActive === false) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="min-h-screen pb-24"
+      >
+        {/* TableHeader for consistent experience */}
+        <TableHeader 
+          venueName={restaurantName || 'Screen 3'} 
+          className="bg-[#16141F] text-white"
+        />
+
+        {/* Category Header */}
+        <div 
+          className="relative h-40 bg-cover bg-center flex items-end mt-14" 
+          style={{ 
+            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.8)), url(${category.image})` 
+          }}
+        >
+          <Button
+            variant="ghost"
+            className="absolute top-4 left-4 text-white bg-black/30 hover:bg-black/40 p-2 rounded-full" 
+            onClick={handleBack}
+            aria-label="Back"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          
+          <div className="p-6 text-white w-full">
+            <h1 className="text-2xl font-bold">{category.name}</h1>
+            <p className="text-sm opacity-90">Currently Unavailable</p>
+          </div>
+        </div>
+        
+        {/* Unavailable Message */}
+        <div className="container mx-auto p-4">
+          <div className="text-center py-12">
+            <div className="mx-auto flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+              <AlertCircle className="h-8 w-8 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            </div>
+            <h2 className="text-xl font-bold mb-4">Category Currently Unavailable</h2>
+            <p className="text-muted-foreground mb-6">
+              This category is not currently available. Please check back later or browse other categories.
+            </p>
+            <Button variant="default" onClick={handleBack}>
+              Back to Categories
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}

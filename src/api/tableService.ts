@@ -161,8 +161,8 @@ export const verifyTableStatus = async (tableId: string): Promise<{
   try {
     // First try the real API endpoint
     try {
-      const response = await axios.get(`${API_BASE_URL}/tables/${tableId}/status`);
-      return response.data.data;
+      const response = await axios.get(`${API_BASE_URL}/tables/${tableId}/verify`);
+      return response.data;
     } catch (apiError) {
       console.log('API not available, using fallback verification');
       
@@ -356,6 +356,64 @@ export class TableService {
     } catch (error) {
       console.error('Error getting restaurant ID from table ID:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get venue ID from table data
+   */
+  static getVenueIdFromTable(tableData: TableData): string | null {
+    if (tableData.venueId) {
+      console.log('Found venueId directly:', tableData.venueId);
+      return tableData.venueId;
+    }
+    
+    if (tableData.venue?._id) {
+      console.log('Found venue._id:', tableData.venue._id);
+      return tableData.venue._id;
+    }
+    
+    console.log('No venue ID found in table data:', tableData);
+    return null;
+  }
+
+  /**
+   * Get venue ID from table ID by reverse lookup through venues
+   */
+  static async getVenueIdFromTableId(tableId: string): Promise<string | null> {
+    try {
+      console.log('🔍 Getting venue ID for tableId:', tableId);
+      
+      // Fetch all venues and find which one contains this table
+      const response = await fetch(`${API_BASE_URL}/api/venues`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        const venues = await response.json();
+        console.log(`📊 Found ${venues.length} venues to search`);
+        
+        // Find venue that contains this table
+        const venue = venues.find((v: any) => v.tables && v.tables.includes(tableId));
+        
+        if (venue) {
+          console.log('✅ Found venue:', venue.name);
+          console.log('📍 Venue ID:', venue._id);
+          return venue._id;
+        } else {
+          console.log('❌ No venue found containing table ID:', tableId);
+          return null;
+        }
+      } else {
+        console.log('❌ Failed to fetch venues:', response.status, response.statusText);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Error finding venue for table ID:', error);
+      return null;
     }
   }
 }

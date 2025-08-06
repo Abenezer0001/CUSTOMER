@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Current Table Service Charge</title>
+</head>
+<body>
+    <h1>Debug Service Charge for Current Table</h1>
+    <div>
+        <label>Enter Table ID: </label>
+        <input type="text" id="tableIdInput" placeholder="Enter table ID" style="width: 300px;">
+        <button onclick="testTable()">Test</button>
+    </div>
+    <div id="output" style="margin-top: 20px; font-family: monospace;"></div>
+    
+    <script>
+        async function testTable() {
+            const tableId = document.getElementById('tableIdInput').value;
+            const output = document.getElementById('output');
+            
+            if (!tableId) {
+                output.innerHTML = '<p style="color: red;">Please enter a table ID</p>';
+                return;
+            }
+            
+            output.innerHTML = '<p>Testing table: ' + tableId + '</p>';
+            
+            try {
+                // Step 1: Find venue for this table
+                output.innerHTML += '<p><strong>Step 1:</strong> Finding venue for table...</p>';
+                
+                const venuesResponse = await fetch('http://localhost:3001/api/venues');
+                if (!venuesResponse.ok) {
+                    throw new Error('Failed to fetch venues: ' + venuesResponse.status);
+                }
+                
+                const venues = await venuesResponse.json();
+                output.innerHTML += '<p>✅ Found ' + venues.length + ' venues</p>';
+                
+                // Find venue that contains this table
+                const venue = venues.find(v => v.tables && v.tables.includes(tableId));
+                
+                if (!venue) {
+                    output.innerHTML += '<p style="color: red;">❌ No venue found containing table: ' + tableId + '</p>';
+                    output.innerHTML += '<p>Available table IDs from venues:</p>';
+                    venues.forEach(v => {
+                        if (v.tables && v.tables.length > 0) {
+                            output.innerHTML += '<p>• ' + v.name + ': ' + v.tables.slice(0, 3).join(', ') + (v.tables.length > 3 ? '...' : '') + '</p>';
+                        }
+                    });
+                    return;
+                }
+                
+                output.innerHTML += '<p>✅ Found venue: <strong>' + venue.name + '</strong> (ID: ' + venue._id + ')</p>';
+                
+                // Step 2: Check service charge
+                output.innerHTML += '<p><strong>Step 2:</strong> Checking service charge...</p>';
+                
+                if (venue.serviceCharge) {
+                    output.innerHTML += '<p>✅ Service charge configuration found:</p>';
+                    output.innerHTML += '<pre>' + JSON.stringify(venue.serviceCharge, null, 2) + '</pre>';
+                    
+                    // Step 3: Calculate service charge for test order
+                    const testSubtotal = 14.99; // From your screenshot
+                    let serviceCharge = 0;
+                    
+                    if (venue.serviceCharge.enabled) {
+                        if (venue.serviceCharge.type === 'percentage') {
+                            serviceCharge = testSubtotal * (venue.serviceCharge.value / 100);
+                            output.innerHTML += '<p><strong>Calculation:</strong> $' + testSubtotal + ' × ' + venue.serviceCharge.value + '% = $' + serviceCharge.toFixed(2) + '</p>';
+                        } else if (venue.serviceCharge.type === 'flat') {
+                            const withinMin = venue.serviceCharge.minAmount === undefined || testSubtotal >= venue.serviceCharge.minAmount;
+                            const withinMax = venue.serviceCharge.maxAmount === undefined || testSubtotal <= venue.serviceCharge.maxAmount;
+                            
+                            if (withinMin && withinMax) {
+                                serviceCharge = venue.serviceCharge.value;
+                                output.innerHTML += '<p><strong>Calculation:</strong> Flat rate $' + serviceCharge.toFixed(2) + '</p>';
+                            } else {
+                                output.innerHTML += '<p><strong>Calculation:</strong> Order ($' + testSubtotal + ') not within range [' + (venue.serviceCharge.minAmount || 0) + ' - ' + (venue.serviceCharge.maxAmount || '∞') + ']</p>';
+                            }
+                        }
+                        
+                        const total = testSubtotal + serviceCharge;
+                        output.innerHTML += '<div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0; background: #f9f9f9;">';
+                        output.innerHTML += '<p><strong>Expected Cart Display:</strong></p>';
+                        output.innerHTML += '<p>Subtotal: $' + testSubtotal.toFixed(2) + '</p>';
+                        if (serviceCharge > 0) {
+                            const label = venue.serviceCharge.type === 'percentage' ? 
+                                '(' + venue.serviceCharge.value + '%)' : '(Flat Rate)';
+                            output.innerHTML += '<p>Service Charge ' + label + ': $' + serviceCharge.toFixed(2) + '</p>';
+                        }
+                        output.innerHTML += '<p>Total: $' + total.toFixed(2) + '</p>';
+                        output.innerHTML += '</div>';
+                        
+                        if (serviceCharge === 0 && venue.serviceCharge.enabled) {
+                            output.innerHTML += '<p style="color: orange;">⚠️ Service charge is enabled but calculated as $0.00</p>';
+                        } else if (serviceCharge > 0) {
+                            output.innerHTML += '<p style="color: green;">✅ Service charge should appear in cart!</p>';
+                        }
+                    } else {
+                        output.innerHTML += '<p style="color: orange;">⚠️ Service charge is disabled for this venue</p>';
+                    }
+                } else {
+                    output.innerHTML += '<p style="color: orange;">⚠️ No service charge configuration found for this venue</p>';
+                }
+                
+            } catch (error) {
+                output.innerHTML += '<p style="color: red;">❌ Error: ' + error.message + '</p>';
+            }
+        }
+        
+        // Auto-populate with a known test table ID
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('tableIdInput').value = '68624acb3a3a2035f54fe8e1';
+        });
+    </script>
+</body>
+</html>
