@@ -272,9 +272,11 @@ class GroupOrderingService {
   }
 
   // Leave group order
-  async leaveGroupOrder(groupOrderId: string): Promise<{ success: boolean; message: string }> {
+  async leaveGroupOrder(groupOrderId: string, participantId?: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await apiClient.post(`${this.baseUrl}/${groupOrderId}/leave`);
+      const response = await apiClient.post(`${this.baseUrl}/${groupOrderId}/leave`, {
+        participantId: participantId
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to leave group order');

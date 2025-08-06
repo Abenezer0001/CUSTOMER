@@ -145,8 +145,8 @@ const LoginSuccess: React.FC = () => {
       // Redirect with a short delay to allow auth processing
       setTimeout(() => {
         if (effectiveTableId) {
-          console.log(`LoginSuccess: Table ID found: ${effectiveTableId}, redirecting to home with table`);
-          navigate(`/?table=${effectiveTableId}`, { replace: true });
+          console.log(`LoginSuccess: Table ID found: ${effectiveTableId}, redirecting to localhost:8080 with table`);
+          window.location.href = `http://localhost:8080/?table=${effectiveTableId}`;
         } else {
           // No table ID found, redirect to scan page to get a table
           console.log('LoginSuccess: No table ID found, redirecting to scan page');

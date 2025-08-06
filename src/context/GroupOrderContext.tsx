@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { groupOrderingService, GroupOrder } from '@/services/GroupOrderingService';
 import { CartItem } from './CartContext';
 import { useTableInfo } from './TableContext';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 interface GroupOrderContextType {
@@ -45,6 +46,7 @@ interface GroupOrderProviderProps {
 export const GroupOrderProvider: React.FC<GroupOrderProviderProps> = ({ children }) => {
   const [searchParams] = useSearchParams();
   const { setTableInfo } = useTableInfo();
+  const { isAuthenticated } = useAuth();
   const [isInGroupOrder, setIsInGroupOrder] = useState(false);
   const [groupOrder, setGroupOrder] = useState<GroupOrder | null>(null);
   const [currentParticipantId, setCurrentParticipantId] = useState<string | null>(null);
@@ -102,6 +104,18 @@ export const GroupOrderProvider: React.FC<GroupOrderProviderProps> = ({ children
       sessionStorage.removeItem('currentParticipantId');
     }
   }, [groupOrder, currentParticipantId, isInGroupOrder]);
+
+  // Clear group order state when user logs out
+  useEffect(() => {
+    if (!isAuthenticated) {
+      console.log('User logged out, clearing group order state');
+      setIsInGroupOrder(false);
+      setGroupOrder(null);
+      setCurrentParticipantId(null);
+      sessionStorage.removeItem('currentGroupOrder');
+      sessionStorage.removeItem('currentParticipantId');
+    }
+  }, [isAuthenticated]);
 
   // Auto-refresh group order for real-time sync
   useEffect(() => {
@@ -283,7 +297,7 @@ export const GroupOrderProvider: React.FC<GroupOrderProviderProps> = ({ children
     }
 
     try {
-      await groupOrderingService.leaveGroupOrder(groupOrder._id);
+      await groupOrderingService.leaveGroupOrder(groupOrder._id, currentParticipantId);
       setGroupOrder(null);
       setCurrentParticipantId(null);
       setIsInGroupOrder(false);

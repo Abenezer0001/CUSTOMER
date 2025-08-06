@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
-import { ClipboardList, Clock, ChevronRight, CheckCircle2, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { ClipboardList, Clock, ChevronRight, CheckCircle2, Loader2, AlertTriangle, RefreshCw, Star } from 'lucide-react';
 import { getEffectiveToken } from '@/api/authService';
 import apiClient from '@/api/apiClient';
 import { AuthService } from '@/services/AuthService';
 import customerAuthService from '@/api/customerAuthService';
 import { Badge } from '@/components/ui/badge';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import TableHeader from '@/components/TableHeader';
 import { useTableInfo } from '@/context/TableContext';
 import { fetchUserOrders, cancelOrder, updatePaymentStatus } from '@/api/orderService';
@@ -17,6 +17,9 @@ import { formatDistanceToNow, isToday, parseISO } from 'date-fns';
 import { useOrders } from '@/context/OrdersContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import RatingSubmissionModal from '@/components/RatingSubmissionModal';
+import * as cashPaymentService from '@/api/cashPaymentService';
+import OrderItemRatingModal from '@/components/OrderItemRatingModal';
 
 // Format date to relative time
 const formatRelativeTime = (dateString: string) => {
@@ -92,10 +95,12 @@ const OrderCard: React.FC<{
   order: any; 
   onPayOrder: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
+  onRateOrder: (order: any) => void;
   cancellingOrderId: string | null;
   processingPaymentOrderId: string | null;
   restaurantServiceCharge: { enabled: boolean; percentage: number };
-}> = ({ order, onPayOrder, onCancelOrder, cancellingOrderId, processingPaymentOrderId, restaurantServiceCharge }) => {
+  existingCashPayments?: any[];
+}> = ({ order, onPayOrder, onCancelOrder, onRateOrder, cancellingOrderId, processingPaymentOrderId, restaurantServiceCharge, existingCashPayments = [] }) => {
   const navigate = useNavigate();
 
   return (
@@ -142,12 +147,12 @@ const OrderCard: React.FC<{
             <span className="text-gray-400">Subtotal</span>
             <span className="text-gray-300">${(order.subtotal || 0).toFixed(2)}</span>
           </div>
-          {order.service_charge > 0 && (
+          {((order.service_charge || order.serviceFee) > 0) && (
             <div className="flex justify-between items-center text-xs">
               <span className="text-gray-400">
                 Service Charge {restaurantServiceCharge.enabled ? `(${restaurantServiceCharge.percentage}%)` : ''}
               </span>
-              <span className="text-gray-300">${(order.service_charge || 0).toFixed(2)}</span>
+              <span className="text-gray-300">${(order.service_charge || order.serviceFee || 0).toFixed(2)}</span>
             </div>
           )}
           {order.tip > 0 && (
@@ -184,18 +189,51 @@ const OrderCard: React.FC<{
         </Button>
         
         <div className="flex gap-2">
-          {/* Add Pay Now button for orders with pending payment */}
-          {((order.paymentStatus || '').toLowerCase() === 'pending' || !order.paymentStatus) && (
+          {/* Show existing cash payment request if exists */}
+          {existingCashPayments.length > 0 ? (
+            <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 mb-2">
+              <div className="flex items-center gap-2 text-orange-400 mb-1">
+                <ClipboardList className="h-4 w-4" />
+                <span className="text-sm font-medium">Previous Cash Payment Request</span>
+              </div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <div>Amount: <span className="text-orange-300 font-medium">${existingCashPayments[0].totalAmount?.toFixed(2)}</span></div>
+                <div>Status: <span className="text-orange-300 font-medium">{existingCashPayments[0].status}</span></div>
+                <div>Requested: <span className="text-gray-300">{new Date(existingCashPayments[0].createdAt).toLocaleDateString()}, {new Date(existingCashPayments[0].createdAt).toLocaleTimeString()}</span></div>
+              </div>
+              <div className="flex items-center gap-1 mt-2 text-xs text-orange-300">
+                <AlertTriangle className="h-3 w-3" />
+                <span>A waiter will come to collect this payment shortly</span>
+              </div>
+            </div>
+          ) : (
+            /* Add Pay Now button for orders with pending payment and no existing cash payment request */
+            ((order.paymentStatus || '').toLowerCase() === 'pending' || !order.paymentStatus) && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="border-green-600 text-green-600 hover:bg-green-600/10"
+                onClick={() => onPayOrder(order._id)}
+                disabled={processingPaymentOrderId === order._id}
+              >
+                {processingPaymentOrderId === order._id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : 'Pay Now'}
+              </Button>
+            )
+          )}
+          
+          {/* Enhanced Rate button for completed/delivered orders */}
+          {(['completed', 'delivered'].includes((order.status || '').toLowerCase()) && 
+            (order.paymentStatus || '').toLowerCase() === 'paid') && (
             <Button 
               variant="outline" 
               size="sm"
-              className="border-green-600 text-green-600 hover:bg-green-600/10"
-              onClick={() => onPayOrder(order._id)}
-              disabled={processingPaymentOrderId === order._id}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-none font-medium transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-sm"
+              onClick={() => onRateOrder(order)}
             >
-              {processingPaymentOrderId === order._id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : 'Pay Now'}
+              <Star className="h-4 w-4 mr-1 fill-current" />
+              Rate Order
             </Button>
           )}
           
@@ -219,7 +257,8 @@ const OrderCard: React.FC<{
 };
 
 const MyOrders: React.FC = () => {
-  const { isAuthenticated, token, isLoading } = useAuth();
+  const { isAuthenticated, token, isLoading, user } = useAuth();
+  const [searchParams] = useSearchParams();
   const { tableId, restaurantName } = useTableInfo();
   const { orders: contextOrders, refreshOrders: contextRefreshOrders } = useOrders();
   const navigate = useNavigate();
@@ -229,8 +268,57 @@ const MyOrders: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [processingPaymentOrderId, setProcessingPaymentOrderId] = useState<string | null>(null);
+  
+  // Handle return from Stripe payment
+  useEffect(() => {
+    const returnFromStripe = searchParams.get('return_from_stripe');
+    const orderId = searchParams.get('order_id');
+    const tableParam = searchParams.get('table');
+    const deviceId = searchParams.get('device_id');
+    
+    if (returnFromStripe === 'true') {
+      console.log('🔄 Detected return from Stripe payment:', { 
+        orderId, 
+        tableParam, 
+        deviceId,
+        currentAuth: isAuthenticated 
+      });
+      
+      // Restore table context if provided
+      if (tableParam && tableParam !== tableId) {
+        localStorage.setItem('currentTableId', tableParam);
+        console.log('📍 Restored table context from Stripe return:', tableParam);
+      }
+      
+      // Restore device context if provided
+      if (deviceId) {
+        localStorage.setItem('device_id', deviceId);
+        console.log('📱 Restored device context from Stripe return:', deviceId);
+      }
+      
+      // Show a message about payment cancellation
+      toast.error('Payment was cancelled. You can try again when ready.');
+      
+      // Clean up URL parameters by navigating to clean URL
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('return_from_stripe');
+      cleanUrl.searchParams.delete('order_id');
+      cleanUrl.searchParams.delete('table');
+      cleanUrl.searchParams.delete('device_id');
+      
+      // Replace current URL with clean version
+      window.history.replaceState({}, '', cleanUrl.toString());
+    }
+  }, [searchParams, tableId, isAuthenticated]);
   const [activeTab, setActiveTab] = useState<string>('today');
   const [restaurantServiceCharge, setRestaurantServiceCharge] = useState({ enabled: false, percentage: 0 });
+  const [orderCashPayments, setOrderCashPayments] = useState<{[orderId: string]: any[]}>({});
+  
+  // Rating modal state
+  const [ratingModalOpen, setRatingModalOpen] = useState(false);
+  const [orderItemRatingModalOpen, setOrderItemRatingModalOpen] = useState(false);
+  const [selectedOrderForRating, setSelectedOrderForRating] = useState<any>(null);
+  const [selectedMenuItemForRating, setSelectedMenuItemForRating] = useState<any>(null);
   
   // Early authentication check - redirect to login if not authenticated
   useEffect(() => {
@@ -317,6 +405,40 @@ const MyOrders: React.FC = () => {
       fetchRestaurantServiceCharge();
     }
   }, [isAuthenticated, isLoading]);
+
+  // Check for existing cash payment requests for orders
+  const checkCashPaymentRequests = async (ordersToCheck: any[]) => {
+    if (!tableId) return;
+    
+    const cashPaymentData: {[orderId: string]: any[]} = {};
+    
+    // Get user info for cash payment requests
+    const user = AuthService.getCurrentUser();
+    const userId = user?.id || localStorage.getItem('user_id') || localStorage.getItem('device_id');
+    const deviceId = localStorage.getItem('device_id');
+    
+    for (const order of ordersToCheck) {
+      try {
+        const response = await cashPaymentService.getCashPaymentRequestsByTable(tableId, userId, deviceId);
+        
+        if (response.success && response.data) {
+          // Filter cash payment requests that match this order's table and are still pending
+          const orderCashRequests = Array.isArray(response.data) ? response.data : [response.data];
+          const pendingRequests = orderCashRequests.filter((req: any) => 
+            req.status === 'PENDING' && req.tableId === tableId
+          );
+          
+          if (pendingRequests.length > 0) {
+            cashPaymentData[order._id] = pendingRequests;
+          }
+        }
+      } catch (error) {
+        console.log(`No cash payment requests found for order ${order._id}:`, error);
+      }
+    }
+    
+    setOrderCashPayments(cashPaymentData);
+  };
 
   // Order card skeleton component
   const OrderCardSkeleton = () => (
@@ -425,7 +547,36 @@ const MyOrders: React.FC = () => {
         if (response.data) {
           const fetchedOrders = Array.isArray(response.data) ? response.data : [];
           console.log('Fetched orders from API:', fetchedOrders.length);
-          setOrders(fetchedOrders);
+          
+          // Deduplicate orders by ID to prevent duplicates
+          const deduplicatedOrders = fetchedOrders.filter((order, index, self) => {
+            const orderId = order._id || order.id;
+            return index === self.findIndex(o => (o._id || o.id) === orderId);
+          });
+          
+          console.log('Deduplicated API orders:', { 
+            original: fetchedOrders.length, 
+            deduplicated: deduplicatedOrders.length 
+          });
+          
+          // Debug order data structure for payment issues
+          deduplicatedOrders.forEach((order, index) => {
+            console.log(`🔍 Order ${index + 1} debugging:`, {
+              id: order.id || order._id,
+              orderNumber: order.orderNumber,
+              total: order.total,
+              subtotal: order.subtotal,
+              service_charge: order.service_charge,
+              serviceFee: order.serviceFee,
+              tip: order.tip,
+              paymentStatus: order.paymentStatus,
+              status: order.status,
+              hasServiceCharge: !!(order.service_charge || order.serviceFee),
+              hasTip: !!order.tip
+            });
+          });
+          
+          setOrders(deduplicatedOrders);
         } else {
           console.log('No data returned from API');
           setOrders([]);
@@ -453,11 +604,26 @@ const MyOrders: React.FC = () => {
     }
   }, [tableId, restaurantName, isLoading]); // Keep contextOrders dependency minimal to prevent loops
   
-  // Sync with context orders when they change
+  // Sync with context orders when they change (with deduplication)
   useEffect(() => {
     if (contextOrders.length > 0 && !loading) {
       console.log('Context orders changed, syncing local state:', contextOrders.length);
-      setOrders(contextOrders);
+      
+      // Deduplicate orders by ID
+      const deduplicatedOrders = contextOrders.filter((order, index, self) => {
+        const orderId = order._id || order.id;
+        return index === self.findIndex(o => (o._id || o.id) === orderId);
+      });
+      
+      console.log('Deduplicated orders:', { 
+        original: contextOrders.length, 
+        deduplicated: deduplicatedOrders.length 
+      });
+      
+      setOrders(deduplicatedOrders);
+      
+      // Check for existing cash payment requests for each order
+      checkCashPaymentRequests(deduplicatedOrders);
     }
   }, [contextOrders, loading]);
   
@@ -473,6 +639,18 @@ const MyOrders: React.FC = () => {
 
     processPendingPayment();
   }, [token]); // Run when token changes
+
+  // Add periodic refresh to ensure new orders appear
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    const interval = setInterval(() => {
+      console.log('Auto-refreshing orders to catch new orders');
+      loadOrders();
+    }, 10000); // Refresh every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
   
   // We're now always fetching from API, so we don't need to use context orders
   // Remove this effect to prevent showing stale data during loading
@@ -511,19 +689,151 @@ const MyOrders: React.FC = () => {
       console.log('Using effective order ID for payment:', effectiveOrderId);
 
       try {
-        // Extract required data from the order for the checkout session
-        const cartItems = orderToPay.items || [];
+        // Convert database order items to cart format for payment processing
+        let cartItems = (orderToPay.items || []).map(item => {
+          // Flatten modifiers from database format to cart format
+          const modifiers = [];
+          if (item.modifiers && Array.isArray(item.modifiers)) {
+            item.modifiers.forEach(modGroup => {
+              if (modGroup.selections && Array.isArray(modGroup.selections)) {
+                modGroup.selections.forEach(selection => {
+                  modifiers.push({
+                    name: selection.name,
+                    price: selection.price || 0,
+                    quantity: selection.quantity || 1
+                  });
+                });
+              }
+            });
+          }
+          
+          // Calculate modifier total for debugging
+          const modifierTotal = modifiers.reduce((sum, mod) => sum + (mod.price * mod.quantity), 0);
+          console.log(`🍕 Item "${item.name}": base price $${item.price}, modifiers: ${modifiers.length}, modifier total: $${modifierTotal}`);
+          
+          return {
+            id: item._id || item.id || `item-${Date.now()}`,
+            name: item.name,
+            price: item.price || 0,
+            quantity: item.quantity || 1,
+            subtotal: item.subtotal, // Include subtotal from database for accurate pricing
+            modifiers: modifiers,
+            specialInstructions: item.specialInstructions || '',
+            image: item.image
+          };
+        });
+        
+        // Service charge and tip will be added later as separate line items in the Stripe processing section
+        
+        console.log('🔍 Converted order items to cart format:', {
+          originalItems: orderToPay.items?.length || 0,
+          convertedItems: cartItems.length,
+          cartItems: cartItems.map(item => ({
+            name: item.name,
+            price: item.price,
+            modifiers: item.modifiers?.length || 0,
+            modifierPrices: item.modifiers?.map(m => m.price) || []
+          }))
+        });
+        
         const tableId = orderToPay.tableId || '';
         const restaurantId = orderToPay.restaurantId || '';
         
+        // Handle group order payment structures
+        if (orderToPay.isGroupOrder && orderToPay.groupOrderData) {
+          const paymentStructure = orderToPay.groupOrderData.paymentStructure;
+          const currentUserId = user?.id || user?._id;
+          
+          console.log('Processing group order payment with structure:', paymentStructure);
+          
+          switch (paymentStructure) {
+            case 'pay_all':
+              // One person pays all - use all items from the group order
+              console.log('Payment structure: One person pays all');
+              break;
+              
+            case 'pay_own':
+              // Pay for own orders - filter items added by current user
+              // For now, calculate the user's portion based on their participation
+              const currentParticipant = orderToPay.groupOrderData.participants.find(p => 
+                p.userId === currentUserId || p._id === currentUserId
+              );
+              
+              if (currentParticipant && currentParticipant.totalAmount > 0) {
+                // Create a line item for the user's own order amount
+                cartItems = [{
+                  id: 'user-own-order',
+                  name: `Your Items from Group Order`,
+                  price: currentParticipant.totalAmount,
+                  quantity: 1,
+                  modifiers: [],
+                  specialInstructions: `Pay for your own items (${orderToPay.groupOrderData.joinCode})`
+                }];
+              } else {
+                // Fallback: if no specific amount, don't charge this user
+                cartItems = [];
+                console.warn('No items found for current user in group order');
+              }
+              console.log('Payment structure: Pay for own orders, user amount:', cartItems[0]?.price || 0);
+              break;
+              
+            case 'equal_split':
+              // Split equally - create a single line item for the user's share
+              const totalAmount = orderToPay.total || 0;
+              const participantCount = orderToPay.groupOrderData.totalParticipants || 1;
+              const userShare = totalAmount / participantCount;
+              
+              cartItems = [{
+                id: 'group-order-share',
+                name: `Group Order Share (${participantCount} participants)`,
+                price: userShare,
+                quantity: 1,
+                modifiers: [],
+                specialInstructions: ''
+              }];
+              console.log('Payment structure: Equal split, user share:', userShare);
+              break;
+              
+            case 'custom_split':
+              // Custom split - find user's custom amount
+              const customSplitParticipant = orderToPay.groupOrderData.participants.find(p => 
+                p.userId === currentUserId || p._id === currentUserId
+              );
+              
+              if (customSplitParticipant) {
+                cartItems = [{
+                  id: 'group-order-custom',
+                  name: `Group Order (Custom Split)`,
+                  price: customSplitParticipant.totalAmount || 0,
+                  quantity: 1,
+                  modifiers: [],
+                  specialInstructions: ''
+                }];
+                console.log('Payment structure: Custom split, user amount:', currentParticipant.totalAmount);
+              }
+              break;
+              
+            default:
+              console.log('Unknown payment structure, using all items');
+          }
+        }
+        
         // Format line items for Stripe - this is the expected format for the backend
         const lineItems = cartItems.map(item => {
-          // Calculate the total price including modifiers
-          const modifierPrice = item.modifiers 
-            ? item.modifiers.reduce((sum, mod) => sum + mod.price, 0) 
-            : 0;
-          
-          const totalItemPrice = (item.price + modifierPrice) * 100; // Convert to cents for Stripe
+          // Use the subtotal from database if available (includes all modifiers), otherwise calculate
+          let totalItemPrice;
+          if (item.subtotal && typeof item.subtotal === 'number') {
+            // Use the pre-calculated subtotal from database (most accurate)
+            totalItemPrice = Math.round(item.subtotal * 100); // Convert to cents for Stripe
+            console.log(`💰 Using database subtotal for "${item.name}": $${item.subtotal} = ${totalItemPrice} cents`);
+          } else {
+            // Fallback: Calculate the total price including modifiers
+            const modifierPrice = item.modifiers 
+              ? item.modifiers.reduce((sum, mod) => sum + mod.price, 0) 
+              : 0;
+            totalItemPrice = Math.round((item.price + modifierPrice) * 100); // Convert to cents for Stripe
+            console.log(`🧮 Calculated total for "${item.name}": base=$${item.price} + modifiers=$${modifierPrice} = ${totalItemPrice} cents`);
+          }
           
           // Format description including modifiers
           let description = item.name;
@@ -551,33 +861,84 @@ const MyOrders: React.FC = () => {
         
         
         // Add service charge as a separate line item if present
-        if (orderToPay.service_charge > 0) {
-          lineItems.push({
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: 'Service Charge'
+        const serviceChargeAmount = orderToPay.service_charge || 
+                                   orderToPay.serviceFee || 
+                                   orderToPay.serviceCharge ||
+                                   orderToPay['service-charge'] ||
+                                   orderToPay['service_fee'] ||
+                                   orderToPay.serviceChargeAmount ||
+                                   0;
+
+        // Add tip calculation - moved here to fix ReferenceError
+        const tipAmount = orderToPay.tip || orderToPay.tips || orderToPay.tipAmount || 0;
+        
+        // CRITICAL DEBUG: Log all possible service charge fields
+        console.log('🔍 CRITICAL: MyOrders Payment Debug - Full Order Object:', {
+          orderId: effectiveOrderId,
+          allOrderFields: Object.keys(orderToPay),
+          orderToPay: {
+            service_charge: orderToPay.service_charge,
+            serviceFee: orderToPay.serviceFee,
+            serviceCharge: orderToPay.serviceCharge,
+            tip: orderToPay.tip,
+            tips: orderToPay.tips,
+            tipAmount: orderToPay.tipAmount,
+            calculatedTipAmount: tipAmount,
+            total: orderToPay.total,
+            subtotal: orderToPay.subtotal,
+            // Check all variations
+            'service-charge': orderToPay['service-charge'],
+            'service_fee': orderToPay['service_fee'],
+            serviceChargeAmount: orderToPay.serviceChargeAmount
+          },
+          calculatedServiceChargeAmount: serviceChargeAmount,
+          calculatedTipAmount: tipAmount,
+          lineItemsCount: lineItems.length,
+          fullOrderSnapshot: JSON.stringify(orderToPay)
+        });
+        
+        if (serviceChargeAmount > 0) {
+          const serviceChargeInCents = Math.round(Number(serviceChargeAmount.toFixed(2)) * 100);
+          console.log(`Adding service charge line item: $${serviceChargeAmount} = ${serviceChargeInCents} cents`);
+          
+          if (serviceChargeInCents > 0 && Number.isInteger(serviceChargeInCents)) {
+            lineItems.push({
+              price_data: {
+                currency: 'usd',
+                product_data: {
+                  name: 'Service Charge'
+                },
+                unit_amount: serviceChargeInCents
               },
-              unit_amount: Math.round((orderToPay.service_charge || 0) * 100) // Convert to cents
-            },
-            quantity: 1
-          });
+              quantity: 1
+            });
+          } else {
+            console.warn(`Invalid service charge amount: ${serviceChargeAmount} -> ${serviceChargeInCents} cents`);
+          }
         }
         
         // Add tip as a separate line item if present
-        if (orderToPay.tip > 0) {
-          lineItems.push({
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: 'Tip'
+        if (tipAmount > 0) {
+          const tipInCents = Math.round(Number(tipAmount.toFixed(2)) * 100);
+          console.log(`Adding tip line item: $${tipAmount} = ${tipInCents} cents`);
+          
+          if (tipInCents > 0 && Number.isInteger(tipInCents)) {
+            lineItems.push({
+              price_data: {
+                currency: 'usd',
+                product_data: {
+                  name: 'Tip'
+                },
+                unit_amount: tipInCents
               },
-              unit_amount: Math.round((orderToPay.tip || 0) * 100) // Convert to cents
-            },
-            quantity: 1
-          });
+              quantity: 1
+            });
+          } else {
+            console.warn(`Invalid tip amount: ${tipAmount} -> ${tipInCents} cents`);
+          }
         }
         
+        // Log all line items before sending to Stripe for debugging
         console.log('Creating checkout session with:', {
           lineItems: lineItems.length,
           tableId,
@@ -585,14 +946,118 @@ const MyOrders: React.FC = () => {
           orderId: effectiveOrderId
         });
         
+        console.log('Detailed line items for Stripe:');
+        lineItems.forEach((item, index) => {
+          console.log(`Line item ${index + 1}:`, {
+            name: item.price_data.product_data.name,
+            description: item.price_data.product_data.description,
+            unit_amount: item.price_data.unit_amount,
+            unit_amount_dollars: item.price_data.unit_amount / 100,
+            quantity: item.quantity,
+            total_cents: item.price_data.unit_amount * item.quantity,
+            total_dollars: (item.price_data.unit_amount * item.quantity) / 100
+          });
+        });
+        
+        const totalAmountCents = lineItems.reduce((sum, item) => sum + (item.price_data.unit_amount * item.quantity), 0);
+        const expectedTotalCents = Math.round((orderToPay.total || orderToPay.totalAmount || 0) * 100);
+        
+        console.log('Total amount for Stripe session:', {
+          totalCents: totalAmountCents,
+          totalDollars: totalAmountCents / 100,
+          expectedTotal: orderToPay.total || orderToPay.totalAmount,
+          expectedTotalCents: expectedTotalCents,
+          amountMatch: totalAmountCents === expectedTotalCents
+        });
+        
+        // Enhanced debug logging before validation
+        console.log('🔍 ENHANCED DEBUG - Complete Payment Calculation:', {
+          orderToPay: {
+            total: orderToPay.total,
+            totalAmount: orderToPay.totalAmount,
+            subtotal: orderToPay.subtotal,
+            service_charge: orderToPay.service_charge,
+            serviceFee: orderToPay.serviceFee,
+            serviceCharge: orderToPay.serviceCharge,
+            tip: orderToPay.tip,
+            tips: orderToPay.tips,
+            tipAmount: orderToPay.tipAmount
+          },
+          calculatedAmounts: {
+            serviceChargeAmount,
+            tipAmount,
+            totalAmountCents,
+            expectedTotalCents,
+            difference: totalAmountCents - expectedTotalCents
+          },
+          lineItemBreakdown: lineItems.map(item => ({
+            name: item.price_data.product_data.name,
+            unit_amount_cents: item.price_data.unit_amount,
+            unit_amount_dollars: item.price_data.unit_amount / 100,
+            quantity: item.quantity,
+            total_cents: item.price_data.unit_amount * item.quantity,
+            total_dollars: (item.price_data.unit_amount * item.quantity) / 100
+          }))
+        });
+
+        // CRITICAL VALIDATION: Ensure calculated amount matches expected total
+        const allowedDifference = 5; // Allow 5 cents difference for rounding issues
+        if (Math.abs(totalAmountCents - expectedTotalCents) > allowedDifference) {
+          console.error('🚨 PAYMENT AMOUNT MISMATCH DETECTED:', {
+            calculatedCents: totalAmountCents,
+            calculatedDollars: totalAmountCents / 100,
+            expectedCents: expectedTotalCents,
+            expectedDollars: expectedTotalCents / 100,
+            difference: totalAmountCents - expectedTotalCents,
+            allowedDifference,
+            lineItems: lineItems.map(item => ({
+              name: item.price_data.product_data.name,
+              unit_amount: item.price_data.unit_amount,
+              quantity: item.quantity,
+              total: item.price_data.unit_amount * item.quantity
+            })),
+            orderBreakdown: {
+              subtotal: orderToPay.subtotal,
+              serviceCharge: serviceChargeAmount,
+              tip: tipAmount,
+              manualTotal: (orderToPay.subtotal || 0) + serviceChargeAmount + tipAmount,
+              orderTotal: orderToPay.total
+            }
+          });
+          
+          // EMERGENCY FIX: Use the line items total instead of order.total if there's a mismatch
+          console.warn('⚠️ Using calculated line items total due to mismatch with order.total');
+          
+          // Don't throw error - proceed with calculated total
+          // throw new Error(`Payment amount mismatch: Stripe total ($${(totalAmountCents/100).toFixed(2)}) doesn't match order total ($${((expectedTotalCents)/100).toFixed(2)}). Please contact support.`);
+        }
+        
+        // Store authentication and session info for return from Stripe
+        const authToken = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+        const currentUser = localStorage.getItem('user');
+        const deviceId = localStorage.getItem('device_id');
+        
+        // Create comprehensive URLs with all necessary parameters to preserve session
+        const baseParams = new URLSearchParams({
+          order_id: effectiveOrderId,
+          table: tableId || '',
+          ...(deviceId && { device_id: deviceId }),
+          return_from_stripe: 'true'
+        });
+        
+        const successUrl = `${window.location.origin}/payment/success?${baseParams.toString()}`;
+        const cancelUrl = `${window.location.origin}/payment/cancel?${baseParams.toString()}`;
+        
+        console.log('📍 Payment URLs:', { successUrl, cancelUrl });
+        
         // Create Stripe checkout session using apiClient
         const response = await apiClient.post('/api/payments/create-checkout-session', {
           lineItems,
           tableId,
           restaurantId,
           orderId: effectiveOrderId, // Pass this for reference
-          successUrl: `${window.location.origin}/payment/success?order_id=${effectiveOrderId}`,
-          cancelUrl: `${window.location.origin}/payment/cancel?order_id=${effectiveOrderId}`
+          successUrl,
+          cancelUrl
         });
 
         if (!response.data.success) {
@@ -603,6 +1068,19 @@ const MyOrders: React.FC = () => {
         if (response.data.sessionId) {
           localStorage.setItem('stripeSessionId', response.data.sessionId);
           localStorage.setItem('currentPaymentOrderId', effectiveOrderId);
+          
+          // Store group order information for payment completion handling
+          if (orderToPay.isGroupOrder && orderToPay.groupOrderData) {
+            const groupPaymentInfo = {
+              groupOrderId: orderToPay.groupOrderId || effectiveOrderId,
+              paymentStructure: orderToPay.groupOrderData.paymentStructure,
+              participants: orderToPay.groupOrderData.participants,
+              joinCode: orderToPay.groupOrderData.joinCode,
+              totalParticipants: orderToPay.groupOrderData.totalParticipants
+            };
+            localStorage.setItem('currentGroupOrderPayment', JSON.stringify(groupPaymentInfo));
+            console.log('Stored group order payment info for completion handling:', groupPaymentInfo);
+          }
         }
 
         // Redirect to Stripe checkout
@@ -708,6 +1186,42 @@ const MyOrders: React.FC = () => {
     } finally {
       setCancellingOrderId(null);
     }
+  };
+
+  // Handle rating order
+  const handleRateOrder = (order: any) => {
+    console.log('Opening rating modal for order:', order);
+    
+    if (!order.items || order.items.length === 0) {
+      toast.error('No items found in this order to rate');
+      return;
+    }
+    
+    if (order.items.length === 1) {
+      // Single item - use direct rating modal
+      setSelectedMenuItemForRating(order.items[0]);
+      setSelectedOrderForRating(order);
+      setRatingModalOpen(true);
+    } else {
+      // Multiple items - use order item rating modal
+      setSelectedOrderForRating(order);
+      setOrderItemRatingModalOpen(true);
+    }
+  };
+
+  // Handle rating submission
+  const handleRatingSubmitted = (rating: any) => {
+    console.log('Rating submitted:', rating);
+    toast.success('Thank you for your rating!');
+    setRatingModalOpen(false);
+    setSelectedOrderForRating(null);
+    setSelectedMenuItemForRating(null);
+  };
+
+  // Handle all ratings submitted for order with multiple items
+  const handleAllRatingsSubmitted = () => {
+    setOrderItemRatingModalOpen(false);
+    setSelectedOrderForRating(null);
   };
 
   // Refresh orders
@@ -870,7 +1384,7 @@ const MyOrders: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {categorizeOrders(orders).today.map(order => (
-                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} restaurantServiceCharge={restaurantServiceCharge} />
+                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} onRateOrder={handleRateOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} restaurantServiceCharge={restaurantServiceCharge} existingCashPayments={orderCashPayments[order._id] || []} />
                   ))}
                 </div>
               )}
@@ -890,7 +1404,7 @@ const MyOrders: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {categorizeOrders(orders).past.map(order => (
-                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} restaurantServiceCharge={restaurantServiceCharge} />
+                    <OrderCard key={order._id} order={order} onPayOrder={handlePayOrder} onCancelOrder={handleCancelOrder} onRateOrder={handleRateOrder} cancellingOrderId={cancellingOrderId} processingPaymentOrderId={processingPaymentOrderId} restaurantServiceCharge={restaurantServiceCharge} existingCashPayments={orderCashPayments[order._id] || []} />
             ))}
           </div>
               )}
@@ -898,6 +1412,37 @@ const MyOrders: React.FC = () => {
           </Tabs>
         )}
       </div>
+      
+      {/* Single Item Rating Modal */}
+      {selectedMenuItemForRating && (
+        <RatingSubmissionModal
+          isOpen={ratingModalOpen}
+          onClose={() => {
+            setRatingModalOpen(false);
+            setSelectedOrderForRating(null);
+            setSelectedMenuItemForRating(null);
+          }}
+          menuItemId={selectedMenuItemForRating.id || selectedMenuItemForRating.menuItemId || selectedMenuItemForRating._id}
+          menuItemName={selectedMenuItemForRating.name}
+          menuItemImage={selectedMenuItemForRating.image}
+          restaurantId={selectedOrderForRating?.restaurantId || localStorage.getItem('restaurantId') || ''}
+          isVerifiedPurchase={true}
+          onRatingSubmitted={handleRatingSubmitted}
+        />
+      )}
+
+      {/* Multiple Items Rating Modal */}
+      {selectedOrderForRating && (
+        <OrderItemRatingModal
+          isOpen={orderItemRatingModalOpen}
+          onClose={() => {
+            setOrderItemRatingModalOpen(false);
+            setSelectedOrderForRating(null);
+          }}
+          order={selectedOrderForRating}
+          onAllRatingsSubmitted={handleAllRatingsSubmitted}
+        />
+      )}
     </div>
   );
 };

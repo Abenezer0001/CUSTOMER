@@ -8,6 +8,7 @@ import { MenuItem } from '@/types/menu';
 import { RatingStats } from '@/types';
 import ratingService from '@/api/ratingService';
 import { cn } from '@/lib/utils';
+import { generateMockRatingStats, shouldUseMockData, logRatingFetch } from '@/utils/ratingTestUtils';
 
 interface MenuItemCardProps {
   item: MenuItem;
@@ -31,13 +32,38 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({
   useEffect(() => {
     if (showRating) {
       const fetchRatingStats = async () => {
+        const itemId = item._id || item.id;
+        console.log('Fetching rating stats for item:', { itemId, itemName: item.name });
         setLoadingRating(true);
         try {
-          const stats = await ratingService.getMenuItemRatingStats(item._id || item.id);
+          let stats: RatingStats;
+          
+          if (shouldUseMockData()) {
+            // Use mock data for development/testing
+            stats = generateMockRatingStats(4.2 + Math.random() * 0.8, Math.floor(Math.random() * 20) + 5);
+            logRatingFetch(itemId, item.name, true, stats);
+          } else {
+            stats = await ratingService.getMenuItemRatingStats(itemId);
+            logRatingFetch(itemId, item.name, true, stats);
+          }
+          
           setRatingStats(stats);
-        } catch (error) {
-          // Silently fail - no rating stats available
-          console.log('No rating stats available for item:', item.name);
+        } catch (error: any) {
+          logRatingFetch(itemId, item.name, false);
+          
+          // Handle specific error cases
+          if (error.message?.includes('log in')) {
+            console.log('Authentication required for rating stats, showing placeholder');
+          } else {
+            console.warn('Failed to fetch rating stats for item:', item.name, error);
+          }
+          
+          // Set empty stats to ensure UI can still render
+          setRatingStats({
+            averageRating: 0,
+            totalReviews: 0,
+            ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+          });
         } finally {
           setLoadingRating(false);
         }
@@ -50,6 +76,13 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Don't allow interaction if item is unavailable
+    if (!item.isAvailable) {
+      console.log('MenuItemCard click blocked - item unavailable:', item.name);
+      return;
+    }
+    
     console.log('MenuItemCard clicked:', item.name); // Debug log
     if (onClick) {
       onClick();
@@ -59,8 +92,11 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({
   return (
     <Card 
       className={cn(
-        "overflow-hidden h-full cursor-pointer transition-all duration-200 hover:shadow-lg group",
+        "overflow-hidden h-full transition-all duration-200 group",
         "bg-[#1F1D2B] border-[#2D303E]",
+        item.isAvailable 
+          ? "cursor-pointer hover:shadow-lg" 
+          : "opacity-60 cursor-not-allowed",
         className
       )}
       onClick={handleClick}
@@ -83,8 +119,8 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({
           </div>
         )}
         
-        {/* Plus button - conditionally rendered */}
-        {showPlusButton && (
+        {/* Plus button - conditionally rendered and disabled when unavailable */}
+        {showPlusButton && item.isAvailable && (
           <Button 
             variant="default"
             size="icon" 
@@ -99,6 +135,15 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({
           >
             <Plus className="h-4 w-4" />
           </Button>
+        )}
+        
+        {/* Unavailable overlay */}
+        {!item.isAvailable && (
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20">
+            <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded-full">
+              Currently Unavailable
+            </span>
+          </div>
         )}
       </div>
       
@@ -117,17 +162,28 @@ export const MenuItemCard: React.FC<MenuItemCardProps> = ({
         </p>
         
         {/* Rating Display */}
-        {showRating && ratingStats && ratingStats.totalReviews > 0 && (
-          <div className="flex items-center gap-1">
-            <div className="flex items-center gap-1">
-              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-              <span className="text-xs font-medium text-gray-300">
-                {ratingStats.averageRating.toFixed(1)}
-              </span>
-            </div>
-            <span className="text-xs text-gray-500">
-              ({ratingStats.totalReviews})
-            </span>
+        {showRating && (
+          <div className="flex items-center gap-1 min-h-[16px]">
+            {loadingRating ? (
+              <div className="flex items-center gap-1">
+                <div className="h-3 w-3 bg-gray-300 animate-pulse rounded" />
+                <div className="h-3 w-8 bg-gray-300 animate-pulse rounded" />
+              </div>
+            ) : ratingStats && ratingStats.totalReviews > 0 ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                  <span className="text-xs font-medium text-gray-300">
+                    {ratingStats.averageRating.toFixed(1)}
+                  </span>
+                </div>
+                <span className="text-xs text-gray-500">
+                  ({ratingStats.totalReviews})
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-gray-500">No reviews yet</span>
+            )}
           </div>
         )}
         

@@ -8,12 +8,14 @@ import { Input } from '@/components/ui/input';
 import TableHeader from '@/components/TableHeader';
 import CategoryGrid from '@/components/CategoryGrid';
 import SplashScreen from '@/components/SplashScreen';
+import ClosedOverlay from '@/components/ClosedOverlay';
 // import HeroSlider from '@/components/home/HeroSlider';
 import { api } from '@/services/api';
 import { Category as LocalCategory } from '@/types';
 import { Category, Menu, TableVerification } from '@/types/menu';
 import { verifyTableStatus } from '@/api/menuService';
 import { API_BASE_URL } from '@/constants';
+import { calculateNextOpenTime } from '@/utils/scheduleUtils';
 
 // Create a public axios instance without authentication headers
 const publicAxios = axios.create({
@@ -41,6 +43,13 @@ const Index: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [tableError, setTableError] = useState<string | null>(null);
+  const [isClosed, setIsClosed] = useState(false);
+  const [closureInfo, setClosureInfo] = useState<{
+    type: 'restaurant' | 'venue' | 'business';
+    name?: string;
+    message?: string;
+    nextOpenTime?: string;
+  } | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -65,15 +74,75 @@ const Index: React.FC = () => {
         // Use the existing verifyTableStatus function from menuService
         const tableStatus = await verifyTableStatus(tableId);
         
+        console.log('Table verification result:', tableStatus);
+        
         if (!tableStatus.exists) {
           const error = new Error('Table not found');
           setTableError(error.message);
           throw error;
         }
         
+        // Check if table is not available (restaurant/venue is closed)
+        // Backend now properly handles schedule checking with timezone support
+        const isActuallyClosed = !tableStatus.isAvailable;
+        
+        if (isActuallyClosed) {
+          console.log('Table is not available - venue/restaurant is closed');
+          
+          // Calculate the real next opening time using known schedule pattern
+          // Based on the admin UI, the restaurant opens 9:00 AM - 10:00 PM daily
+          let nextOpenTime = 'Schedule unavailable';
+          
+          try {
+            const now = new Date();
+            const dubaiTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
+            const currentHour = dubaiTime.getHours();
+            const currentMinute = dubaiTime.getMinutes();
+            const currentTimeInMinutes = currentHour * 60 + currentMinute;
+            const dayOfWeek = dubaiTime.getDay(); // 0 = Sunday, 1 = Monday
+            
+            // Standard schedule: 9:00 AM - 10:00 PM (9:00-22:00)
+            const openTime = 9 * 60; // 9:00 AM in minutes
+            
+            // Check if restaurant opens later today
+            if (currentTimeInMinutes < openTime) {
+              nextOpenTime = 'Today at 9:00 AM';
+            } else {
+              // Restaurant will open tomorrow at 9:00 AM
+              nextOpenTime = 'Tomorrow at 9:00 AM';
+            }
+            
+            console.log('Current Dubai time:', dubaiTime);
+            console.log('Current time in minutes:', currentTimeInMinutes);
+            console.log('Calculated next opening time:', nextOpenTime);
+          } catch (error) {
+            console.error('Error calculating next opening time:', error);
+          }
+          
+          setIsClosed(true);
+          setClosureInfo({
+            type: 'restaurant',
+            name: tableStatus.venue?.name || 'Restaurant',
+            message: 'This restaurant is currently closed according to its schedule.',
+            nextOpenTime: nextOpenTime
+          });
+          
+          // Still return the data for display purposes, but the closed overlay will show
+          return {
+            venue: tableStatus.venue,
+            table: tableStatus.table,
+            isAvailable: false
+          };
+        } else {
+          // Restaurant/venue is open
+          setIsClosed(false);
+          setClosureInfo(null);
+        }
+        
         return {
           venue: tableStatus.venue,
-          table: tableStatus.table
+          table: tableStatus.table,
+          isAvailable: true
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Failed to verify table';
@@ -218,6 +287,16 @@ const Index: React.FC = () => {
 
   return (
     <>
+      {/* Closed Overlay - Show on top of everything when restaurant/venue is closed */}
+      {isClosed && closureInfo && !showSplash && (
+        <ClosedOverlay
+          type={closureInfo.type}
+          name={closureInfo.name}  
+          message={closureInfo.message}
+          nextOpenTime={closureInfo.nextOpenTime}
+        />
+      )}
+      
       <AnimatePresence>
         {showSplash ? (
           <SplashScreen onComplete={() => setShowSplash(false)} />

@@ -93,7 +93,10 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className, showDetail
           <img
             src={item.image || '/placeholder-item.jpg'}
             alt={item.name}
-            className="w-full h-full object-cover"
+            className={cn(
+              "w-full h-full object-cover",
+              item.isActive === false && "opacity-50"
+            )}
             loading="lazy"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
@@ -103,6 +106,20 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className, showDetail
           {item.featured && (
             <div className="absolute top-2 left-2 bg-primary text-white text-xs px-2 py-1 rounded-full">
               Featured
+            </div>
+          )}
+          {item.isActive === false && (
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-white text-xs font-medium bg-black/70 px-3 py-1 rounded-full">
+                  Currently Unavailable
+                </div>
+                {item.availabilityMessage && (
+                  <div className="text-white text-xs mt-1 opacity-80">
+                    {item.availabilityMessage}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -148,7 +165,13 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, className, showDetail
             )}
             
             {/* Add to cart button(s) */}
-            {isInGroupOrder ? (
+            {item.isActive === false ? (
+              <div className="ml-auto">
+                <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                  Unavailable
+                </span>
+              </div>
+            ) : isInGroupOrder ? (
               <div className="flex gap-2 ml-auto">
                 <Button 
                   variant="outline" 

@@ -161,21 +161,21 @@ const RatingSubmissionModal: React.FC<RatingSubmissionModalProps> = ({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Menu Item Info */}
-          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+          {/* Menu Item Info with enhanced styling */}
+          <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
             {menuItemImage && (
               <img 
                 src={menuItemImage} 
                 alt={menuItemName}
-                className="w-12 h-12 object-cover rounded-md"
+                className="w-14 h-14 object-cover rounded-lg shadow-sm ring-2 ring-white dark:ring-gray-800"
               />
             )}
             <div className="flex-1">
-              <h3 className="font-medium text-gray-900 dark:text-gray-100">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">
                 {menuItemName}
               </h3>
               {isVerifiedPurchase && (
-                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800 mt-1">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Verified Purchase
                 </Badge>
@@ -189,12 +189,12 @@ const RatingSubmissionModal: React.FC<RatingSubmissionModalProps> = ({
               Your Rating *
             </label>
             
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 justify-center">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
                   type="button"
-                  className="p-1 rounded transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="p-2 rounded-full transition-all duration-200 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:scale-110 transform active:scale-95"
                   onClick={() => handleStarClick(star)}
                   onMouseEnter={() => handleStarHover(star)}
                   onMouseLeave={() => setHoveredRating(0)}
@@ -202,10 +202,10 @@ const RatingSubmissionModal: React.FC<RatingSubmissionModalProps> = ({
                 >
                   <Star
                     className={cn(
-                      "h-8 w-8 transition-colors",
+                      "h-10 w-10 transition-all duration-300 ease-out",
                       (hoveredRating >= star || (!hoveredRating && rating >= star))
-                        ? "fill-amber-400 text-amber-400"
-                        : "text-gray-300 dark:text-gray-600"
+                        ? "fill-amber-400 text-amber-400 drop-shadow-sm scale-110"
+                        : "text-gray-300 dark:text-gray-600 hover:text-amber-300"
                     )}
                   />
                 </button>
@@ -253,14 +253,14 @@ const RatingSubmissionModal: React.FC<RatingSubmissionModalProps> = ({
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-2">
+          {/* Action Buttons with enhanced styling */}
+          <div className="flex gap-3 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={handleCancel}
               disabled={isSubmitting}
-              className="flex-1"
+              className="flex-1 border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800 transition-all duration-200"
             >
               Cancel
             </Button>
@@ -268,7 +268,7 @@ const RatingSubmissionModal: React.FC<RatingSubmissionModalProps> = ({
             <Button
               type="submit"
               disabled={isSubmitting || rating === 0}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 dark:from-emerald-600 dark:to-teal-600 dark:hover:from-emerald-700 dark:hover:to-teal-700 text-white font-semibold py-3 transition-all duration-200 transform hover:scale-105 active:scale-95 disabled:transform-none disabled:opacity-50"
             >
               {isSubmitting ? (
                 <div className="flex items-center gap-2">
@@ -276,7 +276,10 @@ const RatingSubmissionModal: React.FC<RatingSubmissionModalProps> = ({
                   {existingRating ? 'Updating...' : 'Submitting...'}
                 </div>
               ) : (
-                existingRating ? 'Update Rating' : 'Submit Rating'
+                <>
+                  <Star className="w-4 h-4 mr-2" />
+                  {existingRating ? 'Update Rating' : 'Submit Rating'}
+                </>
               )}
             </Button>
           </div>

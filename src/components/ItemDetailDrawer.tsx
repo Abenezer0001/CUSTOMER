@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MenuItem, CartItemModifier, MenuItemModifierGroup, ModifierOption } from '@/types';
+import { MenuItem, CartItemModifier, MenuItemModifierGroup, ModifierOption, RatingStats } from '@/types';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { DrawerClose } from './ui/drawer';
@@ -13,6 +13,10 @@ import { Textarea } from './ui/textarea';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import MenuItemRating from './MenuItemRating';
+import ReviewsList from './ReviewsList';
+import StarRating from './StarRating';
+import { Separator } from './ui/separator';
 
 interface ItemDetailDrawerProps {
   item: MenuItem;
@@ -29,6 +33,7 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
   const [isLoading, setIsLoading] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
 
   // Calculate total price using useMemo for efficiency
   const totalPrice = useMemo(() => {
@@ -277,7 +282,34 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
         {/* Item Name and Description */}
         <div className="mb-4 px-4">
           <div className="flex justify-between items-start mb-2">
-            <h2 className="text-2xl font-semibold">{item.name}</h2>
+            <div className="flex-1">
+              <h2 className="text-2xl font-semibold">{item.name}</h2>
+              {/* Enhanced Rating Display with better styling */}
+              <div className="mt-3">
+                {ratingStats && ratingStats.totalReviews > 0 ? (
+                  <div className="flex items-center gap-4 p-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <StarRating
+                      rating={ratingStats.averageRating}
+                      size="lg"
+                      showNumeric={true}
+                      className="text-amber-500"
+                    />
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      <span className="font-medium">
+                        {ratingStats.totalReviews} review{ratingStats.totalReviews !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-gray-50 dark:bg-gray-900/20 rounded-lg border border-gray-200 dark:border-gray-800">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      No ratings yet - be the first to review!
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
             <span className="text-xl font-bold text-purple-600">${item.price.toFixed(2)}</span>
           </div>
           
@@ -287,13 +319,6 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
               <Badge variant="outline" className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {typeof (item as any).preparationTime === 'string' ? (item as any).preparationTime : `${(item as any).preparationTime} min`}
-              </Badge>
-            )}
-            
-            {(item as any).rating && (
-              <Badge variant="outline" className="flex items-center gap-1 bg-amber-50 text-amber-700 border-amber-200">
-                <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                {(item as any).rating}
               </Badge>
             )}
             
@@ -430,6 +455,85 @@ export const ItemDetailDrawer: React.FC<ItemDetailDrawerProps> = ({ item, onClos
           >
             <Plus className="h-4 w-4" />
           </Button>
+        </div>
+      </div>
+
+      {/* Enhanced Rating and Reviews Section */}
+      <div className="px-4 pb-4">
+        <Separator className="mb-6" />
+        
+        <div className="space-y-6">
+          {/* Enhanced Rating Overview */}
+          {ratingStats && ratingStats.totalReviews > 0 && (
+            <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-900/20 dark:via-orange-900/20 dark:to-yellow-900/20 rounded-xl p-6 border-2 border-amber-200 dark:border-amber-800 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+                  Customer Reviews
+                </h3>
+                <div className="text-right">
+                  <div className="flex items-center gap-3 mb-2">
+                    <StarRating
+                      rating={ratingStats.averageRating}
+                      size="xl"
+                      showNumeric={true}
+                      className="text-amber-500"
+                    />
+                  </div>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 font-medium">
+                    Based on {ratingStats.totalReviews} review{ratingStats.totalReviews !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Rating Distribution */}
+              <div className="space-y-2">
+                {[5, 4, 3, 2, 1].map((starCount) => {
+                  const count = ratingStats.ratingDistribution[starCount as keyof typeof ratingStats.ratingDistribution] || 0;
+                  const percentage = ratingStats.totalReviews > 0 ? (count / ratingStats.totalReviews) * 100 : 0;
+                  
+                  return (
+                    <div key={starCount} className="flex items-center gap-3 text-sm">
+                      <div className="flex items-center gap-1 w-12">
+                        <span className="text-gray-600 dark:text-gray-400">{starCount}</span>
+                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      </div>
+                      <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div 
+                          className="bg-amber-400 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <span className="w-8 text-right text-gray-600 dark:text-gray-400">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          
+          {/* Rate This Item Section */}
+          <MenuItemRating
+            menuItemId={item._id || item.id}
+            menuItemName={item.name}
+            restaurantId={localStorage.getItem('restaurantId') || ''}
+            showFullStats={false}
+            onStatsUpdate={(stats) => setRatingStats(stats)}
+          />
+          
+          {/* Reviews List */}
+          {ratingStats && ratingStats.totalReviews > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                What customers are saying
+              </h3>
+              <ReviewsList
+                menuItemId={item._id || item.id}
+                menuItemName={item.name}
+                maxHeight="300px"
+                showFilters={true}
+              />
+            </div>
+          )}
         </div>
       </div>
       </ScrollArea>

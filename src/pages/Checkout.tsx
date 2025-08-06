@@ -7,9 +7,10 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, CreditCard, Loader2, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { createOrder, getRestaurantIdFromTableId } from '@/api/orderService';
+import { createOrder, getRestaurantIdFromTableId, OrderData, OrderType } from '@/api/orderService';
 import { createStripeCheckoutSession } from '@/api/paymentService';
 import { OrderStatus, PaymentStatus } from '@/types';
+import apiClient from '@/api/apiClient';
 
 const Checkout: React.FC = () => {
   const { cartItems, clearCart } = useCart();
@@ -19,21 +20,98 @@ const Checkout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Calculate subtotal from cart items
+  // Service charge state
+  const [venueServiceCharge, setVenueServiceCharge] = useState({
+    enabled: false,
+    type: 'percentage' as 'percentage' | 'flat',
+    value: 0
+  });
+  const [tipAmount, setTipAmount] = useState(0);
+  
+  // Calculate subtotal from cart items including modifiers
   const subtotal = cartItems.reduce((total, item) => {
-    return total + (item.price * item.quantity);
+    const basePrice = item.price * item.quantity;
+    const modifiersPrice = item.modifiers 
+      ? item.modifiers.reduce((modSum, mod) => modSum + mod.price, 0) * item.quantity
+      : 0;
+    return total + basePrice + modifiersPrice;
   }, 0);
+  
+  // Calculate service charge based on venue settings
+  const serviceCharge = React.useMemo(() => {
+    if (!venueServiceCharge.enabled) return 0;
+    
+    if (venueServiceCharge.type === 'percentage') {
+      return Math.round((subtotal * venueServiceCharge.value) / 100 * 100) / 100;
+    } else {
+      return venueServiceCharge.value;
+    }
+  }, [venueServiceCharge, subtotal]);
   
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const tax = subtotal * 0.1;
-  const total = subtotal + tax;
+  const tax = 0; // No tax applied, only service charge (following CartDrawer pattern)
+  const total = subtotal + tax + serviceCharge + tipAmount;
+
+  // Fetch venue service charge settings when component loads
+  useEffect(() => {
+    const fetchVenueServiceCharge = async () => {
+      try {
+        if (!tableId) return;
+        
+        // Get table data to find venueId
+        const tableResponse = await apiClient.get(`/api/restaurant-service/tables/${tableId}`);
+        
+        // Extract venueId - handle both string ID and populated object
+        let venueId = null;
+        if (typeof tableResponse.data.venueId === 'string') {
+          venueId = tableResponse.data.venueId;
+        } else if (typeof tableResponse.data.venueId === 'object' && tableResponse.data.venueId?._id) {
+          venueId = tableResponse.data.venueId._id;
+        }
+        
+        if (!venueId) {
+          console.log('No venueId found in table data');
+          return;
+        }
+        
+        // If venue data is already populated, use it directly
+        if (typeof tableResponse.data.venueId === 'object' && tableResponse.data.venueId?.serviceCharge) {
+          setVenueServiceCharge(tableResponse.data.venueId.serviceCharge);
+          return;
+        }
+        
+        // Fetch venue data separately if not populated
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/venue-service/venues/${venueId}`);
+        if (response.ok) {
+          const venueData = await response.json();
+          if (venueData.serviceCharge) {
+            setVenueServiceCharge(venueData.serviceCharge);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching venue service charge:', error);
+      }
+    };
+
+    fetchVenueServiceCharge();
+  }, [tableId]);
 
   // Function to handle checkout with Stripe
   const handleStripeCheckout = async () => {
     if (!tableId) {
       toast.error('Table information is missing. Please scan a table QR code.');
       navigate('/scan-table');
+      return;
+    }
+    
+    if (cartItems.length === 0) {
+      toast.error('Your cart is empty. Please add items before checking out.');
+      return;
+    }
+    
+    if (total <= 0) {
+      toast.error('Invalid order total. Please refresh and try again.');
       return;
     }
     
@@ -78,11 +156,40 @@ const Checkout: React.FC = () => {
         throw new Error('Unable to determine restaurant ID from table: ' + tableId);
       }
       
-      // Create order without passing token (it will be retrieved from storage)
+      // Format order items
+      const formattedItems = cartItems.map(item => ({
+        menuItem: item.menuItemId || item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: item.price * item.quantity,
+        specialInstructions: item.specialInstructions || '',
+        modifiers: item.modifiers?.map(mod => ({
+          name: mod.name,
+          price: mod.price
+        })) || []
+      }));
+
+      // Create custom order data with tip and service charge
+      const orderData: OrderData = {
+        restaurantId,
+        tableId,
+        items: formattedItems,
+        subtotal,
+        tax,
+        serviceFee: serviceCharge,
+        tip: tipAmount,
+        total,
+        orderType: OrderType.DINE_IN,
+        specialInstructions: ''
+      };
+
+      // Create order with custom data that includes tip and service charge
       const orderResponse = await createOrder(
         cartItems,
         tableId,
-        restaurantId
+        restaurantId,
+        orderData
       );
       
       if (!orderResponse || !orderResponse._id) {
@@ -97,8 +204,8 @@ const Checkout: React.FC = () => {
         items: cartItems,
         subtotal,
         tax,
-        serviceFee: orderResponse.serviceFee || 0,
-        tip: orderResponse.tip || 0,
+        serviceFee: serviceCharge,
+        tip: tipAmount,
         total,
         status: OrderStatus.PENDING,
         paymentStatus: orderResponse.paymentStatus || PaymentStatus.PENDING,
@@ -108,11 +215,52 @@ const Checkout: React.FC = () => {
         userId: orderResponse.userId // Include userId for filtering
       });
       
-      // Create Stripe checkout session
-      const stripeSession = await createStripeCheckoutSession(
-        cartItems,
+      // Create modified cart items that include service charge and tip as separate line items
+      const modifiedCartItems = [...cartItems];
+      
+      // Add service charge as a line item if enabled
+      if (venueServiceCharge.enabled && serviceCharge > 0) {
+        modifiedCartItems.push({
+          id: 'service-charge',
+          menuItemId: 'service-charge',
+          name: `Service Charge ${venueServiceCharge.type === 'percentage' ? `(${venueServiceCharge.value}%)` : '(Flat Rate)'}`,
+          price: serviceCharge,
+          quantity: 1,
+          modifiers: [],
+          specialInstructions: ''
+        } as any);
+      }
+      
+      // Add tip as a line item if provided
+      if (tipAmount > 0) {
+        modifiedCartItems.push({
+          id: 'tip',
+          menuItemId: 'tip',
+          name: 'Tip',
+          price: tipAmount,
+          quantity: 1,
+          modifiers: [],
+          specialInstructions: ''
+        } as any);
+      }
+
+      console.log('Creating Stripe checkout session with:', {
+        originalCartItems: cartItems.length,
+        modifiedCartItems: modifiedCartItems.length,
+        subtotal,
+        serviceCharge,
+        tipAmount,
+        total,
         tableId,
         restaurantId
+      });
+
+      // Create Stripe checkout session with modified cart items that include charges
+      const stripeSession = await createStripeCheckoutSession(
+        modifiedCartItems,
+        tableId,
+        restaurantId,
+        orderResponse._id
       );
       
       if (!stripeSession || !stripeSession.url) {
@@ -130,7 +278,25 @@ const Checkout: React.FC = () => {
       
     } catch (error) {
       console.error('Checkout failed:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to process your order');
+      
+      // Provide more specific error messages based on error type
+      let errorMessage = 'Failed to process your order';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Table information is missing')) {
+          errorMessage = 'Table information is missing. Please scan the QR code again.';
+        } else if (error.message.includes('Invalid restaurant ID')) {
+          errorMessage = 'Restaurant information is invalid. Please scan the QR code again.';
+        } else if (error.message.includes('Authentication') || error.message.includes('login')) {
+          errorMessage = 'Please log in to complete your order.';
+        } else if (error.message.includes('Invalid calculated price')) {
+          errorMessage = 'There was an issue with item pricing. Please refresh and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
       setIsProcessing(false);
     }
   };
@@ -150,23 +316,31 @@ const Checkout: React.FC = () => {
       <div className="mb-8 bg-night rounded-lg border border-delft-blue p-4">
         <h2 className="font-medium mb-4 text-white">Order Summary</h2>
         
-        {cartItems.map((item) => (
-          <div key={item.id} className="flex justify-between py-2 text-sm text-white">
-            <div>
-              <span>{item.quantity} x {item.name}</span>
-              {item.modifiers && item.modifiers.length > 0 && (
-                <div className="text-xs text-gray-400 ml-4">
-                  {/* Check for cookingPreference property safely */}
-                  {(item as any).cookingPreference && <div>• {(item as any).cookingPreference}</div>}
-                  {item.modifiers.map(mod => (
-                    <div key={mod.id}>• {mod.name}</div>
-                  ))}
-                </div>
-              )}
+        {cartItems.map((item) => {
+          const itemTotal = item.price * item.quantity;
+          const modifiersTotal = item.modifiers 
+            ? item.modifiers.reduce((sum, mod) => sum + mod.price, 0) * item.quantity
+            : 0;
+          const lineTotal = itemTotal + modifiersTotal;
+          
+          return (
+            <div key={item.id} className="flex justify-between py-2 text-sm text-white">
+              <div>
+                <span>{item.quantity} x {item.name}</span>
+                {item.modifiers && item.modifiers.length > 0 && (
+                  <div className="text-xs text-gray-400 ml-4">
+                    {/* Check for cookingPreference property safely */}
+                    {(item as any).cookingPreference && <div>• {(item as any).cookingPreference}</div>}
+                    {item.modifiers.map(mod => (
+                      <div key={mod.id}>• {mod.name} (+${mod.price.toFixed(2)})</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <span>${lineTotal.toFixed(2)}</span>
             </div>
-            <span>${(item.price * item.quantity).toFixed(2)}</span>
-          </div>
-        ))}
+          );
+        })}
         
         <div className="border-t border-delft-blue/30 my-3"></div>
         
@@ -175,14 +349,72 @@ const Checkout: React.FC = () => {
           <span>${subtotal.toFixed(2)}</span>
         </div>
         
-        <div className="flex justify-between text-sm py-2 text-white">
-          <span>Tax (10%)</span>
-          <span>${tax.toFixed(2)}</span>
-        </div>
+        {venueServiceCharge.enabled && serviceCharge > 0 && (
+          <div className="flex justify-between text-sm py-2 text-white">
+            <span>
+              Service Charge {venueServiceCharge.type === 'percentage' 
+                ? `(${venueServiceCharge.value}%)`
+                : '(Flat Rate)'
+              }
+            </span>
+            <span>${serviceCharge.toFixed(2)}</span>
+          </div>
+        )}
+        
+        {tipAmount > 0 && (
+          <div className="flex justify-between text-sm py-2 text-white">
+            <span>Tip</span>
+            <span>${tipAmount.toFixed(2)}</span>
+          </div>
+        )}
         
         <div className="flex justify-between font-medium py-2 text-white">
           <span>Total</span>
           <span>${total.toFixed(2)}</span>
+        </div>
+      </div>
+      
+      {/* Tip Section */}
+      <div className="bg-night rounded-lg border border-delft-blue p-4 mb-8">
+        <h2 className="font-medium mb-4 text-white">Add Tip (Optional)</h2>
+        
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          {[15, 18, 20, 22].map(percentage => {
+            const tipValue = (subtotal * percentage) / 100;
+            return (
+              <Button
+                key={percentage}
+                variant={tipAmount === tipValue ? "default" : "outline"}
+                onClick={() => setTipAmount(tipValue)}
+                className="h-12 flex flex-col"
+              >
+                <span className="text-sm font-semibold">{percentage}%</span>
+                <span className="text-xs">${tipValue.toFixed(2)}</span>
+              </Button>
+            );
+          })}
+        </div>
+        
+        <div className="flex gap-2">
+          <input
+            type="number"
+            placeholder="Custom tip amount"
+            value={tipAmount > 0 ? tipAmount.toFixed(2) : ''}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value) || 0;
+              setTipAmount(value);
+            }}
+            className="flex-1 px-3 py-2 bg-delft-blue/20 border border-delft-blue rounded text-white placeholder-gray-400"
+            step="0.01"
+            min="0"
+          />
+          <Button
+            variant="outline"
+            onClick={() => setTipAmount(0)}
+            className="px-4"
+          >
+            No Tip
+          </Button>
         </div>
       </div>
       

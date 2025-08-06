@@ -24,12 +24,51 @@ export class RatingService {
   }
 
   /**
-   * Submit a new rating for a menu item
+   * Submit a new rating for a menu item from an order
    */
   async submitRating(data: RatingSubmission): Promise<Rating> {
     try {
-      console.log('Submitting rating:', data);
-      const response = await apiClient.post('/api/v1/ratings', data);
+      console.log('🔍 Submitting rating with data:', data);
+      
+      // Debug authentication state before making request
+      const token = localStorage.getItem('auth_token');
+      const cookies = document.cookie;
+      const user = localStorage.getItem('user');
+      
+      console.log('🔍 Auth state debug before rating submission:', {
+        hasToken: !!token,
+        tokenLength: token?.length || 0,
+        tokenPreview: token ? token.substring(0, 20) + '...' : 'none',
+        hasCookies: cookies.includes('auth_token') || cookies.includes('access_token'),
+        hasUserData: !!user,
+        cookiePreview: cookies.substring(0, 100)
+      });
+
+      // Validate token before making request (skip if using HttpOnly cookies)
+      if (token && token !== 'http-only-auth-detected') {
+        try {
+          const tokenParts = token.split('.');
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(atob(tokenParts[1]));
+            const now = Math.floor(Date.now() / 1000);
+            
+            if (payload.exp && payload.exp < now) {
+              console.error('🔑 Token is expired, cannot submit rating');
+              throw new Error('Your session has expired. Please log in again to submit a rating.');
+            }
+            
+            console.log('🔍 Token validation passed, expires at:', new Date(payload.exp * 1000).toISOString());
+          }
+        } catch (tokenError) {
+          console.warn('⚠️ Could not validate token format:', tokenError);
+        }
+      } else if (token === 'http-only-auth-detected') {
+        console.log('🔍 Using HttpOnly cookie authentication for rating submission');
+      } else {
+        console.log('🔍 No token available, relying on HttpOnly cookies for authentication');
+      }
+      
+      const response = await apiClient.post('/api/v1/ratings/order-item', data);
       
       if (response.data?.success && response.data?.data) {
         console.log('Rating submitted successfully:', response.data.data);
@@ -39,6 +78,25 @@ export class RatingService {
       throw new Error(response.data?.message || 'Failed to submit rating');
     } catch (error: any) {
       console.error('Error submitting rating:', error);
+      
+      // Enhanced error handling for auth errors
+      if (error.response?.status === 401) {
+        console.error('🚨 401 Authentication Error Details:', {
+          responseData: error.response?.data,
+          requestUrl: error.config?.url,
+          requestHeaders: error.config?.headers,
+          responseHeaders: error.response?.headers
+        });
+        throw new Error('Please log in to submit a rating');
+      }
+      
+      if (error.response?.status === 403) {
+        throw new Error('You can only rate items from your verified orders');
+      }
+      
+      if (error.response?.status === 409) {
+        throw new Error('You have already rated this item');
+      }
       
       if (error.response?.data?.message) {
         throw new Error(error.response.data.message);
@@ -104,6 +162,22 @@ export class RatingService {
       throw new Error(response.data?.message || 'Failed to fetch rating stats');
     } catch (error: any) {
       console.error('Error fetching rating stats:', error);
+      
+      // Enhanced error handling for auth and not found errors
+      if (error.response?.status === 401) {
+        console.warn('Authentication required for rating stats');
+        throw new Error('Please log in to view ratings');
+      }
+      
+      if (error.response?.status === 404) {
+        console.log('No rating stats found for menu item:', menuItemId);
+        // Return empty stats for 404 instead of throwing
+        return {
+          averageRating: 0,
+          totalReviews: 0,
+          ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+        };
+      }
       
       if (error.response?.data?.message) {
         throw new Error(error.response.data.message);
@@ -297,35 +371,80 @@ export class RatingService {
   }
 
   /**
-   * Check if user has an existing rating for a menu item
+   * Submit a rating for a specific order item (verified purchase)
    */
-  async getUserRatingForItem(menuItemId: string): Promise<Rating | null> {
+  async submitOrderItemRating(data: RatingSubmission & { orderId?: string; orderItemId?: string }): Promise<Rating> {
     try {
-      console.log('Checking user rating for menu item:', menuItemId);
-      
-      const response = await apiClient.get(`/api/v1/ratings/menu-item/${menuItemId}/user-rating`);
+      console.log('Submitting order item rating:', data);
+      const response = await apiClient.post('/api/v1/ratings/order-item', data);
       
       if (response.data?.success && response.data?.data) {
-        console.log('User rating found:', response.data.data);
+        console.log('Order item rating submitted successfully:', response.data.data);
         return response.data.data;
       }
       
-      // No rating found
-      return null;
+      throw new Error(response.data?.message || 'Failed to submit order item rating');
     } catch (error: any) {
-      // If 404, it means no rating exists - this is not an error
-      if (error.response?.status === 404) {
-        console.log('No existing rating found for user');
-        return null;
-      }
-      
-      console.error('Error checking user rating:', error);
+      console.error('Error submitting order item rating:', error);
       
       if (error.response?.data?.message) {
         throw new Error(error.response.data.message);
       }
       
-      throw new Error('Failed to check existing rating. Please try again.');
+      throw new Error('Failed to submit order item rating. Please try again.');
+    }
+  }
+
+  /**
+   * Check if user can rate a menu item (using the correct backend endpoint)
+   */
+  async getUserRatingForItem(menuItemId: string): Promise<Rating | null> {
+    try {
+      console.log('Checking if user can rate menu item:', menuItemId);
+      
+      // Use the correct endpoint from the backend: /menu-item/:menuItemId/can-rate
+      const response = await apiClient.get(`/api/v1/ratings/menu-item/${menuItemId}/can-rate`);
+      
+      console.log('Can-rate response:', response.data);
+      
+      if (response.data?.success) {
+        const canRate = response.data.data?.canRate;
+        const existingRating = response.data.data?.existingRating;
+        
+        console.log('User can rate:', canRate);
+        console.log('Existing rating:', existingRating);
+        
+        // Return existing rating if it exists
+        if (existingRating) {
+          return existingRating;
+        }
+        
+        // Return null if no existing rating (user can rate)
+        return null;
+      }
+      
+      // If response doesn't have expected structure, return null
+      console.log('Unexpected response structure, returning null');
+      return null;
+      
+    } catch (error: any) {
+      // If 404, endpoint doesn't exist - return null
+      if (error.response?.status === 404) {
+        console.log('Can-rate endpoint not found, returning null');
+        return null;
+      }
+      
+      // If 401, user needs to be authenticated
+      if (error.response?.status === 401) {
+        console.log('Authentication required to check rating ability');
+        return null;
+      }
+      
+      console.error('Error checking rating ability:', error);
+      
+      // Don't throw errors for rating checks - just return null
+      console.log('Returning null due to error in getUserRatingForItem');
+      return null;
     }
   }
 

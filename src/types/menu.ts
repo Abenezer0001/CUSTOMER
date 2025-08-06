@@ -12,6 +12,8 @@ export interface MenuItem {
   preparationTime?: string;
   rating?: number;
   modifiers?: MenuItemModifierGroup[];
+  isActive?: boolean;
+  availabilityMessage?: string;
 }
 
 export interface TableVerification {

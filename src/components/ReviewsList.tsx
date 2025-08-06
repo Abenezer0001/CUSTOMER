@@ -362,8 +362,15 @@ const ReviewsList: React.FC<ReviewsListProps> = ({
         className="space-y-3 overflow-y-auto" 
         style={{ maxHeight }}
       >
-        {reviews.map((review) => (
-          <Card key={review._id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+        {reviews.map((review, index) => (
+          <Card 
+            key={review._id} 
+            className="p-4 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 dark:hover:from-gray-900/50 dark:hover:to-blue-900/20 transition-all duration-300 transform hover:scale-102 hover:shadow-md border border-gray-200 dark:border-gray-700"
+            style={{
+              animationDelay: `${index * 100}ms`,
+              animation: 'fadeInUp 0.5s ease-out forwards'
+            }}
+          >
             <div className="flex gap-3">
               {/* User Avatar */}
               <Avatar className="w-10 h-10 flex-shrink-0">
@@ -415,7 +422,7 @@ const ReviewsList: React.FC<ReviewsListProps> = ({
                     size="sm"
                     onClick={() => handleHelpfulVote(review._id, true)}
                     disabled={votingStates[review._id]}
-                    className="h-8 px-2 text-xs"
+                    className="h-8 px-3 text-xs hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-all duration-200 transform hover:scale-105"
                   >
                     <ThumbsUp className="h-3 w-3 mr-1" />
                     {review.helpfulCount > 0 && review.helpfulCount}
@@ -426,7 +433,7 @@ const ReviewsList: React.FC<ReviewsListProps> = ({
                     size="sm"
                     onClick={() => handleHelpfulVote(review._id, false)}
                     disabled={votingStates[review._id]}
-                    className="h-8 px-2 text-xs"
+                    className="h-8 px-3 text-xs hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-all duration-200 transform hover:scale-105"
                   >
                     <ThumbsDown className="h-3 w-3 mr-1" />
                     {review.unhelpfulCount > 0 && review.unhelpfulCount}
